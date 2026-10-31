@@ -214,7 +214,7 @@ Supabase Auth를 쓰지 않고 FastAPI에서 직접 구현한다. 가입 화면 
 
 - **팀 참조 공통 형태(`TeamRef`):** `{ "id", "nameKo": string | null, "nameEn", "crestUrl": string | null, "detailAvailable": true | false | null }`. 한국어 이름이 없으면 `nameKo`는 `null`이고 화면은 `nameEn`을 쓴다(`CompetitionRef.nameKo`도 같음). `null`은 소속 미확인(조회 중·실패)이며 강등으로 표시하지 않는다(D-15).
 - **경기 요약 공통 형태(`MatchSummary`):** 경기 카드·TOP 5·팀 경기 목록이 같은 형태를 쓴다. `{ "id", "competition": { "id", "nameKo", "shortName" }, "kickoffAt", "kickoffDateKst", "timeConfirmed", "status", "finishType", "elapsed", "statusReason", "home": TeamRef, "away": TeamRef, "score": { "home", "away", "penaltyHome", "penaltyAway" } }`. 스코어·경과 시간이 없으면 `null`. 01이 스키마를 먼저 정의하고 03이 실제 데이터로 채운다. 필드를 바꾸면 이 줄을 갱신한다.
-- **TOP 5 응답:** `GET /api/v1/top-matches/current` → `data: { "period": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } | null, "items": [ { "rank", "match": MatchSummary } ] }`. 01은 테이블 없이 항상 `period: null, items: []`를 돌려주는 서비스 함수로 계약만 만든다. 주간 경계의 시간대·귀속 시각(P-06)이 정해지기 전에는 `period`를 `null`로 두고 띠는 집계 기간 표기 없이 빈 상태를 보여준다. `weekly_top_matches` 테이블과 실제 선정은 04가 만든다.
+- **TOP 5 응답:** `GET /api/v1/top-matches/current` → `data: { "period": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } | null, "items": [ { "rank", "match": MatchSummary, "averageRating": number | null, "ratingCount": number } ] }`. 평균 평점·평가 수는 펼침 목록(Figma 126:111·126:140)에 표시하며, 평가가 0건이면 `averageRating: null`(화면 `평균 — / 5`)로 두고 0점으로 만들지 않는다. 01은 테이블 없이 항상 `period: null, items: []`를 돌려주는 서비스 함수로 계약만 만든다. 주간 경계의 시간대·귀속 시각(P-06)이 정해지기 전에는 `period`를 `null`로 두고 띠는 집계 기간 표기 없이 빈 상태를 보여준다. `weekly_top_matches` 테이블과 실제 선정은 04가 만든다.
 - **프런트엔드 타입:** 백엔드 OpenAPI(`/openapi.json`)에서 `openapi-typescript`로 `src/lib/api/schema.d.ts`를 생성한다(`npm run gen:api`). 손으로 타입을 중복 작성하지 않는다.
 
 **초기 엔드포인트 목록(담당 채팅이 세부를 확정하고 이 표를 갱신)**
@@ -421,11 +421,11 @@ src/
 
 | ID | 항목 | 01 처리 | 확인 요청 |
 | --- | --- | --- | --- |
-| D-01-1 | TOP 5 띠의 빈 상태·조회 실패 프레임 없음 | 띠 구조는 그대로 두고 '이번 주 인기 경기를 준비 중입니다.'(문구는 데스크톱 띠에만), 펼치면 같은 문구와 '지난주 순위를 이번 주 TOP 5로 보여주지 않습니다.' | 문구·표현 |
-| D-01-2 | 데스크톱 TOP 5 펼침 목록 프레임 없음(모바일 시트 `62:1523`만 있음) | 띠 오른쪽 아래에 폭 420px 카드, 항목 구성은 모바일 시트와 같음 | 배치 |
-| D-01-3 | 모바일 메뉴의 위치 미지정(`62:1427`) | TOP 5·의견 보내기와 같은 하단 시트 | 위치 |
-| D-01-4 | 모바일 푸터에 '맨 위로' 없음(Figma) ↔ COM-003·PRD 7장 푸터 구성에 포함 | Figma대로 데스크톱 푸터에만 표시 | 모바일 제공 여부 |
-| D-01-5 | 푸터 출처·권리 고지 11px(Figma) ↔ 보조 설명 12px 이상(컬러 가이드) | Figma대로 11px/19px | 글자 크기 |
+| D-01-1 | TOP 5 빈 상태 | 해결(2026-10-31): Figma `128:3674`·`128:3686` 반영. 띠(접힌 상태) 문구는 프레임이 없어 '아직 선정된 경기가 없어요.'로 맞춤. 기간이 `null`이면 요약에서 기간을 생략 | 접힌 띠 문구 |
+| D-01-2 | TOP 5 펼침 목록 | 해결(2026-10-31): 데스크톱 `128:3145`·`128:3474`·`128:3700`(헤더 아래 전체 폭 패널 + 12% 배경), 모바일 `128:3574`·`128:4408`(핸들 있는 하단 시트) 반영 | — |
+| D-01-3 | 모바일 메뉴의 위치 미지정(`62:1427`) | TOP 5·의견 보내기와 같은 하단 시트. 계정 버튼은 Figma `133:4134`대로 로그인(ghost)·회원가입(primary) 가로 배치 | 위치 |
+| D-01-4 | 푸터 리디자인(`49:532`·`49:1012`, 2026-10-31)에서 '맨 위로'·브랜드 소개 문구·'서비스 소개'·권리 고지 문장 제거 ↔ COM-003 5번·PRD 7장 푸터 구성(브랜드 소개, 맨 위로, 이미지 출처·권리 고지 포함) | Figma대로 구현 | 기능 명세서·PRD 푸터 항목 갱신 또는 디자인 보완 |
+| D-01-5 | 푸터 운영자·출처 문구 11px(Figma) ↔ 보조 설명 12px 이상(컬러 가이드) | Figma대로 11px/19px | 글자 크기 |
 | D-01-6 | 의견 전달 완료 상태 아이콘이 검색 아이콘(`62:1882`) | Figma대로 사용 | 아이콘 교체 여부 |
 | D-01-7 | 뉴스 출처 BI 표시(COM-003) | 텍스트 'NAVER'만 표시, 이미지 권리 문구는 Figma 문구를 임시 사용 | V-09·V-10 확인 후 반영 |
 

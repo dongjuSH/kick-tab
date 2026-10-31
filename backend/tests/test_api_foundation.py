@@ -190,5 +190,8 @@ def test_openapi_uses_camel_case_and_documents_error_envelope(client):
         "id", "nameKo", "nameEn", "crestUrl", "detailAvailable",
     }
     assert "pagePath" in components["FeedbackCreate"]["properties"]
+    assert {"rank", "match", "averageRating", "ratingCount"} == set(
+        components["TopMatchItem"]["properties"]
+    )
     feedback_responses = schema["paths"]["/api/v1/feedback"]["post"]["responses"]
     assert "ErrorResponse" in str(feedback_responses["4XX"])

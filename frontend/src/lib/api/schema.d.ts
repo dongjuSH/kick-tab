@@ -184,6 +184,10 @@ export interface components {
             /** Rank */
             rank: number;
             match: components["schemas"]["MatchSummary"];
+            /** Averagerating */
+            averageRating: number | null;
+            /** Ratingcount */
+            ratingCount: number;
         };
         /** TopMatches */
         TopMatches: {

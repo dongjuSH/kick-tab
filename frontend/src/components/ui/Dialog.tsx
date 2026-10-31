@@ -24,6 +24,8 @@ interface DialogProps {
   /** Max width of the centred card in px (Figma: 520 for feedback). */
   width?: number;
   closeLabel?: string;
+  /** Compact sheet (Figma TOP 5 sheet 128:3574): drag handle, 16px padding, 18px title. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -43,6 +45,7 @@ export function Dialog({
   layout = "responsive",
   width = 520,
   closeLabel = "닫기",
+  compact = false,
   className,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -60,6 +63,8 @@ export function Dialog({
     if (open && !dialog.open) {
       returnFocus.current = document.activeElement as HTMLElement | null;
       dialog.showModal();
+      // Start on the dialog itself so no control shows a focus ring until the user tabs.
+      dialog.focus();
       document.documentElement.style.overflow = "hidden";
     } else if (!open && dialog.open) {
       dialog.close();
@@ -92,11 +97,12 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
+      tabIndex={-1}
       aria-labelledby={titleId}
       style={{ "--kt-dialog-width": `${width}px` } as CSSProperties}
       className={cx(
-        "overflow-y-auto overscroll-contain rounded-card border border-line bg-surface p-0 text-fg",
-        "backdrop:bg-fg/40 lg:max-w-(--kt-dialog-width)",
+        "overflow-y-auto overscroll-contain rounded-card border border-line bg-surface p-0 text-fg outline-none",
+        "backdrop:bg-fg/12 lg:max-w-(--kt-dialog-width)",
         layout === "center" && "max-w-(--kt-dialog-width)",
         LAYOUTS[layout],
         className,
@@ -107,9 +113,10 @@ export function Dialog({
       }}
     >
       {open && (
-        <div className="flex flex-col gap-4 p-6">
+        <div className={cx("flex flex-col", compact ? "gap-3 p-4" : "gap-4 p-6")}>
+          {compact && <span aria-hidden className="mx-auto h-1 w-10 rounded-full bg-line-strong" />}
           <div className="flex items-center gap-2">
-            <h2 id={titleId} className="min-w-0 flex-1 text-title font-bold">
+            <h2 id={titleId} className={cx("min-w-0 flex-1 font-bold", compact ? "text-subtitle" : "text-title")}>
               {title}
             </h2>
             <IconButton icon="x" label={closeLabel} onClick={onClose} />

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
+import { IconButton } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -14,20 +15,22 @@ import { Top5List, scoreText, teamName } from "./Top5List";
 import { currentTopMatchesQuery } from "./queries";
 
 const TITLE = "이번 주 인기 경기";
+const PANEL_TITLE = `${TITLE} TOP 5`;
 
 /**
  * This week's TOP 5 strip, fixed under the header on every page (COM-003, TOP-003).
- * Desktop opens a panel below the strip; below 1024px it opens a bottom sheet.
+ * Desktop opens a full-width panel under the header with a dimmed page (Figma 128:3700);
+ * below 1024px it opens a bottom sheet (Figma 128:4408).
  */
 export function Top5Strip() {
-  const query = useQuery(currentTopMatchesQuery);
-  const { data, isPending, error, refetch } = query;
+  const { data, isPending, error, refetch } = useQuery(currentTopMatchesQuery);
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const panelId = useId();
-  const root = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const toggle = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLElement>(null);
 
   // Close on navigation (a TOP 5 item was chosen or the page changed) and when the
   // layout switches between the desktop panel and the mobile sheet.
@@ -37,30 +40,30 @@ export function Top5Strip() {
     setOpen(false);
   }
 
-  // Desktop panel: Escape and outside clicks close it; focus returns to the toggle.
+  const closePanel = () => {
+    setOpen(false);
+    toggle.current?.focus();
+  };
+
+  // Desktop panel: move focus in on open, Escape closes and returns focus to the strip.
   useEffect(() => {
     if (!open || !isDesktop) return;
+    panel.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
         toggle.current?.focus();
       }
     };
-    const onPointer = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    };
     document.addEventListener("keydown", onKey);
-    document.addEventListener("pointerdown", onPointer);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("pointerdown", onPointer);
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, isDesktop]);
 
   const items = data?.items ?? [];
   const period = data?.period ? formatPeriod(data.period.start, data.period.end) : null;
-  const list = (
+  const list = (layout: "desktop" | "mobile") => (
     <Top5List
+      layout={layout}
       data={data}
       isPending={isPending}
       error={error}
@@ -70,7 +73,7 @@ export function Top5Strip() {
   );
 
   return (
-    <div ref={root} className="relative border-b border-line bg-surface">
+    <div className="border-b border-line bg-surface">
       <div className="kt-container py-2">
         <button
           ref={toggle}
@@ -92,7 +95,7 @@ export function Top5Strip() {
             ) : error ? (
               <span className="truncate text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>
             ) : items.length === 0 ? (
-              <span className="truncate">이번 주 인기 경기를 준비 중입니다.</span>
+              <span className="truncate">아직 선정된 경기가 없어요.</span>
             ) : (
               items.slice(0, 2).map((item) => (
                 <span key={item.match.id} className="min-w-0 shrink truncate whitespace-pre">
@@ -111,22 +114,35 @@ export function Top5Strip() {
       </div>
 
       {isDesktop ? (
-        <div
-          id={panelId}
-          hidden={!open}
-          className="kt-container absolute inset-x-0 top-full z-40 flex justify-end"
-        >
-          <section
-            aria-label={`${TITLE} TOP 5`}
-            className="mt-2 w-full max-w-[420px] rounded-card border border-line bg-surface p-6 shadow-lg"
-          >
-            <h2 className="mb-4 text-title font-bold">{TITLE} TOP 5</h2>
-            {open && list}
-          </section>
+        <div id={panelId} hidden={!open}>
+          {/* Dimmed page below the header; clicking it closes the panel (Figma 128:4249). */}
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-label="인기 경기 목록 닫기"
+            onClick={closePanel}
+            className="fixed inset-x-0 bottom-0 top-(--kt-header-height) z-0 cursor-default bg-fg/12"
+          />
+          <div className="kt-container absolute inset-x-0 top-full z-10">
+            <section
+              ref={panel}
+              tabIndex={-1}
+              aria-labelledby={titleId}
+              className="flex max-h-[calc(100dvh-var(--kt-header-height)-16px)] flex-col gap-3 overflow-y-auto rounded-b-card border border-t-0 border-line bg-surface p-6 outline-none"
+            >
+              <div className="flex items-center gap-2">
+                <h2 id={titleId} className="min-w-0 flex-1 text-title leading-7 font-bold">
+                  {PANEL_TITLE}
+                </h2>
+                <IconButton icon="x" label="인기 경기 목록 닫기" onClick={closePanel} />
+              </div>
+              {open && list("desktop")}
+            </section>
+          </div>
         </div>
       ) : (
-        <BottomSheet open={open} onClose={() => setOpen(false)} title={`${TITLE} TOP 5`}>
-          {list}
+        <BottomSheet open={open} onClose={() => setOpen(false)} title={PANEL_TITLE} compact>
+          {list("mobile")}
         </BottomSheet>
       )}
     </div>

@@ -20,8 +20,10 @@ export function Logo({ size, className }: { size: keyof typeof SIZES; className?
         alt=""
         width={(height * 80) / 48}
         height={height}
+        // Fixed box: preflight's height:auto would otherwise trigger an aspect-ratio warning.
+        style={{ width: (height * 80) / 48, height }}
         unoptimized
-        priority={size !== "footer"}
+        loading={size === "footer" ? "lazy" : "eager"}
       />
       <span className={cx("font-wordmark font-bold whitespace-nowrap", text)}>
         <span className="text-fg">Kick</span>

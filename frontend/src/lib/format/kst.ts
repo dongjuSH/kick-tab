@@ -57,6 +57,12 @@ export function formatKstTime(value: string | Date): string {
   return date ? timeFormatter.format(date) : MISSING;
 }
 
+/** "10/29 03:30" (KST month/day + time). */
+export function formatKstMonthDayTime(value: string | Date): string {
+  const p = kstParts(value);
+  return p ? `${p.month}/${p.day} ${formatKstTime(value)}` : MISSING;
+}
+
 /** "10월 29일 목요일". */
 export function formatKstLongDate(value: string | Date): string {
   const p = kstParts(value);
