@@ -17,6 +17,9 @@ class FeedbackCreate(ApiModel):
     type: FeedbackType
     # Current screen path only (no query string), used to group feedback by page.
     page_path: str | None = Field(default=None, max_length=FEEDBACK_PAGE_PATH_MAX)
+    # Honeypot: an input people never see. Anything here means a bot filled the form;
+    # the request is refused without saving or notifying.
+    website: str | None = Field(default=None, max_length=500)
 
     @field_validator("body")
     @classmethod

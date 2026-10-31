@@ -37,6 +37,7 @@ def stored():
     """Fake DB session capturing feedback rows instead of writing to PostgreSQL."""
     rows: list[Feedback] = []
     session = MagicMock()
+    session.scalar.return_value = None  # no duplicate within 24 hours
     session.add.side_effect = rows.append
 
     def refresh(obj):
@@ -153,6 +154,7 @@ def test_feedback_rate_limit_returns_429_with_retry_after(client, stored):
 
 def test_failed_save_is_not_counted_and_hides_internal_details(client):
     session = MagicMock()
+    session.scalar.return_value = None  # no duplicate within 24 hours
     session.commit.side_effect = RuntimeError("password=private-test-value")
     app.dependency_overrides[get_db] = lambda: session
     feedback_rate_limit.reset()
@@ -201,3 +203,42 @@ def test_openapi_uses_camel_case_and_documents_error_envelope(client):
     )
     feedback_responses = schema["paths"]["/api/v1/feedback"]["post"]["responses"]
     assert "ErrorResponse" in str(feedback_responses["4XX"])
+
+
+def test_honeypot_filled_is_refused_without_saving(client, stored, monkeypatch):
+    from app.api.routes import feedback as route
+
+    notified = []
+    monkeypatch.setattr(route, "notify_feedback", notified.append)
+    payload = {**HELLO, "website": "http://spam.example"}
+    response = client.post("/api/v1/feedback", json=payload, headers=WEB)
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "요청을 처리할 수 없습니다."
+    assert "website" not in response.text
+    assert stored == [] and notified == []
+
+
+def test_empty_honeypot_is_accepted(client, stored):
+    response = client.post("/api/v1/feedback", json={**HELLO, "website": ""}, headers=WEB)
+    assert response.status_code == 201
+
+
+def test_duplicate_body_within_24_hours_is_refused(client, stored):
+    db = app.dependency_overrides[get_db]()
+    db.scalar.return_value = 99  # an earlier row with the same body hash exists
+    response = client.post("/api/v1/feedback", json=HELLO, headers=WEB)
+    assert response.status_code == 409
+    assert response.json()["error"] == {
+        "code": "FEEDBACK_DUPLICATE",
+        "message": "같은 내용의 의견이 이미 접수되었습니다.",
+        "details": {},
+    }
+    assert stored == []
+
+
+def test_body_hash_ignores_case_and_whitespace():
+    from app.services.feedback import body_hash
+
+    assert body_hash("팀 검색이\n  안 돼요 OK") == body_hash("  팀 검색이 안 돼요 ok ")
+    assert body_hash("팀 검색이 안 돼요") != body_hash("팀 검색이 안 돼요!")
+    assert len(body_hash("x")) == 64

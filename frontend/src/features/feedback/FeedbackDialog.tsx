@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StateMessage } from "@/components/ui/DataState";
 import { Dialog } from "@/components/ui/Dialog";
@@ -38,6 +38,8 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
     typeof window === "undefined" ? EMPTY_DRAFT : loadDraft(),
   );
   const [touched, setTouched] = useState(false);
+  // Honeypot (hidden from people): bots that fill every field get refused by the API.
+  const honeypot = useRef<HTMLInputElement>(null);
   const [sent, setSent] = useState(false);
   const bodyId = useId();
   const hintId = useId();
@@ -75,15 +77,23 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
   const typeError =
     (touched && !draft.type ? "의견 유형을 선택해 주세요." : undefined) ?? serverErrors.type;
   const failed = mutation.isError && !serverErrors.body && !serverErrors.type;
+  const apiError = isApiError(mutation.error) ? mutation.error : null;
   const failMessage =
-    failed && isApiError(mutation.error) && mutation.error.code === "RATE_LIMITED"
-      ? `${mutation.error.message} 입력한 내용은 유지되었습니다.`
-      : FAIL_MESSAGE;
+    apiError?.code === "RATE_LIMITED"
+      ? `${apiError.message} 입력한 내용은 유지되었습니다.`
+      : apiError?.code === "FEEDBACK_DUPLICATE"
+        ? apiError.message
+        : FAIL_MESSAGE;
 
   const submit = () => {
     setTouched(true);
     if (!trimmed || !draft.type || mutation.isPending) return;
-    mutation.mutate({ body: draft.body, type: draft.type, pagePath: pathname });
+    mutation.mutate({
+      body: draft.body,
+      type: draft.type,
+      pagePath: pathname,
+      website: honeypot.current?.value || undefined,
+    });
   };
 
   return (
@@ -108,6 +118,14 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
           }}
         >
           <p className="text-body text-fg-secondary">불편했던 점이나 바라는 점을 알려주세요.</p>
+
+          {/* Honeypot: off-screen, unfocusable and hidden from assistive tech. */}
+          <div aria-hidden className="absolute -left-[10000px] top-auto h-px w-px overflow-hidden">
+            <label>
+              웹사이트
+              <input ref={honeypot} type="text" name="kt_website" tabIndex={-1} autoComplete="off" />
+            </label>
+          </div>
 
           <fieldset className="flex flex-col gap-4" aria-describedby={typeError ? typeErrorId : undefined}>
             <legend className="mb-4 text-label font-medium">의견 유형 · 필수</legend>

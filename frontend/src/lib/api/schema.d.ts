@@ -112,6 +112,8 @@ export interface components {
             type: "bug" | "suggestion" | "other";
             /** Pagepath */
             pagePath?: string | null;
+            /** Website */
+            website?: string | null;
         };
         /** FeedbackReceipt */
         FeedbackReceipt: {

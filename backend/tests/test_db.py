@@ -1,4 +1,5 @@
 import os
+import uuid
 
 import pytest
 
@@ -49,14 +50,18 @@ def test_feedback_constraints_on_dev_database():
 
     from app.db.session import get_engine
     from app.schemas.feedback import FeedbackCreate
-    from app.services.feedback import create_feedback
+    from app.services.feedback import DuplicateFeedbackError, create_feedback
 
     with get_engine().connect() as connection:
         transaction = connection.begin()
         try:
             session = Session(bind=connection, join_transaction_mode="create_savepoint")
-            row = create_feedback(session, FeedbackCreate(body="통합 확인", type="other"))
+            body = f"통합 확인 {uuid.uuid4()}"
+            row = create_feedback(session, FeedbackCreate(body=body, type="other"))
             assert row.id is not None and row.user_id is None and row.created_at is not None
+            assert row.body_hash is not None and len(row.body_hash) == 64
+            with pytest.raises(DuplicateFeedbackError):
+                create_feedback(session, FeedbackCreate(body=f"  {body.upper()} ", type="bug"))
             with pytest.raises(IntegrityError):
                 with session.begin_nested():
                     session.execute(text("INSERT INTO feedback (body) VALUES ('')"))

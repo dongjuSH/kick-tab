@@ -104,6 +104,7 @@ def test_feedback_route_schedules_notification_after_saving(monkeypatch):
     from unittest.mock import MagicMock
 
     session = MagicMock()
+    session.scalar.return_value = None  # no duplicate within 24 hours
 
     def refresh(obj):
         obj.id = 42
