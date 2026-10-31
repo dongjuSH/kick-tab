@@ -1,0 +1,46 @@
+import Link from "next/link";
+import { Logo } from "@/components/common/Logo";
+import { Top5Strip } from "@/features/top5/Top5Strip";
+import { HeaderAuth } from "./HeaderAuth";
+import { MainNav } from "./MainNav";
+import { MobileMenu } from "./MobileMenu";
+
+/**
+ * Global header + TOP 5 strip, fixed together at the top while scrolling (COM-003).
+ * Figma 49:58 (desktop, 129px) / 49:571 (mobile, 113px).
+ */
+export function SiteHeader() {
+  return (
+    <header className="sticky top-0 z-30 bg-surface">
+      <a
+        href="#main"
+        className="sr-only z-50 rounded-control bg-surface px-4 py-2 focus:not-sr-only focus:absolute focus:left-4 focus:top-2"
+      >
+        본문으로 건너뛰기
+      </a>
+      <div className="border-b border-line">
+        <div className="kt-container flex items-center py-3 lg:py-5">
+          <Link href="/" aria-label="KickTab 홈" className="shrink-0 rounded-control">
+            <span className="hidden lg:flex">
+              <Logo size="header" />
+            </span>
+            <span className="flex lg:hidden">
+              <Logo size="header-mobile" />
+            </span>
+          </Link>
+          <div className="hidden lg:block">
+            <MainNav />
+          </div>
+          <div className="flex-1" />
+          <div className="hidden lg:block">
+            <HeaderAuth layout="desktop" />
+          </div>
+          <div className="lg:hidden">
+            <MobileMenu />
+          </div>
+        </div>
+      </div>
+      <Top5Strip />
+    </header>
+  );
+}

@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Noto_Sans_KR } from "next/font/google";
+import { MobileBottomBar } from "@/components/layout/MobileBottomBar";
+import { SiteFooter } from "@/components/layout/SiteFooter";
+import { SiteHeader } from "@/components/layout/SiteHeader";
+import { FeedbackProvider } from "@/features/feedback/FeedbackProvider";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -35,7 +39,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" className={`${notoSansKr.variable} ${inter.variable} h-full`}>
       <body className="flex min-h-full flex-col">
-        <Providers>{children}</Providers>
+        <Providers>
+          <FeedbackProvider>
+            <SiteHeader />
+            <main id="main" className="flex flex-1 flex-col">
+              {children}
+            </main>
+            <SiteFooter />
+            <MobileBottomBar />
+          </FeedbackProvider>
+        </Providers>
       </body>
     </html>
   );
