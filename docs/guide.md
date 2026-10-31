@@ -71,7 +71,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 | 엠블럼·선수 사진·공통 대체 이미지(`TeamCrest`, `PlayerPhoto`) | 01 | 전체 | 이미지 URL이 `null`이면 대체 이미지 |
 | API 클라이언트·응답 타입·오류 처리 | 01 | 전체 | `src/lib/api/`, OpenAPI 생성 타입 |
 | TOP 5 띠 | 01(표시) / 04(선정 작업) | 전 페이지 | `GET /api/v1/top-matches/current` |
-| 의견 보내기 | 01 | 전 페이지 | 전역 버튼 + 모달, `POST /api/v1/feedback` |
+| 의견 보내기 | 01 | 전 페이지 | 데스크톱 푸터·모바일 하단 고정 영역의 진입 버튼 + 모달(모바일 하단 시트), `POST /api/v1/feedback` |
 | 인증 상태·로그인 유도·복귀 | 02 | 04·03·08·09 | `useAuth()`, `requireLogin({ intent })` |
 | 관심 팀 | 02(저장소·토글) / 03(일정 선별) | 03·07·08·09 | `useFavorites()`, `<FavoriteToggle teamId>` |
 | 팀 링크 허용 여부 | 03 | 04·05·06·07·08 | 모든 팀 참조 응답의 `detailAvailable: true \| false \| null` |
@@ -88,7 +88,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 
 | 채팅 | 상태 | 비고 |
 | --- | --- | --- |
-| 00 | 첫 설계 완료(2026-10-31) | 이 문서 §2·§6~§10 확정. Codex 검토 요청 사항은 §10 |
+| 00 | 첫 설계·01 착수 전 검수 완료(2026-10-31) | 이 문서 §2·§6~§11 확정. Codex 검토 요청 사항은 §10 |
 | 01 | **다음 작업** | 선행 조건 충족: 원격 `main`·`dev` 준비(§11), Supabase Data API 꺼짐 확인(§9 U-03), Figma 커넥터 접근(§1) |
 | 02~09 | 대기 | 앞 순서 채팅의 완료(교차 검증 포함) 후 진행 |
 
@@ -208,7 +208,9 @@ Supabase Auth를 쓰지 않고 FastAPI에서 직접 구현한다. 가입 화면 
 | `ABD` | abandoned | '경기 중단', 중단 시점 스코어, 평가·TOP 5 제외 |
 | 그 밖 | unknown | '확인 필요' |
 
-- **팀 참조 공통 형태:** `{ "id", "nameKo", "nameEn", "crestUrl": string | null, "detailAvailable": true | false | null }`. `null`은 소속 미확인(조회 중·실패)이며 강등으로 표시하지 않는다(D-15).
+- **팀 참조 공통 형태(`TeamRef`):** `{ "id", "nameKo", "nameEn", "crestUrl": string | null, "detailAvailable": true | false | null }`. `null`은 소속 미확인(조회 중·실패)이며 강등으로 표시하지 않는다(D-15).
+- **경기 요약 공통 형태(`MatchSummary`):** 경기 카드·TOP 5·팀 경기 목록이 같은 형태를 쓴다. `{ "id", "competition": { "id", "nameKo", "shortName" }, "kickoffAt", "kickoffDateKst", "timeConfirmed", "status", "finishType", "elapsed", "statusReason", "home": TeamRef, "away": TeamRef, "score": { "home", "away", "penaltyHome", "penaltyAway" } }`. 스코어·경과 시간이 없으면 `null`. 01이 스키마를 먼저 정의하고 03이 실제 데이터로 채운다. 필드를 바꾸면 이 줄을 갱신한다.
+- **TOP 5 응답:** `GET /api/v1/top-matches/current` → `data: { "period": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } | null, "items": [ { "rank", "match": MatchSummary } ] }`. 01은 테이블 없이 항상 `period: null, items: []`를 돌려주는 서비스 함수로 계약만 만든다. 주간 경계의 시간대·귀속 시각(P-06)이 정해지기 전에는 `period`를 `null`로 두고 띠는 집계 기간 표기 없이 빈 상태를 보여준다. `weekly_top_matches` 테이블과 실제 선정은 04가 만든다.
 - **프런트엔드 타입:** 백엔드 OpenAPI(`/openapi.json`)에서 `openapi-typescript`로 `src/lib/api/schema.d.ts`를 생성한다(`npm run gen:api`). 손으로 타입을 중복 작성하지 않는다.
 
 **초기 엔드포인트 목록(담당 채팅이 세부를 확정하고 이 표를 갱신)**
@@ -271,7 +273,7 @@ Supabase Auth를 쓰지 않고 FastAPI에서 직접 구현한다. 가입 화면 
 
 ```
 src/
-  app/                      경로별 page.tsx·layout.tsx (전역 헤더·TOP 5·푸터·의견 버튼은 루트 layout)
+  app/                      경로별 page.tsx·layout.tsx (전역 헤더·TOP 5·푸터·모바일 하단 고정 영역은 루트 layout)
   components/ui/            디자인 시스템 기본 컴포넌트 (01)
   components/common/        여러 페이지 공용 도메인 컴포넌트 (TeamCrest, MatchCard, NewsCard …)
   features/<기능>/          기능 전용 컴포넌트·훅 (auth, favorites, schedule, match, results, standings, teams, team-detail, mypage, feedback, top5)
@@ -305,6 +307,8 @@ src/
 | 백엔드 `.env`(추가 예정) | `APP_ENV`, `CORS_ORIGINS`, `AUTH_JWT_SECRET`(02), `EMAIL_*`(02, 공급자 결정 후), `SCHEDULER_ENABLED`, `API_FOOTBALL_DAILY_BUDGET`(01), `IMAGE_RIGHTS_ENFORCED`(03), `NEWS_RETENTION_HOURS`(03) | 추가하는 채팅이 이 표를 갱신 |
 | 프런트엔드 `.env.local` | `BACKEND_ORIGIN`(01, 서버 전용) | 기존 `NEXT_PUBLIC_API_BASE_URL`은 01에서 제거 |
 
+비밀이 아닌 설정값(`BACKEND_ORIGIN`, `APP_ENV`, `SCHEDULER_ENABLED` 등)은 담당 채팅이 `.env`·`.env.local`에 직접 추가·수정할 수 있다. 이때 기존 비밀 값 줄은 읽어서 출력하거나 바꾸지 않는다. 코드에는 비밀이 아닌 설정의 기본값을 두어 변수가 없어도 로컬에서 동작하게 한다.
+
 비밀 값은 `.env`·`.env.local`에만 둔다. `.env`·`.env.local`·`.env.example` 등 모든 `.env*` 파일은 Git에 올리지 않으며(사용자 결정), 필요한 변수 이름은 이 표로만 관리한다. 로컬의 `.env.example`은 참고용으로만 둔다. 새 비밀 값이 필요하면 사용자에게 직접 입력을 요청하고 값을 출력·기록하지 않는다.
 
 ## 7. 현재 개발 기반과 실행 방법
@@ -313,12 +317,12 @@ src/
 
 | 영역 | 현재 기준 |
 | --- | --- |
-| 프런트엔드 | Next.js 16.4.3·React 19.3.0·TypeScript·Tailwind CSS v4(`@tailwindcss/postcss`). `cacheComponents`·`partialPrefetching` 켜짐. 기본 시작 화면, `lang="en"`·기본 메타데이터 그대로 |
+| 프런트엔드 | Next.js 16.4.3·React 19.3.0·TypeScript·Tailwind CSS v4(`@tailwindcss/postcss`). `cacheComponents`·`partialPrefetching` 켜짐. create-next-app 기본 시작 화면(`page.tsx`가 `next.svg`·`vercel.svg` 사용), `lang="en"`·기본 메타데이터·Geist 글꼴 그대로. 01이 교체·정리한다 |
 | 백엔드 | FastAPI·Python 3.12·uv. `/health`·CORS·환경 설정·DB 연결·읽기 전용 연결 확인 명령 구현. ORM·마이그레이션 도구 미설치 |
-| DB | Supabase PostgreSQL `kicktab-dev`(서울), Direct connection 5432, 현재 환경에서 IPv6 접속. Psycopg 3, `sslmode=verify-full` + `certs/supabase-ca.crt`. 제품 테이블 없음 |
+| DB | Supabase PostgreSQL `kicktab-dev`(서울), Direct connection 5432, 현재 환경에서 IPv6 접속. Psycopg 3, `sslmode=verify-full` + `certs/supabase-ca.crt`. 제품 테이블 없음. Data API 꺼짐. **현재 DB는 이 프로젝트 하나뿐**이므로 개발 중 마이그레이션·롤백 검증도 여기서 한다(운영 DB 분리는 §10 C-07) |
 | 버전 관리 | Git 저장소 루트 `kick-tab/apps/`, 원격 `main`·`dev`(§11) |
 
-**2026-10-31 00 채팅 실행 확인:** 백엔드 `ruff check` 통과, 기반 테스트 6개 통과, DB 인증·`SELECT 1`·TLS 확인 통과(읽기 전용), 프런트엔드 `npm run lint` 통과. 프런트엔드 `npm run build`와 개발 서버 실행은 이번에 하지 않았다.
+**2026-10-31 00 채팅 실행 확인:** 백엔드 `ruff check` 통과, 기반 테스트 6개 통과, DB 인증·`SELECT 1`·TLS 확인 통과(읽기 전용), 프런트엔드 `npm run lint`·`npm run build` 통과. 개발 서버 실행은 하지 않았다.
 
 명령은 각 앱 폴더에서 실행한다.
 
@@ -327,7 +331,7 @@ src/
 | `frontend/` | `npm ci` → `npm run dev` | `npm run lint`, `npm run build` |
 | `backend/` | `uv sync --locked --group dev` → `uv run fastapi dev app/main.py` | `uv run ruff check .`, `uv run python -m pytest`, `uv run python -m app.check_database` |
 
-**주의:** 이 PC에서는 Windows 애플리케이션 제어 정책이 `.venv`의 `pytest.exe` 실행을 차단한다(`uv run pytest` 실패). 테스트는 `uv run python -m pytest`로 실행한다. 같은 이유로 다른 콘솔 스크립트(`alembic` 등)도 `uv run python -m alembic …` 형태를 우선 사용한다.
+**주의:** 이 PC에서는 Windows 애플리케이션 제어 정책이 `.venv`의 실행 파일(`pytest.exe` 등)을 간헐적으로 차단한다(2026-10-31 한 차례 `uv run pytest` 실패, 이후 재확인 시 실행됨). 안정적으로 `uv run python -m pytest`, `uv run python -m alembic …`처럼 `python -m` 형태를 사용한다.
 
 기본 주소는 프런트엔드 `http://localhost:3000`, 백엔드 `http://localhost:8000`이며 API 문서는 `/docs`, 상태 확인은 `/health`다. 기본 Google Fonts는 빌드 시 네트워크 접근이 필요하다(Figma 글꼴 확정 시 01에서 교체).
 
@@ -337,7 +341,7 @@ src/
 
 | 채팅 | 선행 조건 | 고유 완료 조건(공통 조건 §4에 추가) |
 | --- | --- | --- |
-| 01 | Git 저장소 연결 | SQLAlchemy·Alembic 첫 마이그레이션(`sync_runs`, `feedback`) 적용·롤백 확인, 응답·오류 형식과 예외 처리기, CSRF·요청 제한 공통 의존성, API-Football 클라이언트 골격과 한도 보호 단위 테스트, `rewrites`·API 래퍼·생성 타입·Query Provider, 디자인 토큰·공통 UI, 헤더(인증 자리)·푸터(출처·권리 고지 자리)·TOP 5 띠 빈 상태·의견 보내기(비회원 제출, 1,000자, 실패 시 입력 유지) |
+| 01 | 없음(준비 완료) | SQLAlchemy·Alembic 첫 마이그레이션(`sync_runs`, `feedback`, RLS 포함) 적용·롤백 확인, 응답·오류 형식과 예외 처리기, CSRF·요청 제한 공통 의존성, API-Football 클라이언트 골격과 한도 보호 단위 테스트, `rewrites`·API 래퍼·생성 타입·Query Provider, 디자인 토큰·공통 UI, 헤더(인증 자리)·푸터(출처·권리 고지 자리)·TOP 5 띠 빈 상태·의견 보내기(비회원 제출, 1,000자, 실패 시 입력 유지) |
 | 02 | 01 완료, `AUTH_JWT_SECRET` 사용자 입력 | 가입 인증번호 규칙 전체, 가입 직후 세션 확인, 로그인·갱신·로그아웃·비밀번호 찾기/변경, CSRF·오픈 리다이렉트 방지, 관심 팀 비회원/회원 분리(A→B→로그아웃 시 A 복원), 6번째 거부, 로그인 유도·복귀 유틸 테스트 |
 | 03 | 01·02 완료 | 14개 대회·현재 시즌·5대 리그 팀·허용 집합 적재, 상태 변환 표 테스트, KST 날짜 묶음, 날짜 막대·대회 필터·팀 검색(별칭)·초기화 규칙, 관심 팀 일정 우선순위, 실시간 폴링(실제 경기 검증은 가능한 시간에 별도 기록), 뉴스 분류 규칙·중복 제거·출처 표시·북마크 저장/해제/재선택 |
 | 04 | 03 완료 | 상태별 영역 전환, 미제공·발표 전 표기, 상대 전적 표시 조건, 평가 작성 가능 조건(일반 종료만), 1인 1건·수정·삭제, 반응·정렬 규칙, 평가 로그인 복귀, TOP 5 선정은 정책 확정분만 |
@@ -346,6 +350,19 @@ src/
 | 07 | 02·03 완료 | 현재 시즌 팀만 표시, 리그 필터·검색·관심 팀 토글·페이지 분할 |
 | 08 | 03·06 완료 | 팀 상세 6개 영역, 선수 표 정렬·더 보기·누락 표시, 시즌 기록 전환, 이적 반기 분류·안내·고정, 팀 뉴스, 모바일 탭, 허용되지 않은 팀 직접 URL 차단 |
 | 09 | 02·03·04 완료 | 마이페이지 4개 섹션, 회원 전용 접근 차단, 다른 화면과 변경 반영 일치, 로그아웃 이동 규칙 |
+
+**01 세부 기준(2026-10-31 착수 전 검수에서 확정)**
+
+- **진행 단계:** A 백엔드 기반(DB·마이그레이션·응답/오류 형식·공통 의존성·API-Football 클라이언트 골격·수집 실행기) → B 프런트엔드 기반(rewrites·API 래퍼·생성 타입·Query Provider·토큰·글꼴·공통 UI) → C 전역 화면(헤더·TOP 5 띠·푸터·모바일 하단 고정 영역·의견 보내기). 단계마다 검사 통과 후 커밋하고, Codex 교차 검증은 01 전체 완료 후 한 번 받는다.
+- **`feedback` 테이블:** `users` 테이블이 아직 없으므로 `user_id uuid NULL`을 외래 키 없이 만든다. 02가 `users` 생성 시 외래 키를 추가한다(삭제 시 처리 방식은 P-03 결정 후). 01의 제출 API는 항상 비회원 익명 제출로 저장하고, 로그인 회원 연결은 02가 인증 의존성으로 붙인다. IP 주소는 테이블에 저장하지 않는다.
+- **요청 제한:** 단일 인스턴스 기준 메모리 기반 제한기로 구현하고 키 함수를 교체할 수 있게 한다. 브라우저 요청은 Next.js `rewrites`를 거치므로 실제 클라이언트 IP는 `X-Forwarded-For`에서 얻되, 신뢰할 프록시(로컬 Next.js) 뒤에서만 이 헤더를 믿도록 설정값으로 둔다. 의견 제출 기본값은 P-10 제안값(분당 3회·일 20회)이며 확정 전임을 코드 주석과 §10에 유지한다.
+- **CSRF 헤더:** `X-KickTab-Client: web` 검사는 공개 변경 요청인 의견 제출에도 적용한다. 프런트엔드 API 래퍼가 변경 요청에 이 헤더를 자동으로 붙인다.
+- **API-Football 클라이언트:** 01에서는 실제 외부 호출을 하지 않는다(0회). 모의 전송으로 속도 제한·일일 예산·HTTP 200 + `errors` 실패 처리·재시도 상한·키 비노출을 테스트한다. 실제 호출은 03부터.
+- **헤더 인증 영역:** 02 전까지 비회원 상태(로그인·회원가입 버튼)만 표시하고, 02가 `useAuth()`로 연결할 수 있게 컴포넌트 경계를 둔다. 모바일 메뉴의 회원용 변형(`62:1475`, `81:3209`)은 02에서 연결한다.
+- **푸터:** 서비스 소개·이용약관·개인정보처리방침·문의 항목은 대상 문서가 없으므로(P-12) 링크 없이 표시하거나 "준비 중"으로 두고, 운영자·주소·이메일은 시안의 가상 값을 쓰지 않고 설정값 자리로 둔다. 데이터·뉴스 출처 고지 문구는 Figma 푸터를 따르되 이미지 권리 고지 문구는 V-10 확인 전 임시 문구로 표시한다.
+- **브랜드·대체 이미지:** Figma `55:22`(로고 심벌)과 `55:26`(공통 대체 이미지)을 SVG로 내려받아 `frontend/public/brand/`, `frontend/public/placeholder.svg`에 둔다. 파비콘도 로고 심벌 기준으로 교체한다.
+- **Figma 도구 사용:** `get_design_context`는 Figma의 design-to-code 안내(skill 또는 MCP 리소스)를 먼저 읽으라고 요구한다. 읽을 수 없으면 `get_metadata`·`get_screenshot`과 §6.6 토큰으로 구현하고, 생성 코드는 그대로 붙이지 말고 프로젝트 컴포넌트·토큰으로 옮긴다.
+- **기본 생성 파일 정리:** create-next-app 시작 화면·`next.svg`·`vercel.svg`·Geist 글꼴은 01에서 제거하고, 메인 경로(`/`)는 03 전까지 헤더·푸터 사이에 빈 자리 표시만 둔다.
 
 ## 9. 사용자 확인·환경 작업
 
@@ -387,6 +404,7 @@ src/
 | C-04 | Supabase Direct connection이 IPv6 전용일 수 있음 | 배포 환경에 IPv6가 없으면 Supavisor 세션 풀러 연결로 바꿔야 함(배포 시 확인) |
 | C-05 | 모든 테이블 RLS 활성화(정책 없음) + Data API 비활성화 — 사용자 확정(2026-10-31) | Supabase 공개 API로 테이블이 노출되는 것을 방지 |
 | C-06 | 실시간 갱신을 클라이언트 폴링(30~60초)으로 구현 | 웹소켓 없이 단순화. 실제 경기 검증(V-04) 후 조정 |
+| C-07 | 개발 DB(`kicktab-dev`) 하나로 개발하고, 공개 배포 전 운영용 Supabase 프로젝트를 분리할지 결정 | 개발 중 마이그레이션·테스트 데이터가 운영 데이터와 섞이지 않게 하기 위함(배포 시 결정) |
 
 ### 10.3 기존 기획·디자인 변경 요청
 
