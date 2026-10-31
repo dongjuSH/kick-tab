@@ -12,7 +12,9 @@ FeedbackType = Literal["bug", "suggestion", "other"]
 class FeedbackCreate(ApiModel):
     # Required, 1~1,000 characters after trimming; whitespace-only is rejected (FEED-002).
     body: str = Field(max_length=FEEDBACK_BODY_MAX * 2)
-    type: FeedbackType | None = None
+    # Required by user decision (2026-10-31), replacing "선택" in FEED-002/PRD 21.
+    # The DB column stays nullable for rows saved before this change.
+    type: FeedbackType
     # Current screen path only (no query string), used to group feedback by page.
     page_path: str | None = Field(default=None, max_length=FEEDBACK_PAGE_PATH_MAX)
 

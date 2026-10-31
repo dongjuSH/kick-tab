@@ -12,6 +12,8 @@ from app.main import app
 from app.models.feedback import Feedback
 
 WEB = {"X-KickTab-Client": "web"}
+HELLO = {"body": "hello", "type": "other"}
+HI = {"body": "hi", "type": "other"}
 
 # Test-only routes to exercise the shared exception handlers.
 _probe = APIRouter(prefix="/__probe")
@@ -78,20 +80,23 @@ def test_feedback_is_stored_anonymously_with_trimmed_body(client, stored):
     assert row.page_path == "/teams"
 
 
-def test_feedback_type_is_optional(client, stored):
-    response = client.post("/api/v1/feedback", json={"body": "좋아요"}, headers=WEB)
-    assert response.status_code == 201
-    assert stored[0].type is None
+@pytest.mark.parametrize("payload", [{"body": "좋아요"}, {"body": "좋아요", "type": None}])
+def test_feedback_type_is_required(client, stored, payload):
+    """User decision 2026-10-31: 의견 유형(버그·제안·기타) is required."""
+    response = client.post("/api/v1/feedback", json=payload, headers=WEB)
+    assert response.status_code == 422
+    assert "type" in response.json()["error"]["details"]["fields"]
+    assert stored == []
 
 
 @pytest.mark.parametrize(
     ("payload", "field"),
     [
         ({"body": "   \n  "}, "body"),
-        ({}, "body"),
-        ({"body": "가" * 1001}, "body"),
+        ({"type": "bug"}, "body"),
+        ({"body": "가" * 1001, "type": "bug"}, "body"),
         ({"body": "ok", "type": "spam"}, "type"),
-        ({"body": "ok", "pagePath": "https://evil.example"}, "pagePath"),
+        ({"body": "ok", "type": "bug", "pagePath": "https://evil.example"}, "pagePath"),
     ],
 )
 def test_invalid_feedback_is_rejected_without_saving(client, stored, payload, field):
@@ -104,12 +109,13 @@ def test_invalid_feedback_is_rejected_without_saving(client, stored, payload, fi
 
 
 def test_feedback_accepts_exactly_1000_characters(client, stored):
-    response = client.post("/api/v1/feedback", json={"body": "가" * 1000}, headers=WEB)
+    payload = {"body": "가" * 1000, "type": "other"}
+    response = client.post("/api/v1/feedback", json=payload, headers=WEB)
     assert response.status_code == 201
 
 
 def test_changing_request_without_csrf_header_is_forbidden(client, stored):
-    response = client.post("/api/v1/feedback", json={"body": "hello"})
+    response = client.post("/api/v1/feedback", json=HELLO)
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "FORBIDDEN"
     assert stored == []
@@ -118,7 +124,7 @@ def test_changing_request_without_csrf_header_is_forbidden(client, stored):
 def test_changing_request_from_unknown_origin_is_forbidden(client, stored):
     response = client.post(
         "/api/v1/feedback",
-        json={"body": "hello"},
+        json=HELLO,
         headers={**WEB, "Origin": "https://evil.example"},
     )
     assert response.status_code == 403
@@ -129,7 +135,7 @@ def test_changing_request_from_unknown_origin_is_forbidden(client, stored):
 def test_allowed_origin_passes_csrf_check(client, stored):
     response = client.post(
         "/api/v1/feedback",
-        json={"body": "hello"},
+        json=HELLO,
         headers={**WEB, "Origin": "http://localhost:3000"},
     )
     assert response.status_code == 201
@@ -137,8 +143,8 @@ def test_allowed_origin_passes_csrf_check(client, stored):
 
 def test_feedback_rate_limit_returns_429_with_retry_after(client, stored):
     for _ in range(3):
-        assert client.post("/api/v1/feedback", json={"body": "hi"}, headers=WEB).status_code == 201
-    response = client.post("/api/v1/feedback", json={"body": "hi"}, headers=WEB)
+        assert client.post("/api/v1/feedback", json=HI, headers=WEB).status_code == 201
+    response = client.post("/api/v1/feedback", json=HI, headers=WEB)
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "RATE_LIMITED"
     assert int(response.headers["Retry-After"]) >= 1
@@ -151,7 +157,7 @@ def test_failed_save_is_not_counted_and_hides_internal_details(client):
     app.dependency_overrides[get_db] = lambda: session
     feedback_rate_limit.reset()
     try:
-        response = client.post("/api/v1/feedback", json={"body": "hello"}, headers=WEB)
+        response = client.post("/api/v1/feedback", json=HELLO, headers=WEB)
     finally:
         app.dependency_overrides.pop(get_db, None)
     assert response.status_code == 500

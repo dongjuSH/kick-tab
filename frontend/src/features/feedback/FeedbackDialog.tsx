@@ -28,7 +28,8 @@ function submitFeedback(payload: FeedbackCreate) {
 
 /**
  * Feedback modal (FEED-002; Figma 62:1822·1851·1882, mobile sheet 62:1593·1622·1653·1672).
- * Body is required (1~1,000 chars, whitespace-only rejected); type is optional.
+ * Body (1~1,000 chars, whitespace-only rejected) and type are both required; the type is
+ * required by user decision (2026-10-31), so the Figma label "선택" reads "필수" here.
  * On failure the input stays; the draft also survives closing the dialog.
  */
 export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -41,6 +42,7 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
   const bodyId = useId();
   const hintId = useId();
   const errorId = useId();
+  const typeErrorId = useId();
 
   const mutation = useMutation({
     mutationFn: submitFeedback,
@@ -67,10 +69,12 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
   };
 
   const trimmed = draft.body.trim();
-  const serverFieldError = isApiError(mutation.error) ? mutation.error.fieldErrors.body : undefined;
+  const serverErrors = isApiError(mutation.error) ? mutation.error.fieldErrors : {};
   const emptyError = touched && !trimmed ? "공백 외 내용을 입력해 주세요." : undefined;
-  const fieldError = emptyError ?? serverFieldError;
-  const failed = mutation.isError && !serverFieldError;
+  const fieldError = emptyError ?? serverErrors.body;
+  const typeError =
+    (touched && !draft.type ? "의견 유형을 선택해 주세요." : undefined) ?? serverErrors.type;
+  const failed = mutation.isError && !serverErrors.body && !serverErrors.type;
   const failMessage =
     failed && isApiError(mutation.error) && mutation.error.code === "RATE_LIMITED"
       ? `${mutation.error.message} 입력한 내용은 유지되었습니다.`
@@ -78,7 +82,7 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const submit = () => {
     setTouched(true);
-    if (!trimmed || mutation.isPending) return;
+    if (!trimmed || !draft.type || mutation.isPending) return;
     mutation.mutate({ body: draft.body, type: draft.type, pagePath: pathname });
   };
 
@@ -105,8 +109,8 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
         >
           <p className="text-body text-fg-secondary">불편했던 점이나 바라는 점을 알려주세요.</p>
 
-          <fieldset className="flex flex-col gap-4">
-            <legend className="mb-4 text-label font-medium">의견 유형 · 선택</legend>
+          <fieldset className="flex flex-col gap-4" aria-describedby={typeError ? typeErrorId : undefined}>
+            <legend className="mb-4 text-label font-medium">의견 유형 · 필수</legend>
             <div className="flex gap-2 overflow-x-auto">
               {TYPES.map((type) => {
                 const selected = draft.type === type.value;
@@ -115,7 +119,8 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
                     key={type.value}
                     type="button"
                     aria-pressed={selected}
-                    onClick={() => setDraft({ ...draft, type: selected ? null : type.value })}
+                    // Required: choosing again keeps the selection instead of clearing it.
+                    onClick={() => !selected && setDraft({ ...draft, type: type.value })}
                     className={cx(
                       "min-h-11 w-[76px] shrink-0 rounded-control border p-3 text-label",
                       selected
@@ -128,6 +133,11 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
                 );
               })}
             </div>
+            {typeError && (
+              <p id={typeErrorId} role="alert" className="text-label font-medium text-error">
+                {typeError}
+              </p>
+            )}
           </fieldset>
 
           <div className="flex flex-col gap-4">
@@ -165,7 +175,12 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
             </p>
           )}
 
-          <Button type="submit" variant="primary" fullWidth disabled={!trimmed || mutation.isPending}>
+          <Button
+            type="submit"
+            variant="primary"
+            fullWidth
+            disabled={!trimmed || !draft.type || mutation.isPending}
+          >
             {mutation.isPending ? "보내는 중…" : failed ? "다시 보내기" : "의견 보내기"}
           </Button>
           <p className="text-small text-fg-muted">로그인하지 않아도 익명으로 보낼 수 있습니다.</p>

@@ -105,8 +105,11 @@ export interface components {
         FeedbackCreate: {
             /** Body */
             body: string;
-            /** Type */
-            type?: ("bug" | "suggestion" | "other") | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "bug" | "suggestion" | "other";
             /** Pagepath */
             pagePath?: string | null;
         };
