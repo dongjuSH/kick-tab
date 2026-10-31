@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
+/*
+ * KickTab design tokens — Figma "00 · 컬러 가이드" (46:258) and "개발 전달 기준" (96:412).
+ * --kt-* keep the Figma variable names; @theme maps them to Tailwind utilities
+ * (bg-surface, text-fg-muted, border-line, ...). Components never use raw hex values.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --kt-bg-canvas: #f8fafc;
+  --kt-bg-surface: #ffffff;
+  --kt-bg-subtle: #f1f5f9;
+  --kt-bg-selected: #eff6ff;
+  --kt-text-primary: #0f172a;
+  --kt-text-secondary: #475569;
+  --kt-text-muted: #64748b;
+  --kt-text-inverse: #ffffff;
+  --kt-action-primary: #2563eb;
+  --kt-action-hover: #1d4ed8;
+  --kt-action-soft: #dbeafe;
+  --kt-action-disabled: #e2e8f0;
+  --kt-border-default: #e2e8f0;
+  --kt-border-strong: #cbd5e1;
+  --kt-border-focus: #93c5fd;
+  --kt-status-live: #047857;
+  --kt-status-live-bg: #ecfdf5;
+  --kt-status-warning: #b45309;
+  --kt-status-warning-bg: #fffbeb;
+  --kt-status-error: #b91c1c;
+  --kt-status-error-bg: #fef2f2;
+  /* Logo keycap face / Tab arrow / keycap rim (Figma 46:258, 96:412). */
+  --kt-brand-key: #eff6ff;
+  --kt-brand-arrow: #2563eb;
+  --kt-brand-rim: #cbd5e1;
+
+  /* Sticky header + TOP 5 strip height, used for scroll offsets. */
+  --kt-header-height: 113px;
+  --kt-gutter: 16px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@media (min-width: 640px) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --kt-gutter: 24px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (min-width: 1024px) {
+  :root {
+    --kt-header-height: 129px;
+  }
+}
+
+@theme inline {
+  --color-canvas: var(--kt-bg-canvas);
+  --color-surface: var(--kt-bg-surface);
+  --color-subtle: var(--kt-bg-subtle);
+  --color-selected: var(--kt-bg-selected);
+  --color-fg: var(--kt-text-primary);
+  --color-fg-secondary: var(--kt-text-secondary);
+  --color-fg-muted: var(--kt-text-muted);
+  --color-fg-inverse: var(--kt-text-inverse);
+  --color-action: var(--kt-action-primary);
+  --color-action-hover: var(--kt-action-hover);
+  --color-action-soft: var(--kt-action-soft);
+  --color-action-disabled: var(--kt-action-disabled);
+  --color-line: var(--kt-border-default);
+  --color-line-strong: var(--kt-border-strong);
+  --color-focus: var(--kt-border-focus);
+  --color-live: var(--kt-status-live);
+  --color-live-bg: var(--kt-status-live-bg);
+  --color-warning: var(--kt-status-warning);
+  --color-warning-bg: var(--kt-status-warning-bg);
+  --color-error: var(--kt-status-error);
+  --color-error-bg: var(--kt-status-error-bg);
+  --color-brand-key: var(--kt-brand-key);
+  --color-brand-arrow: var(--kt-brand-arrow);
+  --color-brand-rim: var(--kt-brand-rim);
+
+  --font-sans: var(--font-noto-sans-kr), "Noto Sans KR", system-ui, sans-serif;
+  --font-wordmark: var(--font-inter), system-ui, sans-serif;
+
+  /* Figma text styles KickTab/<size>/<weight> with their line heights. */
+  --text-2xs: 10px;
+  --text-2xs--line-height: 18px;
+  --text-caption: 11px;
+  --text-caption--line-height: 19px;
+  --text-small: 12px;
+  --text-small--line-height: 20px;
+  --text-label: 13px;
+  --text-label--line-height: 21px;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-lead: 16px;
+  --text-lead--line-height: 24px;
+  --text-title: 20px;
+  --text-title--line-height: 30px;
+  --text-heading: 28px;
+  --text-heading--line-height: 38px;
+
+  /* Badge 4px, button/input 8px, card/dialog 16px. */
+  --radius-badge: 4px;
+  --radius-control: 8px;
+  --radius-card: 16px;
+}
+
+@layer base {
+  html {
+    scroll-padding-top: var(--kt-header-height);
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 3px focus ring for keyboard users (Figma 55:27). */
+  :focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+}
+
+@utility kt-container {
+  width: 100%;
+  margin-inline: auto;
+  /* Content max 1280px; 24px gutters on small screens, 16px on mobile. */
+  max-width: calc(1280px + 2 * var(--kt-gutter));
+  padding-inline: var(--kt-gutter);
 }
