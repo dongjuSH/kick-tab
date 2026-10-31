@@ -1,0 +1,24 @@
+# Secrets and env templates are never committed
+.env
+.env.*
+
+# Python
+.venv/
+.python-runtime/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
