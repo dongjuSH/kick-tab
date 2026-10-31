@@ -72,7 +72,7 @@ def is_discord_webhook(url: str) -> bool:
     return (
         parts.scheme == "https"
         and parts.hostname in DISCORD_HOSTS
-        and parts.path.startswith("/api/webhooks/")
+        and parts.path.startswith(WEBHOOK_PATH)
     )
 
 

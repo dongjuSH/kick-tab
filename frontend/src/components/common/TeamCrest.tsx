@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { cx } from "@/components/ui/cx";
 
-export const PLACEHOLDER_IMAGE = "/placeholder.svg";
+const PLACEHOLDER_IMAGE = "/placeholder.svg";
 
 interface RemoteImageProps {
   src: string | null | undefined;

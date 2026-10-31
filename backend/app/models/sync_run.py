@@ -7,8 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-SYNC_RUN_STATUSES = ("running", "succeeded", "failed", "skipped")
-
 
 class SyncRun(Base):
     """One execution of a collection job, including its external API request count."""

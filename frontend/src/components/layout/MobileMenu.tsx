@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Fragment, useState } from "react";
-import { IconButton, buttonClass } from "@/components/ui/Button";
+import { useState } from "react";
+import { IconButton } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/Dialog";
 import { cx } from "@/components/ui/cx";
 import { HeaderAuth } from "./HeaderAuth";
 import { MAIN_NAV, isNavActive } from "./nav";
 
-/** Mobile header menu button + sheet (Figma 62:1427). */
+/** Mobile header menu button + sheet (Figma 62:1427): menu items split by 1px lines. */
 export function MobileMenu() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -30,19 +30,19 @@ export function MobileMenu() {
             {MAIN_NAV.map((item) => {
               const active = isNavActive(item.href, pathname);
               return (
-                <Fragment key={item.href}>
-                  <li>
-                    <Link
-                      href={item.href}
-                      onClick={close}
-                      aria-current={active ? "page" : undefined}
-                      className={cx(buttonClass("ghost", true), active && "font-bold text-action")}
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                  <li aria-hidden className="h-px bg-line" />
-                </Fragment>
+                <li key={item.href} className="border-b border-line pb-4">
+                  <Link
+                    href={item.href}
+                    onClick={close}
+                    aria-current={active ? "page" : undefined}
+                    className={cx(
+                      "flex min-h-11 items-center justify-center rounded-control text-body hover:bg-subtle",
+                      active ? "font-bold text-action" : "font-medium text-fg",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
               );
             })}
           </ul>

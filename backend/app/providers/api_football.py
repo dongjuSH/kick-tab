@@ -231,10 +231,10 @@ class ApiFootballClient:
                 self._backoff(attempt)
                 attempt += 1
                 continue
-            return self._parse(endpoint, params, response, key)
+            return self._parse(endpoint, params, response)
 
     def _parse(
-        self, endpoint: str, params: dict[str, Any], response: httpx.Response, key: str
+        self, endpoint: str, params: dict[str, Any], response: httpx.Response
     ) -> ApiFootballResult:
         try:
             body = response.json()
@@ -250,7 +250,7 @@ class ApiFootballClient:
         status = response.status_code
         if status in (401, 403, 429) or (errors not in (None, [], {})):
             error_keys = _error_keys(errors)
-            text = str(errors).replace(key, "[REDACTED]").lower()
+            text = str(errors).lower()  # only matched against keywords, never logged
             if status in (401, 403, 429) or any(word in text for word in _STOP_WORDS):
                 self._stop_reason = (
                     f"API-Football stopped after HTTP {status} ({', '.join(error_keys) or 'auth'})"

@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Inter, Noto_Sans_KR } from "next/font/google";
 import { MobileBottomBar } from "@/components/layout/MobileBottomBar";
 import { SiteFooter } from "@/components/layout/SiteFooter";
@@ -29,10 +29,6 @@ export const metadata: Metadata = {
   },
   description: "해외 축구 경기 일정·결과·순위·뉴스를 한 곳에서 확인하세요.",
   applicationName: "KickTab",
-};
-
-export const viewport: Viewport = {
-  themeColor: "#ffffff",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

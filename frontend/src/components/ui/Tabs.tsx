@@ -18,11 +18,11 @@ interface TabsProps<V extends string> {
   className?: string;
 }
 
-export function tabId(idBase: string, value: string) {
+function tabId(idBase: string, value: string) {
   return `${idBase}-tab-${value}`;
 }
 
-export function panelId(idBase: string, value: string) {
+function panelId(idBase: string, value: string) {
   return `${idBase}-panel-${value}`;
 }
 

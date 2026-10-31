@@ -1,6 +1,6 @@
 import { ApiError, networkError, toApiError } from "./errors";
 
-export const CSRF_HEADER = "X-KickTab-Client";
+const CSRF_HEADER = "X-KickTab-Client";
 const CSRF_VALUE = "web";
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 

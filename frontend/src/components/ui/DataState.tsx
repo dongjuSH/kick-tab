@@ -6,10 +6,11 @@ import { Icon } from "./Icon";
 import { Skeleton } from "./Skeleton";
 
 /**
- * Standard request states (COM-004, guide §6.6): loading / ready / empty / partial / error.
- * Empty and error copy are always different so "no data" is never mistaken for a failure.
+ * Standard request states (COM-004, guide §4·§6.6): loading / ready / empty / partial /
+ * error / denied. Empty and error copy are always different so "no data" is never mistaken
+ * for a failure; "denied" is for member-only data (e.g. a login prompt as `deniedAction`).
  */
-export type DataStatus = "loading" | "ready" | "empty" | "partial" | "error";
+export type DataStatus = "loading" | "ready" | "empty" | "partial" | "error" | "denied";
 
 interface DataStateProps {
   status: DataStatus;
@@ -23,6 +24,9 @@ interface DataStateProps {
   onRetry?: () => void;
   /** Shown above the data when some fields/blocks were not provided. */
   partialNotice?: ReactNode;
+  deniedTitle?: ReactNode;
+  deniedDescription?: ReactNode;
+  deniedAction?: ReactNode;
   className?: string;
 }
 
@@ -38,7 +42,8 @@ export function StateMessage({
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
-  tone?: "neutral" | "error";
+  /** neutral = search icon (Figma empty/success state), plain = no icon. */
+  tone?: "neutral" | "plain" | "error";
   className?: string;
 }) {
   return (
@@ -64,6 +69,9 @@ export function DataState({
   errorTitle = "정보를 불러오지 못했습니다",
   onRetry,
   partialNotice = "일부 정보는 제공되지 않습니다.",
+  deniedTitle = "로그인이 필요합니다",
+  deniedDescription,
+  deniedAction,
   className,
 }: DataStateProps) {
   if (status === "loading") {
@@ -87,6 +95,17 @@ export function DataState({
         title={errorTitle}
         description={isApiError(error) ? error.message : DEFAULT_ERROR}
         action={onRetry && <Button onClick={onRetry}>다시 시도</Button>}
+      />
+    );
+  }
+  if (status === "denied") {
+    return (
+      <StateMessage
+        tone="plain"
+        className={className}
+        title={deniedTitle}
+        description={deniedDescription}
+        action={deniedAction}
       />
     );
   }

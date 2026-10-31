@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-FEEDBACK_TYPES = ("bug", "suggestion", "other")
 FEEDBACK_BODY_MAX = 1000
 FEEDBACK_PAGE_PATH_MAX = 300
 

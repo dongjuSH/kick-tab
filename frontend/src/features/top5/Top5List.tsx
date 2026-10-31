@@ -7,7 +7,7 @@ import { cx } from "@/components/ui/cx";
 import type { TeamRef, TopMatchItem, TopMatches } from "@/lib/api/types";
 import { MISSING, formatKstMonthDayTime, formatPeriod } from "@/lib/format/kst";
 
-export type Top5Layout = "desktop" | "mobile";
+type Top5Layout = "desktop" | "mobile";
 
 export function teamName(team: TeamRef): string {
   return team.nameKo ?? team.nameEn;
@@ -23,7 +23,7 @@ function averageText(item: TopMatchItem): string {
 }
 
 /** "10/26(월)~11/1(일) · 종료 경기 3개" or "… · 이번 주 선정 결과 없음" (Figma 128:3145·128:3674). */
-export function periodSummary(data: TopMatches): string {
+function periodSummary(data: TopMatches): string {
   const parts = data.period ? [formatPeriod(data.period.start, data.period.end)] : [];
   parts.push(data.items.length ? `종료 경기 ${data.items.length}개` : "이번 주 선정 결과 없음");
   return parts.join(" · ");

@@ -12,7 +12,7 @@ import { isApiError } from "@/lib/api/errors";
 import type { FeedbackCreate, FeedbackReceipt, FeedbackType } from "@/lib/api/types";
 import { EMPTY_DRAFT, clearDraft, loadDraft, saveDraft, type FeedbackDraft } from "./draft";
 
-export const FEEDBACK_MAX_LENGTH = 1000;
+const FEEDBACK_MAX_LENGTH = 1000;
 
 const TYPES: { value: FeedbackType; label: string }[] = [
   { value: "bug", label: "버그" },

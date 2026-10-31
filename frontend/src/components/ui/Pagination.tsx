@@ -4,7 +4,7 @@ import { cx } from "./cx";
 type PageEntry = number | "gap";
 
 /** Page numbers with gaps, e.g. 1 … 4 5 6 … 20. */
-export function pageEntries(page: number, totalPages: number, siblings = 1): PageEntry[] {
+function pageEntries(page: number, totalPages: number, siblings = 1): PageEntry[] {
   if (totalPages <= 0) return [];
   const pages = new Set([1, totalPages]);
   for (let p = page - siblings; p <= page + siblings; p += 1) {

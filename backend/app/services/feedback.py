@@ -57,8 +57,3 @@ def create_feedback(
     session.commit()
     session.refresh(feedback)
     return feedback
-
-
-def count_feedback(session: Session) -> int:
-    """Number of successfully stored feedback rows (basic aggregate for operations)."""
-    return session.scalar(select(func.count()).select_from(Feedback)) or 0
