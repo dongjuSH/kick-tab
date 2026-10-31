@@ -12,7 +12,19 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "local"
+    # Browser origins allowed for CORS and for the CSRF Origin check.
     cors_origins: list[str] = ["http://localhost:3000"]
+    # X-Forwarded-For is trusted only when the direct peer is one of these (the local
+    # Next.js rewrite proxy by default).
+    trusted_proxies: list[str] = ["127.0.0.1", "::1"]
+
+    # Only one instance may run the in-process scheduler (guide §6.5).
+    scheduler_enabled: bool = False
+
+    # API-Football protection (Pro plan: 7,500/day, 300/min).
+    api_football_base_url: str = "https://v3.football.api-sports.io"
+    api_football_daily_budget: int = 7000
+    api_football_per_minute: int = 250
 
     api_football_key: SecretStr = SecretStr("")
     naver_client_id: SecretStr = SecretStr("")
