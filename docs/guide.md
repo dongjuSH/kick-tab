@@ -1,6 +1,6 @@
 # KickTab 개발 가이드
 
-최종 갱신: 2026-10-31 (토), 한국 시간(KST) — 00 채팅 첫 설계 반영
+최종 갱신: 2026-10-31 (토), 한국 시간(KST) — 01 채팅 구현 반영(Codex 교차 검증 전)
 
 Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유하는 최신 작업 기준이다. 각 채팅은 시작 전에 이 문서와 관련 코드를 읽는다. 프로젝트 파악·기술 설계·구현은 Claude, 기획 문서·디자인 반영·교차 검증·실제 배포는 Codex에서 진행한다.
 
@@ -67,11 +67,14 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 
 | 공통 기능 | 만드는 채팅 | 재사용 채팅 | 재사용 방식 |
 | --- | --- | --- | --- |
-| 공통 UI(버튼·뱃지·다이얼로그·하단 시트·툴팁·탭·드롭다운·페이지네이션·스켈레톤·`DataState`) | 01 | 전체 | `src/components/ui/` |
-| 엠블럼·선수 사진·공통 대체 이미지(`TeamCrest`, `PlayerPhoto`) | 01 | 전체 | 이미지 URL이 `null`이면 대체 이미지 |
-| API 클라이언트·응답 타입·오류 처리 | 01 | 전체 | `src/lib/api/`, OpenAPI 생성 타입 |
-| TOP 5 띠 | 01(표시) / 04(선정 작업) | 전 페이지 | `GET /api/v1/top-matches/current` |
-| 의견 보내기 | 01 | 전 페이지 | 데스크톱 푸터·모바일 하단 고정 영역의 진입 버튼 + 모달(모바일 하단 시트), `POST /api/v1/feedback` |
+| 공통 UI(버튼·뱃지·다이얼로그·하단 시트·툴팁·탭·드롭다운·페이지네이션·스켈레톤·`DataState`) | 01 | 전체 | `src/components/ui/`: `Button`·`ButtonLink`·`IconButton`(`Button.tsx`), `Badge`(tone `info`·`live`·`neutral`·`warning`·`error`), `Dialog`(layout `center`·`sheet`·`responsive`)·`BottomSheet`, `Tooltip`, `Tabs`·`TabPanel`, `Dropdown`, `Pagination`(`hrefFor`로 URL 상태), `Skeleton`, `DataState`·`StateMessage`, `Icon`(`public/icons/`), `cx` |
+| 엠블럼·선수 사진·공통 대체 이미지(`TeamCrest`, `PlayerPhoto`) | 01 | 전체 | `src/components/common/TeamCrest.tsx`. 이미지 URL이 `null`이거나 로드 실패면 `public/placeholder.svg`. 로고는 `src/components/common/Logo.tsx`(`size`: `header`·`header-mobile`·`footer`) |
+| API 클라이언트·응답 타입·오류 처리 | 01 | 전체 | `src/lib/api/client.ts`의 `apiFetch<T>(path, { method, query, body })`(→ `{ data, meta }`, 변경 요청에 CSRF 헤더 자동, 401 갱신 연결 자리 `setUnauthorizedHandler`), `errors.ts`의 `ApiError`(`status`·`code`·`message`·`fieldErrors`·`retryAfter`), `types.ts`(생성 타입 별칭), `query-keys.ts`, KST 포맷 `src/lib/format/kst.ts`. 백엔드는 `app/api/errors.py`의 `ApiError(status, code, message)`, `app/schemas/common.py`의 `ApiModel`·`DataResponse[T]`, 공통 경기 스키마 `app/schemas/match.py` |
+| TOP 5 띠 | 01(표시) / 04(선정 작업) | 전 페이지 | `GET /api/v1/top-matches/current`, `src/features/top5/`(`Top5Strip`, `Top5List`, `currentTopMatchesQuery`), 백엔드 `app/services/top_matches.py`의 `get_current_top_matches()`(04가 교체) |
+| 의견 보내기 | 01 | 전 페이지 | `src/features/feedback/`(`FeedbackProvider`·`useFeedback().openFeedback()`, `FeedbackButton`, `FeedbackDialog`), `POST /api/v1/feedback`, 백엔드 `app/services/feedback.py`의 `create_feedback(session, payload, user_id=None)`(02가 회원 ID 전달) |
+| 헤더 인증 영역 | 01(비회원 자리) / 02(연결) | 전 페이지 | `src/components/layout/HeaderAuth.tsx`(`layout`: `desktop`·`menu`, `onNavigate`)의 본문만 `useAuth()`로 교체 |
+| 수집 작업 실행기·API-Football 클라이언트 | 01 | 03·04·05·06·08 | `app/sync/registry.py`의 `@register_job(name, schedule=...)`와 `JobContext.api_football()`(요청 수 자동 집계), 작업 모듈은 `app/sync/jobs.py`에 import 추가, 실행 `uv run python -m app.sync <job> [key=value]`. 클라이언트 `app/providers/api_football.py`의 `ApiFootballClient.get()` |
+| 요청 제한·CSRF | 01 | 02 이후 변경 API | `app/api/deps.py`의 `RateLimit(scope, [Limit(횟수, 초)], key_func=)`, `/api/v1` 라우터 전체에 `require_csrf` 적용 |
 | 인증 상태·로그인 유도·복귀 | 02 | 04·03·08·09 | `useAuth()`, `requireLogin({ intent })` |
 | 관심 팀 | 02(저장소·토글) / 03(일정 선별) | 03·07·08·09 | `useFavorites()`, `<FavoriteToggle teamId>` |
 | 팀 링크 허용 여부 | 03 | 04·05·06·07·08 | 모든 팀 참조 응답의 `detailAvailable: true \| false \| null` |
@@ -89,8 +92,9 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 | 채팅 | 상태 | 비고 |
 | --- | --- | --- |
 | 00 | 첫 설계·01 착수 전 검수 완료(2026-10-31) | 이 문서 §2·§6~§11 확정. Codex 검토 요청 사항은 §10 |
-| 01 | **다음 작업** | 선행 조건 충족: 원격 `main`·`dev` 준비(§11), Supabase Data API 꺼짐 확인(§9 U-03), Figma 커넥터 접근(§1) |
-| 02~09 | 대기 | 앞 순서 채팅의 완료(교차 검증 포함) 후 진행 |
+| 01 | **Claude 구현·자체 검수 완료(2026-10-31), Codex 교차 검증 대기** | 브랜치 `feat/01-header-footer`(원격 push·`dev` 병합 전). 개발 DB에 `0001_sync_runs_feedback` 적용(데이터 행 0건), 실제 외부 API 호출 0회. 확인 요청은 §10.2 C-08, §10.3 |
+| 02 | 다음 작업(01 교차 검증 후) | `AUTH_JWT_SECRET` 사용자 입력 필요(§9 U-04) |
+| 03~09 | 대기 | 앞 순서 채팅의 완료(교차 검증 포함) 후 진행 |
 
 기능 채팅 완료 시 이 표의 상태, 새로 생긴 공통 인터페이스, 남은 확인 사항을 갱신한다.
 
@@ -154,7 +158,7 @@ Supabase Auth를 쓰지 않고 FastAPI에서 직접 구현한다. 가입 화면 
 
 ### 6.3 DB·마이그레이션
 
-- **도구:** SQLAlchemy 2.x(동기, psycopg 3 드라이버) + Alembic. 01이 `app/db/`(엔진·세션·`Base`)와 `backend/migrations/`를 만든다. 연결 문자열은 `.env`의 `DATABASE_URL`을 코드에서 `postgresql+psycopg://`로 바꿔 쓰고, 기존과 같이 `sslmode=verify-full`·`certs/supabase-ca.crt`를 `connect_args`로 전달한다. 기존 `app/database.py`·`check_database`는 연결 점검용으로 유지한다.
+- **도구:** SQLAlchemy 2.x(동기, psycopg 3 드라이버) + Alembic. 01이 `app/db/`(엔진·세션·`Base`, 지연 생성 `get_engine()`, 요청 의존성 `get_db`)와 `backend/migrations/`(첫 리비전 `0001_sync_runs_feedback`)를 만들었다. 모델은 `app/models/`에 두고 `app/models/__init__.py`에 import해야 Alembic이 인식한다. 제약 이름은 `Base`의 명명 규칙을 따르고, 새 리비전 템플릿에 RLS 활성화 안내가 들어 있다. 연결 문자열은 `.env`의 `DATABASE_URL`을 코드에서 `postgresql+psycopg://`로 바꿔 쓰고, 기존과 같이 `sslmode=verify-full`·`certs/supabase-ca.crt`를 `connect_args`로 전달한다. 기존 `app/database.py`·`check_database`는 연결 점검용으로 유지한다.
 - **규칙:** 스키마 변경은 마이그레이션 파일로만 한다(대시보드 수동 변경 금지). 한 기능 채팅의 마이그레이션은 기능 단위로 나누고 `downgrade`를 작성한다. 시간은 `timestamptz`(UTC 저장), 경기 묶음용 KST 날짜는 별도 `date` 컬럼으로 저장한다.
 - **Supabase 공개 API 차단:** Supabase는 `public` 스키마를 Data API(PostgREST)로 노출할 수 있다. **모든 테이블 생성 마이그레이션에 `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`를 포함하고 정책은 만들지 않는다.** 백엔드는 테이블 소유 역할로 접속하므로 영향을 받지 않는다. 사용자는 Supabase 대시보드에서 Data API 비활성화를 함께 검토한다(§9).
 - **ID:** 외부 데이터(대회·팀·선수·경기)는 API-Football ID를 기본 키로 그대로 쓴다. 서비스 데이터(회원·후기 등)는 UUID(`users`) 또는 `bigint identity`를 쓴다.
@@ -208,7 +212,7 @@ Supabase Auth를 쓰지 않고 FastAPI에서 직접 구현한다. 가입 화면 
 | `ABD` | abandoned | '경기 중단', 중단 시점 스코어, 평가·TOP 5 제외 |
 | 그 밖 | unknown | '확인 필요' |
 
-- **팀 참조 공통 형태(`TeamRef`):** `{ "id", "nameKo", "nameEn", "crestUrl": string | null, "detailAvailable": true | false | null }`. `null`은 소속 미확인(조회 중·실패)이며 강등으로 표시하지 않는다(D-15).
+- **팀 참조 공통 형태(`TeamRef`):** `{ "id", "nameKo": string | null, "nameEn", "crestUrl": string | null, "detailAvailable": true | false | null }`. 한국어 이름이 없으면 `nameKo`는 `null`이고 화면은 `nameEn`을 쓴다(`CompetitionRef.nameKo`도 같음). `null`은 소속 미확인(조회 중·실패)이며 강등으로 표시하지 않는다(D-15).
 - **경기 요약 공통 형태(`MatchSummary`):** 경기 카드·TOP 5·팀 경기 목록이 같은 형태를 쓴다. `{ "id", "competition": { "id", "nameKo", "shortName" }, "kickoffAt", "kickoffDateKst", "timeConfirmed", "status", "finishType", "elapsed", "statusReason", "home": TeamRef, "away": TeamRef, "score": { "home", "away", "penaltyHome", "penaltyAway" } }`. 스코어·경과 시간이 없으면 `null`. 01이 스키마를 먼저 정의하고 03이 실제 데이터로 채운다. 필드를 바꾸면 이 줄을 갱신한다.
 - **TOP 5 응답:** `GET /api/v1/top-matches/current` → `data: { "period": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } | null, "items": [ { "rank", "match": MatchSummary } ] }`. 01은 테이블 없이 항상 `period: null, items: []`를 돌려주는 서비스 함수로 계약만 만든다. 주간 경계의 시간대·귀속 시각(P-06)이 정해지기 전에는 `period`를 `null`로 두고 띠는 집계 기간 표기 없이 빈 상태를 보여준다. `weekly_top_matches` 테이블과 실제 선정은 04가 만든다.
 - **프런트엔드 타입:** 백엔드 OpenAPI(`/openapi.json`)에서 `openapi-typescript`로 `src/lib/api/schema.d.ts`를 생성한다(`npm run gen:api`). 손으로 타입을 중복 작성하지 않는다.
@@ -217,7 +221,7 @@ Supabase Auth를 쓰지 않고 FastAPI에서 직접 구현한다. 가입 화면 
 
 | 구분 | 엔드포인트 | 담당 |
 | --- | --- | --- |
-| 공통 | `GET /api/v1/top-matches/current`, `POST /api/v1/feedback` | 01 |
+| 공통 | `GET /api/v1/top-matches/current`, `POST /api/v1/feedback`(요청 `{ body, type?: bug·suggestion·other, pagePath? }`, 본문 앞뒤 공백 제거 후 1~1,000자, 성공 201 `{ data: { id, createdAt } }`) — 01 구현 | 01 |
 | 인증 | `POST /auth/email-codes`, `POST /auth/email-codes/verify`, `POST /auth/signup`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/password-reset`, `GET /auth/me` | 02 |
 | 계정·관심 팀 | `PATCH /me/password`, `DELETE /me`, `GET /me/favorites`, `POST /me/favorites`, `DELETE /me/favorites/{teamId}` | 02 |
 | 기준·일정 | `GET /competitions`, `GET /fixtures?date=&competitions=&team=`, `GET /fixtures/live?ids=`, `GET /teams/search?q=&scope=schedule\|season&season=` | 03 |
@@ -290,13 +294,14 @@ src/
   - 레이아웃: 시안은 데스크톱 1920px·모바일 375px. 콘텐츠·헤더·푸터 내부는 최대 1280px 중앙 정렬의 유동 컨테이너. 1024px 미만은 메뉴 접기·1열 전환, 작은 화면 좌우 24px, 모바일 16px.
   - 서체·크기: Noto Sans KR. 본문 14px/22px 이상, 보조 설명 12px/20px 이상. 모바일 조작 영역 44px 이상.
   - 간격·반경: 4·8·12·16·24·32·48px, 버튼 반경 8px, 카드 반경 16px. 포커스는 3px 외곽선.
-  - 색상 토큰: `bg/canvas #F8FAFC`, `bg/surface #FFFFFF`, `bg/subtle #F1F5F9`, `bg/selected #EFF6FF`, `text/primary #0F172A`, `text/secondary #475569`, `text/muted #64748B`, `text/inverse #FFFFFF`, `action/primary #2563EB`, `action/hover #1D4ED8`, `action/soft #DBEAFE`, `action/disabled #E2E8F0`, `border/default #E2E8F0`, `border/strong #CBD5E1`, `border/focus #93C5FD`, `status/live #047857`, `status/live-bg #ECFDF5`, `status/warning #B45309`, `status/warning-bg #FFFBEB`, `status/error #B91C1C`, `status/error-bg #FEF2F2`, `brand/key #0F172A`, `brand/arrow #BFDBFE`, `brand/rim #60A5FA`. 블루는 주요 동작·선택·링크에만 쓰고, 진행 중·주의·오류는 색과 상태명을 함께 표시한다.
+  - 색상 토큰: `bg/canvas #F8FAFC`, `bg/surface #FFFFFF`, `bg/subtle #F1F5F9`, `bg/selected #EFF6FF`, `text/primary #0F172A`, `text/secondary #475569`, `text/muted #64748B`, `text/inverse #FFFFFF`, `action/primary #2563EB`, `action/hover #1D4ED8`, `action/soft #DBEAFE`, `action/disabled #E2E8F0`, `border/default #E2E8F0`, `border/strong #CBD5E1`, `border/focus #93C5FD`, `status/live #047857`, `status/live-bg #ECFDF5`, `status/warning #B45309`, `status/warning-bg #FFFBEB`, `status/error #B91C1C`, `status/error-bg #FEF2F2`, `brand/key #EFF6FF`, `brand/arrow #2563EB`, `brand/rim #CBD5E1`(01에서 Figma 46:258·96:412 값으로 정정). 블루는 주요 동작·선택·링크에만 쓰고, 진행 중·주의·오류는 색과 상태명을 함께 표시한다.
   - 로고: 80×48 비율 심벌(`55:22`) + 워드마크(10px 간격). 높이 헤더 데스크톱 36px·모바일 32px, 푸터 24px.
   - 헤더: 로고와 메뉴 사이 32px, 메뉴 간격 32px, 로그인·회원가입은 오른쪽. **의견 보내기는 데스크톱 푸터와 모바일 하단 고정 영역에 둔다**(떠 있는 전역 버튼 아님). 모바일은 헤더 메뉴 버튼으로 메뉴·로그아웃을 연다.
   - 필터: 문자 기호 대신 16px 벡터 화살표, 텍스트와 8px 간격. 후기 반응은 16px 엄지 아이콘.
   - 경기 기록: 데스크톱·모바일 모두 타임라인 / 팀 통계 / 라인업 / 선수 평점 4탭. 제공사 선수 평점과 회원 경기 평점을 분리.
   - 푸터: 서비스 소개·이용약관·개인정보처리방침·문의 링크, 운영자 정보, 데이터·뉴스 출처와 권리 고지. 시안의 운영자·주소·이메일은 가상 정보이므로 설정값 또는 자리 표시로 구현한다.
   - 시안의 경기·선수 수치는 샘플이다. 실제 응답을 쓰고 미제공 값은 —로 표시한다.
+- **코드의 토큰 이름(01):** `src/app/globals.css`의 `--kt-*` 변수(Figma 변수명)와 Tailwind 유틸리티 `bg-canvas`·`bg-surface`·`bg-subtle`·`bg-selected`, `text-fg`·`text-fg-secondary`·`text-fg-muted`·`text-fg-inverse`, `bg-action`·`hover:bg-action-hover`·`bg-action-soft`·`bg-action-disabled`, `border-line`·`border-line-strong`, `live`·`warning`·`error`(+`-bg`). 글자 `text-2xs`(10)·`text-caption`(11)·`text-small`(12)·`text-label`(13)·`text-body`(14)·`text-lead`(16)·`text-title`(20)·`text-heading`(28), 반경 `rounded-badge`(4)·`rounded-control`(8)·`rounded-card`(16), 콘텐츠 폭 `kt-container`. 데스크톱 배치는 1024px(`lg:`)부터.
 - **접근성:** 모달·하단 시트는 포커스 이동·Escape 닫기·포커스 복귀, 아이콘 버튼은 `aria-label`, 표는 가로 스크롤.
 
 ### 6.7 환경 변수
@@ -304,8 +309,9 @@ src/
 | 위치 | 변수 | 비고 |
 | --- | --- | --- |
 | 백엔드 `.env` | `API_FOOTBALL_KEY`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `DATABASE_URL` | 설정 완료 |
-| 백엔드 `.env`(추가 예정) | `APP_ENV`, `CORS_ORIGINS`, `AUTH_JWT_SECRET`(02), `EMAIL_*`(02, 공급자 결정 후), `SCHEDULER_ENABLED`, `API_FOOTBALL_DAILY_BUDGET`(01), `IMAGE_RIGHTS_ENFORCED`(03), `NEWS_RETENTION_HOURS`(03) | 추가하는 채팅이 이 표를 갱신 |
-| 프런트엔드 `.env.local` | `BACKEND_ORIGIN`(01, 서버 전용) | 기존 `NEXT_PUBLIC_API_BASE_URL`은 01에서 제거 |
+| 백엔드 설정(01, 코드 기본값 있음) | `APP_ENV`(local), `CORS_ORIGINS`(CSRF Origin 허용 목록 겸용, 기본 `["http://localhost:3000"]`), `TRUSTED_PROXIES`(기본 `["127.0.0.1","::1"]`), `SCHEDULER_ENABLED`(false), `API_FOOTBALL_BASE_URL`, `API_FOOTBALL_DAILY_BUDGET`(7000), `API_FOOTBALL_PER_MINUTE`(250) | 목록 값은 JSON 배열 문자열 |
+| 백엔드 `.env`(추가 예정) | `AUTH_JWT_SECRET`(02), `EMAIL_*`(02, 공급자 결정 후), `IMAGE_RIGHTS_ENFORCED`(03), `NEWS_RETENTION_HOURS`(03) | 추가하는 채팅이 이 표를 갱신 |
+| 프런트엔드 `.env.local` | `BACKEND_ORIGIN`(01, 서버 전용, 기본 `http://localhost:8000`), `SITE_OPERATOR_NAME`·`SITE_OPERATOR_REPRESENTATIVE`·`SITE_OPERATOR_EMAIL`·`SITE_OPERATOR_ADDRESS`(01, 푸터 운영자 정보, 비어 있으면 '공개 전 안내') | `NEXT_PUBLIC_API_BASE_URL`은 코드·로컬 `.env.local`에서 제거 완료 |
 
 비밀이 아닌 설정값(`BACKEND_ORIGIN`, `APP_ENV`, `SCHEDULER_ENABLED` 등)은 담당 채팅이 `.env`·`.env.local`에 직접 추가·수정할 수 있다. 이때 기존 비밀 값 줄은 읽어서 출력하거나 바꾸지 않는다. 코드에는 비밀이 아닌 설정의 기본값을 두어 변수가 없어도 로컬에서 동작하게 한다.
 
@@ -313,13 +319,13 @@ src/
 
 ## 7. 현재 개발 기반과 실행 방법
 
-아래는 2026-10-31 00 채팅 확인 시점의 상태다. 아직 제품 기능은 구현하지 않았다.
+아래는 2026-10-31 01 채팅 완료 시점의 상태다.
 
 | 영역 | 현재 기준 |
 | --- | --- |
-| 프런트엔드 | Next.js 16.4.3·React 19.3.0·TypeScript·Tailwind CSS v4(`@tailwindcss/postcss`). `cacheComponents`·`partialPrefetching` 켜짐. create-next-app 기본 시작 화면(`page.tsx`가 `next.svg`·`vercel.svg` 사용), `lang="en"`·기본 메타데이터·Geist 글꼴 그대로. 01이 교체·정리한다 |
-| 백엔드 | FastAPI·Python 3.12·uv. `/health`·CORS·환경 설정·DB 연결·읽기 전용 연결 확인 명령 구현. ORM·마이그레이션 도구 미설치 |
-| DB | Supabase PostgreSQL `kicktab-dev`(서울), Direct connection 5432, 현재 환경에서 IPv6 접속. Psycopg 3, `sslmode=verify-full` + `certs/supabase-ca.crt`. 제품 테이블 없음. Data API 꺼짐. **현재 DB는 이 프로젝트 하나뿐**이므로 개발 중 마이그레이션·롤백 검증도 여기서 한다(운영 DB 분리는 §10 C-07) |
+| 프런트엔드 | Next.js 16.4.3·React 19.3.0·TypeScript·Tailwind CSS v4. `cacheComponents`·`partialPrefetching` 켜짐. `@tanstack/react-query` 5.105.0, `openapi-typescript` 7.13.0(dev). `lang="ko"`, Noto Sans KR(로고 워드마크만 Inter). 전역 헤더·TOP 5 띠·푸터·모바일 하단 고정 영역은 루트 `layout.tsx`. 메인(`/`)은 03 전까지 자리 표시, 아직 없는 메뉴 경로는 404 안내(`not-found.tsx`). 타입 생성: 백엔드 실행 후 `npm run gen:api`(또는 `npm run gen:api -- <openapi.json 경로>`) |
+| 백엔드 | FastAPI·Python 3.12·uv. SQLAlchemy 2.1.6·Alembic 1.20.1·APScheduler 3.11.3. `/api/v1` 라우터(`app/api/router.py`), 오류 형식·예외 처리기, CSRF·요청 제한, API-Football 클라이언트 골격, 수집 실행기(`app/sync`, 등록된 작업 없음) |
+| DB | Supabase PostgreSQL `kicktab-dev`(서울), Direct connection 5432, 현재 환경에서 IPv6 접속. Psycopg 3, `sslmode=verify-full` + `certs/supabase-ca.crt`. 테이블 `sync_runs`·`feedback`(RLS 켜짐·정책 없음, 리비전 `0001_sync_runs_feedback`). Data API 꺼짐. **현재 DB는 이 프로젝트 하나뿐**이므로 개발 중 마이그레이션·롤백 검증도 여기서 한다(운영 DB 분리는 §10 C-07) |
 | 버전 관리 | Git 저장소 루트 `kick-tab/apps/`, 원격 `main`·`dev`(§11) |
 
 **2026-10-31 00 채팅 실행 확인:** 백엔드 `ruff check` 통과, 기반 테스트 6개 통과, DB 인증·`SELECT 1`·TLS 확인 통과(읽기 전용), 프런트엔드 `npm run lint`·`npm run build` 통과. 개발 서버 실행은 하지 않았다.
@@ -329,7 +335,7 @@ src/
 | 위치 | 설치·실행 | 검사 |
 | --- | --- | --- |
 | `frontend/` | `npm ci` → `npm run dev` | `npm run lint`, `npm run build` |
-| `backend/` | `uv sync --locked --group dev` → `uv run fastapi dev app/main.py` | `uv run ruff check .`, `uv run python -m pytest`, `uv run python -m app.check_database` |
+| `backend/` | `uv sync --locked --group dev` → `uv run fastapi dev app/main.py`(또는 `uv run python -m uvicorn app.main:app --port 8000`) | `uv run ruff check .`, `uv run python -m pytest`(DB 실연동 테스트는 `KICKTAB_DB_TESTS=1`일 때만, 항상 롤백), `uv run python -m app.check_database`, `uv run python -m alembic upgrade head`·`downgrade -1`·`check` |
 
 **주의:** 이 PC에서는 Windows 애플리케이션 제어 정책이 `.venv`의 실행 파일(`pytest.exe` 등)을 간헐적으로 차단한다(2026-10-31 한 차례 `uv run pytest` 실패, 이후 재확인 시 실행됨). 안정적으로 `uv run python -m pytest`, `uv run python -m alembic …`처럼 `python -m` 형태를 사용한다.
 
@@ -389,7 +395,7 @@ src/
 | P-07 | 경기 상태 변경 시 기존 평가 처리(D-07 잔여) | 04 | 종료→중단·취소 등 평가 불가 상태로 바뀌면 숨김 처리 후 원복 시 재노출 |
 | P-08 | 뉴스 대회/팀 분류 세부 규칙, 언론사명 매핑 방식(D-09) | 03 | 원문 도메인→언론사명 매핑 표, 매핑 없으면 도메인 표시 |
 | P-09 | 북마크 중복 키·보존 범위(D-10) | 03·09 | 원문 링크 정규화 해시를 중복 키로 사용, 보관 항목은 설정값 |
-| P-10 | 의견 스팸 방지·보존 정책(D-11 잔여) | 01 | IP 해시 기준 분당 3회·일 20회 제한, 보존 기간은 운영 전 결정 |
+| P-10 | 의견 스팸 방지·보존 정책(D-11 잔여) | 01 | IP 기준 분당 3회·일 20회 제한 — 01에서 제안값으로 임시 적용(메모리 기반, IP는 DB에 저장하지 않음, 형식 오류 요청도 횟수에 포함). 보존 기간은 운영 전 결정 |
 | P-11 | 팀 별칭 사전 구축·관리 방식(D-16) | 03 | 시드 파일(`app/seed/team_aliases.*`)로 버전 관리하고 마이그레이션·시드 명령으로 적재 |
 | P-12 | 이용약관·개인정보 처리방침 문서(가입 동의 화면 필요) | 02 | 문서 작성 주체와 버전 관리 방식 결정 필요 |
 | P-13 | 분석 지표 도구·동의·익명 식별(D-12) | 최종 | 기능 완료 후 별도 결정 |
@@ -405,10 +411,23 @@ src/
 | C-05 | 모든 테이블 RLS 활성화(정책 없음) + Data API 비활성화 — 사용자 확정(2026-10-31) | Supabase 공개 API로 테이블이 노출되는 것을 방지 |
 | C-06 | 실시간 갱신을 클라이언트 폴링(30~60초)으로 구현 | 웹소켓 없이 단순화. 실제 경기 검증(V-04) 후 조정 |
 | C-07 | 개발 DB(`kicktab-dev`) 하나로 개발하고, 공개 배포 전 운영용 Supabase 프로젝트를 분리할지 결정 | 개발 중 마이그레이션·테스트 데이터가 운영 데이터와 섞이지 않게 하기 위함(배포 시 결정) |
+| C-08 | Next.js `rewrites` 프록시는 브라우저가 보낸 `X-Forwarded-For`를 그대로 전달한다(헤더가 없을 때만 채움, 01에서 확인). 배포 시 앞단 프록시가 이 헤더를 실제 클라이언트 IP로 덮어쓰게 하고 백엔드 `TRUSTED_PROXIES`를 그 경로에 맞춘다 | 그렇지 않으면 의견 제출 등의 요청 제한을 헤더 위조로 우회할 수 있다. 로컬 개발 환경은 우회 가능한 상태 |
 
 ### 10.3 기존 기획·디자인 변경 요청
 
-현재 없음. 기능 채팅에서 필요해지면 이유·대안·영향을 이 표에 추가하고 Codex 검토로 전달한다.
+기획·디자인 변경 요청은 없다. 기능 채팅에서 필요해지면 이유·대안·영향을 이 절에 추가하고 Codex 검토로 전달한다.
+
+01 구현 중 Figma에 프레임이 없거나 기준끼리 어긋난 항목은 아래처럼 처리했다. Codex 검토와 디자인 확인을 요청한다.
+
+| ID | 항목 | 01 처리 | 확인 요청 |
+| --- | --- | --- | --- |
+| D-01-1 | TOP 5 띠의 빈 상태·조회 실패 프레임 없음 | 띠 구조는 그대로 두고 '이번 주 인기 경기를 준비 중입니다.'(문구는 데스크톱 띠에만), 펼치면 같은 문구와 '지난주 순위를 이번 주 TOP 5로 보여주지 않습니다.' | 문구·표현 |
+| D-01-2 | 데스크톱 TOP 5 펼침 목록 프레임 없음(모바일 시트 `62:1523`만 있음) | 띠 오른쪽 아래에 폭 420px 카드, 항목 구성은 모바일 시트와 같음 | 배치 |
+| D-01-3 | 모바일 메뉴의 위치 미지정(`62:1427`) | TOP 5·의견 보내기와 같은 하단 시트 | 위치 |
+| D-01-4 | 모바일 푸터에 '맨 위로' 없음(Figma) ↔ COM-003·PRD 7장 푸터 구성에 포함 | Figma대로 데스크톱 푸터에만 표시 | 모바일 제공 여부 |
+| D-01-5 | 푸터 출처·권리 고지 11px(Figma) ↔ 보조 설명 12px 이상(컬러 가이드) | Figma대로 11px/19px | 글자 크기 |
+| D-01-6 | 의견 전달 완료 상태 아이콘이 검색 아이콘(`62:1882`) | Figma대로 사용 | 아이콘 교체 여부 |
+| D-01-7 | 뉴스 출처 BI 표시(COM-003) | 텍스트 'NAVER'만 표시, 이미지 권리 문구는 Figma 문구를 임시 사용 | V-09·V-10 확인 후 반영 |
 
 ### 10.4 공개 전 필수 확인(기존 검증 문서 유지)
 
