@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     naver_client_id: SecretStr = SecretStr("")
     naver_client_secret: SecretStr = SecretStr("")
     database_url: SecretStr = SecretStr("")
+    # Discord channel webhook for new feedback. The URL contains a token: keep it secret.
+    # Empty = notifications off (feedback is still stored).
+    feedback_discord_webhook_url: SecretStr = SecretStr("")
 
 
 settings = Settings()

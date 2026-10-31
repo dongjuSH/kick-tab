@@ -43,10 +43,10 @@ def stored():
 
     session.refresh.side_effect = refresh
     app.dependency_overrides[get_db] = lambda: session
-    feedback_rate_limit.limiter.reset()
+    feedback_rate_limit.reset()
     yield rows
     app.dependency_overrides.pop(get_db, None)
-    feedback_rate_limit.limiter.reset()
+    feedback_rate_limit.reset()
 
 
 @pytest.fixture
@@ -149,7 +149,7 @@ def test_failed_save_is_not_counted_and_hides_internal_details(client):
     session = MagicMock()
     session.commit.side_effect = RuntimeError("password=private-test-value")
     app.dependency_overrides[get_db] = lambda: session
-    feedback_rate_limit.limiter.reset()
+    feedback_rate_limit.reset()
     try:
         response = client.post("/api/v1/feedback", json={"body": "hello"}, headers=WEB)
     finally:

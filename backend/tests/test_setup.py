@@ -19,7 +19,14 @@ def test_health_and_local_frontend_cors():
 
 
 def test_environment_loads_from_backend_directory_and_masks_secrets(tmp_path, monkeypatch):
-    for key in ("API_FOOTBALL_KEY", "NAVER_CLIENT_ID", "NAVER_CLIENT_SECRET", "DATABASE_URL"):
+    secrets = (
+        "API_FOOTBALL_KEY",
+        "NAVER_CLIENT_ID",
+        "NAVER_CLIENT_SECRET",
+        "DATABASE_URL",
+        "FEEDBACK_DISCORD_WEBHOOK_URL",
+    )
+    for key in secrets:
         monkeypatch.setenv(key, f"test-{key.lower()}")
     monkeypatch.chdir(tmp_path)
     loaded = Settings()
@@ -28,6 +35,10 @@ def test_environment_loads_from_backend_directory_and_masks_secrets(tmp_path, mo
     assert loaded.naver_client_id.get_secret_value() == "test-naver_client_id"
     assert loaded.naver_client_secret.get_secret_value() == "test-naver_client_secret"
     assert loaded.database_url.get_secret_value() == "test-database_url"
+    assert (
+        loaded.feedback_discord_webhook_url.get_secret_value()
+        == "test-feedback_discord_webhook_url"
+    )
     for value in loaded.model_dump().values():
         if hasattr(value, "get_secret_value"):
             assert value.get_secret_value() not in repr(loaded)

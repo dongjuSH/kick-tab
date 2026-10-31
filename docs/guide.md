@@ -71,7 +71,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 | 엠블럼·선수 사진·공통 대체 이미지(`TeamCrest`, `PlayerPhoto`) | 01 | 전체 | `src/components/common/TeamCrest.tsx`. 이미지 URL이 `null`이거나 로드 실패면 `public/placeholder.svg`. 로고는 `src/components/common/Logo.tsx`(`size`: `header`·`header-mobile`·`footer`) |
 | API 클라이언트·응답 타입·오류 처리 | 01 | 전체 | `src/lib/api/client.ts`의 `apiFetch<T>(path, { method, query, body })`(→ `{ data, meta }`, 변경 요청에 CSRF 헤더 자동, 401 갱신 연결 자리 `setUnauthorizedHandler`), `errors.ts`의 `ApiError`(`status`·`code`·`message`·`fieldErrors`·`retryAfter`), `types.ts`(생성 타입 별칭), `query-keys.ts`, KST 포맷 `src/lib/format/kst.ts`. 백엔드는 `app/api/errors.py`의 `ApiError(status, code, message)`, `app/schemas/common.py`의 `ApiModel`·`DataResponse[T]`, 공통 경기 스키마 `app/schemas/match.py` |
 | TOP 5 띠 | 01(표시) / 04(선정 작업) | 전 페이지 | `GET /api/v1/top-matches/current`, `src/features/top5/`(`Top5Strip`, `Top5List`, `currentTopMatchesQuery`), 백엔드 `app/services/top_matches.py`의 `get_current_top_matches()`(04가 교체) |
-| 의견 보내기 | 01 | 전 페이지 | `src/features/feedback/`(`FeedbackProvider`·`useFeedback().openFeedback()`, `FeedbackButton`, `FeedbackDialog`), `POST /api/v1/feedback`, 백엔드 `app/services/feedback.py`의 `create_feedback(session, payload, user_id=None)`(02가 회원 ID 전달) |
+| 의견 보내기 | 01 | 전 페이지 | `src/features/feedback/`(`FeedbackProvider`·`useFeedback().openFeedback()`, `FeedbackButton`, `FeedbackDialog`), `POST /api/v1/feedback`, 백엔드 `app/services/feedback.py`의 `create_feedback(session, payload, user_id=None)`(02가 회원 ID 전달). 저장 후 디스코드 채널 알림(`app/notifications/discord.py`의 `notify_feedback`, 백그라운드 작업·실패해도 저장 유지) |
 | 헤더 인증 영역 | 01(비회원 자리) / 02(연결) | 전 페이지 | `src/components/layout/HeaderAuth.tsx`(`layout`: `desktop`·`menu`, `onNavigate`)의 본문만 `useAuth()`로 교체 |
 | 수집 작업 실행기·API-Football 클라이언트 | 01 | 03·04·05·06·08 | `app/sync/registry.py`의 `@register_job(name, schedule=...)`와 `JobContext.api_football()`(요청 수 자동 집계), 작업 모듈은 `app/sync/jobs.py`에 import 추가, 실행 `uv run python -m app.sync <job> [key=value]`. 클라이언트 `app/providers/api_football.py`의 `ApiFootballClient.get()` |
 | 요청 제한·CSRF | 01 | 02 이후 변경 API | `app/api/deps.py`의 `RateLimit(scope, [Limit(횟수, 초)], key_func=)`, `/api/v1` 라우터 전체에 `require_csrf` 적용 |
@@ -310,6 +310,7 @@ src/
 | --- | --- | --- |
 | 백엔드 `.env` | `API_FOOTBALL_KEY`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `DATABASE_URL` | 설정 완료 |
 | 백엔드 설정(01, 코드 기본값 있음) | `APP_ENV`(local), `CORS_ORIGINS`(CSRF Origin 허용 목록 겸용, 기본 `["http://localhost:3000"]`), `TRUSTED_PROXIES`(기본 `["127.0.0.1","::1"]`), `SCHEDULER_ENABLED`(false), `API_FOOTBALL_BASE_URL`, `API_FOOTBALL_DAILY_BUDGET`(7000), `API_FOOTBALL_PER_MINUTE`(250) | 목록 값은 JSON 배열 문자열 |
+| 백엔드 `.env`(비밀, 01 추가) | `FEEDBACK_DISCORD_WEBHOOK_URL`(의견 알림 디스코드 웹후크, 비어 있으면 알림 꺼짐, §9 U-06) | 사용자가 직접 입력 |
 | 백엔드 `.env`(추가 예정) | `AUTH_JWT_SECRET`(02), `EMAIL_*`(02, 공급자 결정 후), `IMAGE_RIGHTS_ENFORCED`(03), `NEWS_RETENTION_HOURS`(03) | 추가하는 채팅이 이 표를 갱신 |
 | 프런트엔드 `.env.local` | `BACKEND_ORIGIN`(01, 서버 전용, 기본 `http://localhost:8000`), `SITE_OPERATOR_NAME`·`SITE_OPERATOR_REPRESENTATIVE`·`SITE_OPERATOR_EMAIL`·`SITE_OPERATOR_ADDRESS`(01, 푸터 운영자 정보, 비어 있으면 '공개 전 안내') | `NEXT_PUBLIC_API_BASE_URL`은 코드·로컬 `.env.local`에서 제거 완료 |
 
@@ -361,7 +362,7 @@ src/
 
 - **진행 단계:** A 백엔드 기반(DB·마이그레이션·응답/오류 형식·공통 의존성·API-Football 클라이언트 골격·수집 실행기) → B 프런트엔드 기반(rewrites·API 래퍼·생성 타입·Query Provider·토큰·글꼴·공통 UI) → C 전역 화면(헤더·TOP 5 띠·푸터·모바일 하단 고정 영역·의견 보내기). 단계마다 검사 통과 후 커밋하고, Codex 교차 검증은 01 전체 완료 후 한 번 받는다.
 - **`feedback` 테이블:** `users` 테이블이 아직 없으므로 `user_id uuid NULL`을 외래 키 없이 만든다. 02가 `users` 생성 시 외래 키를 추가한다(삭제 시 처리 방식은 P-03 결정 후). 01의 제출 API는 항상 비회원 익명 제출로 저장하고, 로그인 회원 연결은 02가 인증 의존성으로 붙인다. IP 주소는 테이블에 저장하지 않는다.
-- **요청 제한:** 단일 인스턴스 기준 메모리 기반 제한기로 구현하고 키 함수를 교체할 수 있게 한다. 브라우저 요청은 Next.js `rewrites`를 거치므로 실제 클라이언트 IP는 `X-Forwarded-For`에서 얻되, 신뢰할 프록시(로컬 Next.js) 뒤에서만 이 헤더를 믿도록 설정값으로 둔다. 의견 제출 기본값은 P-10 제안값(분당 3회·일 20회)이며 확정 전임을 코드 주석과 §10에 유지한다.
+- **요청 제한:** 단일 인스턴스 기준 메모리 기반 제한기로 구현하고 키 함수를 교체할 수 있게 한다. 브라우저 요청은 Next.js `rewrites`를 거치므로 실제 클라이언트 IP는 `X-Forwarded-For`에서 얻되, 신뢰할 프록시(로컬 Next.js) 뒤에서만 이 헤더를 믿도록 설정값으로 둔다. 의견 제출 기본값은 P-10 제안값(분당 3회·일 20회)이며 확정 전임을 코드 주석과 §10에 유지한다. `X-Forwarded-For` 위조 대비로 클라이언트와 무관한 전역 상한(`RateLimit(..., global_limits=)`, 의견은 분당 20회·일 300회)을 함께 둔다(C-08).
 - **CSRF 헤더:** `X-KickTab-Client: web` 검사는 공개 변경 요청인 의견 제출에도 적용한다. 프런트엔드 API 래퍼가 변경 요청에 이 헤더를 자동으로 붙인다.
 - **API-Football 클라이언트:** 01에서는 실제 외부 호출을 하지 않는다(0회). 모의 전송으로 속도 제한·일일 예산·HTTP 200 + `errors` 실패 처리·재시도 상한·키 비노출을 테스트한다. 실제 호출은 03부터.
 - **헤더 인증 영역:** 02 전까지 비회원 상태(로그인·회원가입 버튼)만 표시하고, 02가 `useAuth()`로 연결할 수 있게 컴포넌트 경계를 둔다. 모바일 메뉴의 회원용 변형(`62:1475`, `81:3209`)은 02에서 연결한다.
@@ -379,6 +380,7 @@ src/
 | U-03 | 완료(2026-10-31 확인): Supabase Data API가 처음부터 꺼져 있음(Integrations → Data API → Enable Data API 꺼짐). 코드의 RLS 활성화 규칙과 함께 유지한다. 나중에 Data API를 켜지 않는다 | — |
 | U-04 | `AUTH_JWT_SECRET` 등 새 비밀 값 직접 입력 | 02 |
 | U-05 | 메일 발송 공급자 선택과 계정·도메인 준비(§10 P-01) | 02 운영 연결 전 |
+| U-06 | 의견 알림용 디스코드 채널 웹후크 URL을 `backend/.env`의 `FEEDBACK_DISCORD_WEBHOOK_URL`에 직접 입력(채널 설정 → 연동 → 웹후크 → 새 웹후크 → URL 복사). 비밀 값이므로 채팅·문서에 쓰지 않는다. 비워 두면 알림 없이 저장만 된다 | 01 이후 언제든(배포 환경에도 같은 변수 설정) |
 
 ## 10. 미확정 정책·Codex 검토 요청
 
@@ -391,11 +393,11 @@ src/
 | P-03 | 회원 탈퇴 시 후기·반응·북마크·의견 처리, 같은 이메일 재가입 | 02·04·09 | 관심 팀·북마크·반응 삭제, 후기 삭제(집계에서 제외), 의견은 회원 연결만 해제 |
 | P-04 | 닉네임·비밀번호 규칙(길이·허용 문자·금칙어) | 02 | 닉네임 2~12자 한글·영문·숫자, 비밀번호 8~64자 영문+숫자 포함 |
 | P-05 | 행정 종료(AWD·WO) 경기의 평가·TOP 5 포함 여부 | 04 | 결정 전 제공 보류(문서 기준 유지) |
-| P-06 | TOP 5 시간대·주간 귀속 시각·가중치·베이지안 보정·AI 전환 임계치·동점 기준, AI 선정 입력·출력 형식과 사용할 모델 | 04 | 사용자가 보유한 기준을 받아 정리. 결정 전 TOP 5 띠는 빈 상태 |
+| P-06 | TOP 5 시간대·주간 귀속 시각·가중치·베이지안 보정·AI 전환 임계치·동점 기준, AI 선정 입력·출력 형식과 사용할 모델 | 04 | **사용자 결정(2026-10-31):** 회원 후기 기준으로 선정하되, 초기 오픈이나 표본이 부족하면 LLM이 자동 선정한다. 새 주가 시작되는 자정에 그 주 TOP 5를 선정해 표시하므로 TOP 5는 비어 있지 않는 것이 원칙이다(기획 문서의 '빈 상태' 예외는 사용자가 놓친 부분으로 04에서 정리). 남은 세부(주 시작 직후 후보 범위, 임계치, 모델, 입출력 형식)는 04 착수 시 사용자와 확정. 01의 빈 상태 화면은 선정 실패 대비용으로만 유지 |
 | P-07 | 경기 상태 변경 시 기존 평가 처리(D-07 잔여) | 04 | 종료→중단·취소 등 평가 불가 상태로 바뀌면 숨김 처리 후 원복 시 재노출 |
 | P-08 | 뉴스 대회/팀 분류 세부 규칙, 언론사명 매핑 방식(D-09) | 03 | 원문 도메인→언론사명 매핑 표, 매핑 없으면 도메인 표시 |
 | P-09 | 북마크 중복 키·보존 범위(D-10) | 03·09 | 원문 링크 정규화 해시를 중복 키로 사용, 보관 항목은 설정값 |
-| P-10 | 의견 스팸 방지·보존 정책(D-11 잔여) | 01 | IP 기준 분당 3회·일 20회 제한 — 01에서 제안값으로 임시 적용(메모리 기반, IP는 DB에 저장하지 않음, 형식 오류 요청도 횟수에 포함). 보존 기간은 운영 전 결정 |
+| P-10 | 의견 스팸 방지·보존 정책(D-11 잔여) | 01 | IP 기준 분당 3회·일 20회 + 서비스 전체 분당 20회·일 300회 — 01에서 제안값으로 임시 적용(메모리 기반, IP는 DB에 저장하지 않음, 형식 오류 요청도 횟수에 포함). 보존 기간은 운영 전 결정. 의견 본문이 디스코드로 전송되므로 개인정보처리방침(P-12)에 외부 전송 사실을 반영 |
 | P-11 | 팀 별칭 사전 구축·관리 방식(D-16) | 03 | 시드 파일(`app/seed/team_aliases.*`)로 버전 관리하고 마이그레이션·시드 명령으로 적재 |
 | P-12 | 이용약관·개인정보 처리방침 문서(가입 동의 화면 필요) | 02 | 문서 작성 주체와 버전 관리 방식 결정 필요 |
 | P-13 | 분석 지표 도구·동의·익명 식별(D-12) | 최종 | 기능 완료 후 별도 결정 |
@@ -411,7 +413,7 @@ src/
 | C-05 | 모든 테이블 RLS 활성화(정책 없음) + Data API 비활성화 — 사용자 확정(2026-10-31) | Supabase 공개 API로 테이블이 노출되는 것을 방지 |
 | C-06 | 실시간 갱신을 클라이언트 폴링(30~60초)으로 구현 | 웹소켓 없이 단순화. 실제 경기 검증(V-04) 후 조정 |
 | C-07 | 개발 DB(`kicktab-dev`) 하나로 개발하고, 공개 배포 전 운영용 Supabase 프로젝트를 분리할지 결정 | 개발 중 마이그레이션·테스트 데이터가 운영 데이터와 섞이지 않게 하기 위함(배포 시 결정) |
-| C-08 | Next.js `rewrites` 프록시는 브라우저가 보낸 `X-Forwarded-For`를 그대로 전달한다(헤더가 없을 때만 채움, 01에서 확인). 배포 시 앞단 프록시가 이 헤더를 실제 클라이언트 IP로 덮어쓰게 하고 백엔드 `TRUSTED_PROXIES`를 그 경로에 맞춘다 | 그렇지 않으면 의견 제출 등의 요청 제한을 헤더 위조로 우회할 수 있다. 로컬 개발 환경은 우회 가능한 상태 |
+| C-08 | **배포 시 필수 작업(사용자 결정 2026-10-31, A안):** Next.js `rewrites` 프록시는 브라우저가 보낸 `X-Forwarded-For`를 그대로 전달한다(헤더가 없을 때만 채움, 01에서 확인). 배포 시 앞단 프록시가 이 헤더를 실제 클라이언트 IP로 덮어쓰게 하고(예: Nginx `proxy_set_header X-Forwarded-For $remote_addr;`, Vercel·Cloudflare는 기본 동작 확인) 백엔드 `TRUSTED_PROXIES`를 그 경로에 맞춘다. 코드 쪽 안전망(B안)인 전역 상한은 01에서 반영 완료 | 앞단 설정 전에는 클라이언트별 제한을 헤더 위조로 우회할 수 있고, 전역 상한만 남는다. 로컬 개발 환경은 우회 가능한 상태 |
 
 ### 10.3 기존 기획·디자인 변경 요청
 
@@ -426,6 +428,7 @@ src/
 | D-01-3 | 모바일 메뉴의 위치 미지정(`62:1427`) | TOP 5·의견 보내기와 같은 하단 시트. 계정 버튼은 Figma `133:4134`대로 로그인(ghost)·회원가입(primary) 가로 배치 | 위치 |
 | D-01-4 | 푸터 리디자인(`49:532`·`49:1012`, 2026-10-31)에서 '맨 위로'·브랜드 소개 문구·'서비스 소개'·권리 고지 문장 제거 ↔ COM-003 5번·PRD 7장 푸터 구성(브랜드 소개, 맨 위로, 이미지 출처·권리 고지 포함) | Figma대로 구현 | 기능 명세서·PRD 푸터 항목 갱신 또는 디자인 보완 |
 | D-01-5 | 푸터 운영자·출처 문구 11px(Figma) ↔ 보조 설명 12px 이상(컬러 가이드) | Figma대로 11px/19px | 글자 크기 |
+| D-01-8 | TOP 5는 항상 표시(P-06 사용자 결정) ↔ 기능 명세서 TOP-002·TOP-003의 '선정 결과 없음·빈 상태' 예외 | 01은 빈 상태 화면을 선정 실패 대비로만 유지 | 04에서 선정 작업 구현 시 기획 문서 갱신 |
 | D-01-6 | 의견 전달 완료 상태 아이콘이 검색 아이콘(`62:1882`) | Figma대로 사용 | 아이콘 교체 여부 |
 | D-01-7 | 뉴스 출처 BI 표시(COM-003) | 텍스트 'NAVER'만 표시, 이미지 권리 문구는 Figma 문구를 임시 사용 | V-09·V-10 확인 후 반영 |
 
