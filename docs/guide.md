@@ -67,7 +67,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 
 | 공통 기능 | 만드는 채팅 | 재사용 채팅 | 재사용 방식 |
 | --- | --- | --- | --- |
-| 공통 UI(버튼·뱃지·다이얼로그·하단 시트·툴팁·탭·드롭다운·페이지네이션·스켈레톤·`DataState`) | 01 | 전체 | `src/components/ui/`: `Button`·`ButtonLink`·`IconButton`(`Button.tsx`), `Badge`(tone `info`·`live`·`neutral`·`warning`·`error`), `Dialog`(layout `center`·`sheet`·`responsive`)·`BottomSheet`, `Tooltip`, `Tabs`·`TabPanel`, `Dropdown`, `Pagination`(`hrefFor`로 URL 상태), `Skeleton`, `DataState`·`StateMessage`, `Icon`(`public/icons/`), `cx` |
+| 공통 UI(버튼·뱃지·다이얼로그·하단 시트·탭·드롭다운·페이지네이션·스켈레톤·`DataState`) | 01 | 전체 | `src/components/ui/`: `Button`·`ButtonLink`·`IconButton`(`Button.tsx`), `Badge`(tone `info`·`live`·`neutral`·`warning`·`error`), `Dialog`(layout `center`·`sheet`·`responsive`)·`BottomSheet`, `Tabs`·`TabPanel`, `Dropdown`, `Pagination`(`hrefFor`로 URL 상태), `Skeleton`, `DataState`·`StateMessage`, `Icon`(`public/icons/`), `cx` |
 | 엠블럼·선수 사진·공통 대체 이미지(`TeamCrest`, `PlayerPhoto`) | 01 | 전체 | `src/components/common/TeamCrest.tsx`. 이미지 URL이 `null`이거나 로드 실패면 `public/placeholder.svg`. 로고는 `src/components/common/Logo.tsx`(`size`: `header`·`header-mobile`·`footer`) |
 | API 클라이언트·응답 타입·오류 처리 | 01 | 전체 | `src/lib/api/client.ts`의 `apiFetch<T>(path, { method, query, body })`(→ `{ data, meta }`, 변경 요청에 CSRF 헤더 자동, 401 갱신 연결 자리 `setUnauthorizedHandler`), `errors.ts`의 `ApiError`(`status`·`code`·`message`·`fieldErrors`·`retryAfter`), `types.ts`(생성 타입 별칭), `query-keys.ts`, KST 포맷 `src/lib/format/kst.ts`. 백엔드는 `app/api/errors.py`의 `ApiError(status, code, message)`, `app/schemas/common.py`의 `ApiModel`·`DataResponse[T]`, 공통 경기 스키마 `app/schemas/match.py` |
 | TOP 5 띠 | 01(표시) / 04(선정 작업) | 전 페이지 | `GET /api/v1/top-matches/current`, `src/features/top5/`(`Top5Strip`, `Top5List`, `currentTopMatchesQuery`), 백엔드 `app/services/top_matches.py`의 `get_current_top_matches()`(04가 교체) |
@@ -92,7 +92,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 | 채팅 | 상태 | 비고 |
 | --- | --- | --- |
 | 00 | 첫 설계·01 착수 전 검수 완료(2026-10-31) | 이 문서 §2·§6~§11 확정. Codex 검토 요청 사항은 §10 |
-| 01 | **Codex 재검증(2026-11-01): 11건 중 10건 해결·1건 부분 해결 + 낮음 2건 → Claude 최종 보완 완료, Codex 최종 재검증 대기** | 브랜치 `feat/01-header-footer`(보완 커밋은 로컬만, push·`dev` 병합 전). 개발 DB 리비전 `0002_feedback_body_hash`(보완에 스키마 변경 없음, `feedback` 2행은 사용자 연동 확인용, `sync_runs` 0행), 실제 API-Football 호출 0회. 확인 요청은 §10.2 C-08, §10.3. 인수인계는 §3.1 |
+| 01 | **완료(2026-11-01) — `dev` 병합 가능** | Codex 판정: 로컬 `c3ad860` 기준 완료·`dev` 병합 가능(백엔드 ruff·pytest 88 통과·2 건너뜀, 프런트 lint·기본 Turbopack build 통과). 이후 사용자 결정으로 미사용 `Tooltip`을 삭제했다(정리 커밋, Codex 재검증 대상 아님 — lint·build만 확인). 브랜치 `feat/01-header-footer`(push·`dev` 병합은 사용자 지시 시). 개발 DB 리비전 `0002_feedback_body_hash`, 실제 API-Football 호출 0회. 터치·펜·스크린리더 실기기 검사는 전체 제작 후 일괄 검수(§4). 남은 확인 요청은 §10.2 C-08, §10.3 |
 | 02 | 다음 작업(01 교차 검증 후) | `AUTH_JWT_SECRET` 사용자 입력 필요(§9 U-04) |
 | 03~09 | 대기 | 앞 순서 채팅의 완료(교차 검증 포함) 후 진행 |
 
@@ -111,7 +111,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 - **오류 로그:** 미처리 예외는 `app/api/errors.py`의 `UnhandledErrorMiddleware`가 공통 500 응답으로 바꾸고 예외 종류만 기록한다(서버 로그에 메시지·traceback을 남기지 않음, `tests/test_server_logging.py`가 실제 Uvicorn으로 확인). 새 앱·테스트 앱도 `register_exception_handlers(app)`를 다른 미들웨어보다 먼저 호출한다. 진단이 더 필요하면 메시지 대신 안전한 식별 정보(오류 코드·리소스 ID)를 로그에 남긴다.
 - **동시성:** '조회 후 저장'으로 중복을 막는 서비스는 같은 트랜잭션 안에서 키별 `pg_advisory_xact_lock`으로 묶는다(`app/services/feedback.py`의 `lock_body_hash` 참고). 키는 다른 용도와 겹치지 않게 접두어를 붙여 해시한다. 메모리 제한기 `RateLimiter`는 `check`·`record`·`hit`가 각각 한 번의 잠금으로 동작하고(`hit`은 검사와 기록을 한 잠금 안에서 처리), 잠금 안에서는 `_check_locked`·`_record_locked`만 호출한다.
 - **화면:** 색·글자·반경은 `globals.css` 토큰 유틸리티만 쓰고(§6.6), 데스크톱 배치는 `lg:`(1024px)부터, 콘텐츠 폭은 `kt-container`. 모든 데이터 영역은 `DataState`로 상태를 구분한다. 모달·시트는 `Dialog`(`layout`: `center`·`sheet`·`responsive`)를 쓴다. 같은 성질의 Tailwind 클래스를 `buttonClass` 위에 덧붙이면 충돌해 적용되지 않을 수 있으므로(01에서 모바일 메뉴 강조가 이 문제로 실패), 상태별 스타일은 겹치지 않게 조합하고 브라우저에서 계산 스타일을 확인한다.
-- **조작 영역:** 모바일 44px 이상은 실제 클릭 영역 기준이다. 시안 높이를 지켜야 하면 `before:` 가상 요소로 영역만 넓힌다(TOP 5 띠 버튼: 보이는 높이 43px, 클릭 영역 45px). `Tooltip`은 마우스 클릭 시 열린 상태 유지, 터치 탭은 토글, 키보드 포커스로 표시된다. 누른 포인터 정보는 클릭·pointercancel·버튼 밖에서 놓기·포커스 이탈 때 지워 이후 키보드 포커스를 막지 않는다.
+- **조작 영역:** 모바일 44px 이상은 실제 클릭 영역 기준이다. 시안 높이를 지켜야 하면 `before:` 가상 요소로 영역만 넓힌다(TOP 5 띠 버튼: 보이는 높이 43px, 클릭 영역 45px).
 - **장시간 표시 데이터:** 루트 레이아웃처럼 오래 떠 있는 영역의 조회는 갱신 조건을 명시한다(TOP 5: 5분 지나면 창 포커스·펼칠 때 재조회, 화면이 보일 때만 30분 주기, `src/features/top5/queries.ts`).
 - **외부 이미지:** `TeamCrest`·`PlayerPhoto`는 `next/image`를 `unoptimized`로 쓰므로 원격 도메인 설정이 필요 없다. URL이 `null`이거나 실패하면 대체 이미지가 나온다.
 - **아직 없는 경로:** `/results`·`/standings`·`/teams`·`/login`·`/signup`·`/matches/[id]`는 404 안내(`app/not-found.tsx`)가 뜬다. 담당 채팅이 `app/<경로>/page.tsx`를 만들면 바로 연결된다. 메인 `/`는 `app/page.tsx` 자리 표시를 03이 교체한다.
@@ -136,7 +136,8 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 
 - `app/services/top_matches.py`의 `get_current_top_matches()`를 선정 결과 조회로 교체한다. 응답 계약(`period`, `items[].rank·match·averageRating·ratingCount`)과 화면(`src/features/top5/`)은 이미 맞춰져 있다. 평가 0건이면 `averageRating: null`.
 - TOP 5는 항상 표시가 원칙(P-06 사용자 결정): 후기 기준 + 표본 부족 시 LLM 자동 선정, 새 주 시작 자정에 선정. 주 시작 직후 후보 범위·임계치·모델은 착수 시 사용자와 확정하고, 기획 문서의 빈 상태 예외(D-01-8)를 정리한다.
-- 선정 결과가 바뀌면 프런트에서 `queryKeys.topMatches.all`을 무효화하면 된다(현재 5분 캐시).
+- 선정 결과가 바뀌면 프런트에서 `queryKeys.topMatches.all`을 무효화하면 된다(평소에는 5분 신선도·30분 주기 조회로 반영).
+- 후기 작성 주의사항은 정보 아이콘·툴팁이 아니라 화면에 바로 보이는 UI로 제공한다(사용자 기준, 2026-11-01). 01에서 만들었던 `Tooltip`은 쓰이지 않아 삭제했으므로, 숨겨진 안내가 필요해지면 그때 요구에 맞춰 새로 만든다.
 
 ## 4. 기능 구현·검수·설계 변경 흐름
 
@@ -154,7 +155,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 6. 실제 외부 API 호출은 필요한 최소 횟수만 실행하고 횟수를 완료 응답에 적는다.
 7. 완료 응답에 구현 범위·관련 경로·검사 결과·실제 API/DB 연동 여부·미확인 사항을 남기고, 이 가이드 §3과 바뀐 공통 인터페이스를 갱신한다.
 
-모든 기능을 마치면 페이지 간 이동, 인증 후 복귀, 관심 팀·후기·북마크의 화면 간 반영, 시즌 전환, 외부 API 실패 등 연결 흐름을 전체 검수한다. **Claude 전체 최종 검수 → Codex 교차 검증 → Claude 보완 → 최종 재검증** 후 Codex의 배포 작업으로 넘긴다.
+모든 기능을 마치면 페이지 간 이동, 인증 후 복귀, 관심 팀·후기·북마크의 화면 간 반영, 시즌 전환, 외부 API 실패 등 연결 흐름을 전체 검수한다. **터치·펜 실기기와 스크린리더 검사도 이 단계에서 일괄 진행한다**(사용자 결정 2026-11-01). 기능 채팅 단계에서는 실기기 미검사를 완료 차단 사유로 삼지 않고, 접근성 이름·의미 있는 마크업·키보드 포커스 등 필요한 구현을 갖추는 데 집중한다. **Claude 전체 최종 검수 → Codex 교차 검증 → Claude 보완 → 최종 재검증** 후 Codex의 배포 작업으로 넘긴다.
 
 ## 5. 문서 운영 규칙
 

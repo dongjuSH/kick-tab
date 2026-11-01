@@ -1,6 +1,6 @@
 # KickTab 파일별 구현 기능
 
-기준: 2026-11-01 (일, 01 교차 검증 보완 반영), 브랜치 `feat/01-header-footer`. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+기준: 2026-11-01 (일, 01 완료 — 교차 검증 보완·미사용 `Tooltip` 삭제 반영), 브랜치 `feat/01-header-footer`. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -117,7 +117,6 @@
 | `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, primary·secondary·ghost | 완료 |
 | `Badge.tsx` | 상태 뱃지(info·live·neutral·warning·error) | 완료 |
 | `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
-| `Tooltip.tsx` | 마우스 호버·클릭 시 표시 유지, 터치 탭 토글, 키보드 포커스 표시, Escape·바깥 탭 닫기, 누른 포인터 정보는 클릭·취소·바깥 놓기·포커스 이탈 때 정리 | 완료(04 후기 주의사항 등에서 사용 예정) |
 | `Tabs.tsx` | 키보드 지원 탭·`TabPanel` | 완료(04·08에서 사용 예정) |
 | `Dropdown.tsx` | 단일 선택 목록(시즌·리그) | 완료(05·06에서 사용 예정) |
 | `Pagination.tsx` | URL 기반 페이지 이동 | 완료(05·07에서 사용 예정) |
