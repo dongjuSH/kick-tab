@@ -57,3 +57,29 @@
 - 프런트엔드: `npm run lint`·`npm run build` 통과, `npm run gen:api` 결과가 실행 중 백엔드와 일치.
 - 브라우저: 데스크톱 1920px·모바일 375px를 Figma와 측정 비교(헤더 129/113px, 푸터 147px, TOP 5 패널 1280px 등), 모달·시트의 Escape·포커스 복귀, 의견 실패·성공·중복·유형 미선택 상태 확인.
 - 외부 호출: API-Football 0회. 디스코드 웹후크는 사용자가 직접 연동해 수신 확인.
+
+## 2026-11-01 (일) — 01 Codex 교차 검증 보완
+
+Codex 교차 검증 결과(치명 0·높음 1·중간 7·낮음 3)를 재현 또는 코드 근거로 확인한 뒤 보완했다. 오탐은 없었다(3번은 잠금 부재를 코드로 확인하고 잠금 순서·DB 대기 테스트로 검증, 11번은 문서 대조). 브랜치 `feat/01-header-footer`, 보완 커밋은 로컬만(push·`dev` 병합 전). Codex 재검증 전.
+
+| # | 영역 | 변경 파일·함수 | 이유·결과 |
+| --- | --- | --- | --- |
+| 1 | 서버 로그 원문 노출(높음) | `backend/app/api/errors.py`(`UnhandledErrorMiddleware`, `register_exception_handlers`), `backend/app/main.py` | Starlette가 500 처리 후 예외를 다시 던져 Uvicorn이 traceback(메시지 포함)을 기록하던 문제. 미들웨어가 공통 500 응답 후 종류만 기록. 실제 Uvicorn 서버로 회귀 검사(`tests/test_server_logging.py`) |
+| 2 | 이전 전송 성공이 새 초안 삭제 | `frontend/src/features/feedback/FeedbackDialog.tsx`(세션 번호·`Submission`), `draft.ts`(`sameDraft`) | 열고 닫을 때마다 세션을 구분해 지난 요청 결과가 새 초안·화면을 바꾸지 않게 함. 닫힌 채 같은 초안이면만 정리. 전송 중 입력 잠금 |
+| 3 | 동시 요청 중복 우회 | `backend/app/services/feedback.py`(`duplicate_lock_key`, `lock_body_hash`) | 본문 해시별 `pg_advisory_xact_lock`으로 조회~저장 직렬화. 스키마 변경 없음. 개발 DB 동시 잠금 테스트(롤백) |
+| 4 | 잘못된 JSON 미집계 | `backend/app/api/deps.py`(`RateLimit.route_class`), `backend/app/api/routes/feedback.py` | 요청 제한을 본문 해석 전(라우트 클래스)에 적용 |
+| 5 | 비JSON 401·403·429 후 재호출 | `backend/app/providers/api_football.py`(`_parse`, `STOP_STATUSES`) | 상태 코드 중단 처리를 JSON 해석보다 먼저 |
+| 6 | TOP 5 자동 갱신 없음 | `frontend/src/features/top5/queries.ts`, `Top5Strip.tsx` | 화면이 보일 때 30분 주기, 5분 지나면 창 포커스·펼칠 때 재조회 |
+| 7 | 전역 거부 요청의 버킷 증가 | `backend/app/core/rate_limit.py`(`check`·`record`, LRU 정리, 최대 10,000키), `backend/app/api/deps.py` | 두 한도 모두 통과한 요청만 집계, 정리 비용 상각 O(1) |
+| 8 | 모바일 TOP 5 터치 27px | `frontend/src/features/top5/Top5Strip.tsx` | 띠 높이 유지, 실제 클릭 영역 45px(`before:` 확장) |
+| 9 | Tooltip 첫 클릭 닫힘 | `frontend/src/components/ui/Tooltip.tsx` | 실제 클릭으로 재현. 포인터 종류별 처리(마우스 유지·터치 토글·키보드 포커스) |
+| 10 | 초안 저장 실패 안내 없음 | `draft.ts`(`saveDraft` 반환값), `FeedbackDialog.tsx` | 저장 불가 시 안내 1회 표시, 제출은 유지 |
+| 11 | 확정 제한값 미확정 표기 | `backend/app/api/routes/feedback.py` 주석, `docs/guide.md` §8 | 01 적용값을 확정으로 통일, 02 차등값·보존 기간만 미확정 |
+
+### 검증 결과
+
+- 백엔드: `ruff` 통과, `pytest` 86 통과·2 건너뜀(DB 연동 7개는 `KICKTAB_DB_TESTS=1`로 별도 통과, 롤백), `alembic current` = `0002_feedback_body_hash`(head), `alembic check` 차이 없음.
+- 프런트엔드: `npm run lint` 통과, 기본 `npm run build`(Turbopack) `.next` 삭제 후 통과. Codex 환경의 Turbopack 실패는 샌드박스 프로세스·로컬 연결 제한으로 추정(가이드 §7).
+- 브라우저: 2·6·8·9·10번 재현 후 수정 확인, 1920·375px 회귀(헤더 129/113px, 푸터 147px, 버튼 간격 12px, TOP 5 패널 1280px, Escape·포커스 복귀) 유지.
+- `npm audit`: moderate 18건 모두 개발 도구의 `minimatch` 경로(01 추가분 2건), 수정 미적용(가이드 §7).
+- 외부 호출 0회, 디스코드 전송 0회(화면 확인은 fetch 가로채기), 영구 DB 저장 0건(feedback 2행·sync_runs 0행 유지).

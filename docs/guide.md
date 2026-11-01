@@ -1,6 +1,6 @@
 # KickTab 개발 가이드
 
-최종 갱신: 2026-10-31 (토), 한국 시간(KST) — 01 채팅 구현 반영(Codex 교차 검증 전)
+최종 갱신: 2026-11-01 (일), 한국 시간(KST) — 01 Codex 교차 검증 발견 사항 보완 반영(재검증 전)
 
 Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유하는 최신 작업 기준이다. 각 채팅은 시작 전에 이 문서와 관련 코드를 읽는다. 프로젝트 파악·기술 설계·구현은 Claude, 기획 문서·디자인 반영·교차 검증·실제 배포는 Codex에서 진행한다.
 
@@ -74,7 +74,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 | 의견 보내기 | 01 | 전 페이지 | `src/features/feedback/`(`FeedbackProvider`·`useFeedback().openFeedback()`, `FeedbackButton`, `FeedbackDialog`), `POST /api/v1/feedback`, 백엔드 `app/services/feedback.py`의 `create_feedback(session, payload, user_id=None)`(02가 회원 ID 전달). 저장 후 디스코드 채널 알림(`app/notifications/discord.py`의 `notify_feedback`, 백그라운드 작업·실패해도 저장 유지) |
 | 헤더 인증 영역 | 01(비회원 자리) / 02(연결) | 전 페이지 | `src/components/layout/HeaderAuth.tsx`(`layout`: `desktop`·`menu`, `onNavigate`)의 본문만 `useAuth()`로 교체 |
 | 수집 작업 실행기·API-Football 클라이언트 | 01 | 03·04·05·06·08 | `app/sync/registry.py`의 `@register_job(name, schedule=...)`와 `JobContext.api_football()`(요청 수 자동 집계), 작업 모듈은 `app/sync/jobs.py`에 import 추가, 실행 `uv run python -m app.sync <job> [key=value]`. 클라이언트 `app/providers/api_football.py`의 `ApiFootballClient.get()` |
-| 요청 제한·CSRF | 01 | 02 이후 변경 API | `app/api/deps.py`의 `RateLimit(scope, [Limit(횟수, 초)], key_func=)`, `/api/v1` 라우터 전체에 `require_csrf` 적용 |
+| 요청 제한·CSRF | 01 | 02 이후 변경 API | `app/api/deps.py`의 `RateLimit(scope, [Limit(횟수, 초)], key_func=, global_limits=)`. 본문이 있는 경로는 라우터에 `route_class=limit.route_class()`를 지정해 본문 해석 전에 적용한다(잘못된 JSON도 집계). 본문 없는 경로는 의존성으로 써도 된다. `/api/v1` 라우터 전체에 `require_csrf` 적용 |
 | 인증 상태·로그인 유도·복귀 | 02 | 04·03·08·09 | `useAuth()`, `requireLogin({ intent })` |
 | 관심 팀 | 02(저장소·토글) / 03(일정 선별) | 03·07·08·09 | `useFavorites()`, `<FavoriteToggle teamId>` |
 | 팀 링크 허용 여부 | 03 | 04·05·06·07·08 | 모든 팀 참조 응답의 `detailAvailable: true \| false \| null` |
@@ -92,7 +92,7 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 | 채팅 | 상태 | 비고 |
 | --- | --- | --- |
 | 00 | 첫 설계·01 착수 전 검수 완료(2026-10-31) | 이 문서 §2·§6~§11 확정. Codex 검토 요청 사항은 §10 |
-| 01 | **Claude 구현·자체 검수 완료(2026-10-31), Codex 교차 검증 대기** | 브랜치 `feat/01-header-footer`(원격 기능 브랜치 push 완료, `dev` 병합 전). 개발 DB 리비전 `0002_feedback_body_hash`(`feedback`에 사용자 연동 확인용 행 존재, `sync_runs` 0행), 실제 API-Football 호출 0회. 확인 요청은 §10.2 C-08, §10.3. 인수인계는 §3.1 |
+| 01 | **Codex 교차 검증 1차 완료(2026-11-01, 보완 필요 11건) → Claude 보완 완료, Codex 재검증 대기** | 브랜치 `feat/01-header-footer`(보완 커밋은 로컬만, push·`dev` 병합 전). 개발 DB 리비전 `0002_feedback_body_hash`(보완에 스키마 변경 없음, `feedback` 2행은 사용자 연동 확인용, `sync_runs` 0행), 실제 API-Football 호출 0회. 확인 요청은 §10.2 C-08, §10.3. 인수인계는 §3.1 |
 | 02 | 다음 작업(01 교차 검증 후) | `AUTH_JWT_SECRET` 사용자 입력 필요(§9 U-04) |
 | 03~09 | 대기 | 앞 순서 채팅의 완료(교차 검증 포함) 후 진행 |
 
@@ -108,7 +108,11 @@ Claude의 전체 조율 채팅(00)과 기능별 구현 채팅(01~09)이 공유�
 - **타입 동기화:** 백엔드 스키마를 바꾸면 백엔드 실행 후 `npm run gen:api`로 `src/lib/api/schema.d.ts`를 다시 만들고, 필요한 이름은 `src/lib/api/types.ts`에 별칭으로 추가한다. 타입을 손으로 쓰지 않는다.
 - **마이그레이션:** 파일 이름 `YYYYMMDD_NNNN_<이름>.py`, 리비전 ID는 `NNNN_<이름>`으로 직접 지정한다(`python -m alembic revision --autogenerate -m ... --rev-id NNNN_<이름>` 후 파일명 변경). 자동 생성은 CHECK 제약을 만들지 않으므로 직접 추가한다. 새 테이블은 RLS 활성화를 포함하고, 적용 후 `downgrade -1`·`upgrade head`·`alembic check`를 확인한다. 모델은 `app/models/__init__.py`에 import한다.
 - **테스트:** `tests/conftest.py`가 실제 외부 HTTP 호출을 막고 로컬 웹후크 설정을 무시한다. 외부 API는 `httpx.MockTransport`로 시험한다. 실제 DB 확인이 필요하면 `KICKTAB_DB_TESTS=1`일 때만 도는 테스트로 만들고 트랜잭션을 롤백한다(`tests/test_db.py` 참고). 라우트 테스트는 `app.dependency_overrides[get_db]`로 세션을 바꾸고, 모의 세션은 `session.scalar.return_value`를 지정해야 한다.
+- **오류 로그:** 미처리 예외는 `app/api/errors.py`의 `UnhandledErrorMiddleware`가 공통 500 응답으로 바꾸고 예외 종류만 기록한다(서버 로그에 메시지·traceback을 남기지 않음, `tests/test_server_logging.py`가 실제 Uvicorn으로 확인). 새 앱·테스트 앱도 `register_exception_handlers(app)`를 다른 미들웨어보다 먼저 호출한다. 진단이 더 필요하면 메시지 대신 안전한 식별 정보(오류 코드·리소스 ID)를 로그에 남긴다.
+- **동시성:** '조회 후 저장'으로 중복을 막는 서비스는 같은 트랜잭션 안에서 키별 `pg_advisory_xact_lock`으로 묶는다(`app/services/feedback.py`의 `lock_body_hash` 참고). 키는 다른 용도와 겹치지 않게 접두어를 붙여 해시한다.
 - **화면:** 색·글자·반경은 `globals.css` 토큰 유틸리티만 쓰고(§6.6), 데스크톱 배치는 `lg:`(1024px)부터, 콘텐츠 폭은 `kt-container`. 모든 데이터 영역은 `DataState`로 상태를 구분한다. 모달·시트는 `Dialog`(`layout`: `center`·`sheet`·`responsive`)를 쓴다. 같은 성질의 Tailwind 클래스를 `buttonClass` 위에 덧붙이면 충돌해 적용되지 않을 수 있으므로(01에서 모바일 메뉴 강조가 이 문제로 실패), 상태별 스타일은 겹치지 않게 조합하고 브라우저에서 계산 스타일을 확인한다.
+- **조작 영역:** 모바일 44px 이상은 실제 클릭 영역 기준이다. 시안 높이를 지켜야 하면 `before:` 가상 요소로 영역만 넓힌다(TOP 5 띠 버튼: 보이는 높이 43px, 클릭 영역 45px). `Tooltip`은 마우스 클릭 시 열린 상태 유지, 터치 탭은 토글, 키보드 포커스로 표시된다.
+- **장시간 표시 데이터:** 루트 레이아웃처럼 오래 떠 있는 영역의 조회는 갱신 조건을 명시한다(TOP 5: 5분 지나면 창 포커스·펼칠 때 재조회, 화면이 보일 때만 30분 주기, `src/features/top5/queries.ts`).
 - **외부 이미지:** `TeamCrest`·`PlayerPhoto`는 `next/image`를 `unoptimized`로 쓰므로 원격 도메인 설정이 필요 없다. URL이 `null`이거나 실패하면 대체 이미지가 나온다.
 - **아직 없는 경로:** `/results`·`/standings`·`/teams`·`/login`·`/signup`·`/matches/[id]`는 404 안내(`app/not-found.tsx`)가 뜬다. 담당 채팅이 `app/<경로>/page.tsx`를 만들면 바로 연결된다. 메인 `/`는 `app/page.tsx` 자리 표시를 03이 교체한다.
 - **로컬 실행:** 백엔드는 `uv run python -m uvicorn app.main:app --port 8000`(설정·`.env`를 바꾸면 재시작 필요), 프런트는 `npm run dev`. Windows에서 백그라운드로 띄운 서버가 종료 후에도 남아 포트를 점유할 수 있으니 `netstat -ano`로 확인한다.
@@ -220,7 +224,7 @@ Supabase Auth를 쓰지 않고 FastAPI에서 직접 구현한다. 가입 화면 
 - 경로 접두사 `/api/v1`. 리소스 이름은 복수형 kebab-case. 상태 확인 `/health`는 유지한다.
 - JSON 필드는 camelCase(Pydantic `alias_generator=to_camel`, `populate_by_name=True`). 시각은 ISO 8601 UTC(`2026-10-31T19:00:00Z`), 경기 묶음 날짜는 `kickoffDateKst: "2026-11-01"`처럼 별도 제공. 시간대 표기는 화면에 하지 않는다.
 - **성공:** `{ "data": <객체|배열>, "meta": { ... } }`. 목록은 `meta.page`, `meta.size`, `meta.total`(페이지 방식) 또는 `meta.nextCursor`(뉴스 더 보기). 수집 데이터는 `meta.updatedAt`(마지막 수집 시각)을 넣는다.
-- **오류:** `{ "error": { "code": "FAVORITE_LIMIT", "message": "관심 팀은 최대 5개까지 등록할 수 있습니다.", "details": { } } }`. 메시지는 화면에 그대로 써도 되는 한국어. 내부 예외·SQL·외부 응답 원문은 노출하지 않는다.
+- **오류:** `{ "error": { "code": "FAVORITE_LIMIT", "message": "관심 팀은 최대 5개까지 등록할 수 있습니다.", "details": { } } }`. 메시지는 화면에 그대로 써도 되는 한국어. 내부 예외·SQL·외부 응답 원문은 응답과 서버 로그 어디에도 노출하지 않는다(미처리 예외는 종류만 기록).
 
 | HTTP | code | 용도 |
 | --- | --- | --- |
@@ -374,6 +378,10 @@ src/
 | `frontend/` | `npm ci` → `npm run dev` | `npm run lint`, `npm run build` |
 | `backend/` | `uv sync --locked --group dev` → `uv run fastapi dev app/main.py`(또는 `uv run python -m uvicorn app.main:app --port 8000`) | `uv run ruff check .`, `uv run python -m pytest`(DB 실연동 테스트는 `KICKTAB_DB_TESTS=1`일 때만, 항상 롤백), `uv run python -m app.check_database`, `uv run python -m alembic upgrade head`·`downgrade -1`·`check` |
 
+**빌드 참고(2026-11-01):** 기본 `npm run build`(Turbopack)는 이 PC에서 `.next`를 지운 상태로도 통과한다(Node 24.20.0). Codex 샌드박스에서는 `TurbopackInternalError: Failed to write app endpoint /page … globals.css → creating new process … node process exited before we could connect to it`로 실패했다. Turbopack이 PostCSS(Tailwind)를 별도 Node 프로세스로 띄워 로컬 연결로 붙는 단계라 샌드박스의 프로세스·로컬 소켓 제한이 원인으로 보이며(같은 코드가 일반 환경 Turbopack·Codex 환경 Webpack 빌드 모두 통과), 정확한 제한 항목은 미확인이다. 번들러 설정은 바꾸지 않았다. 검증 환경에서 재현되면 `npm run build -- --webpack` 결과는 참고로만 쓰고 기본 빌드 통과로 기록하지 않는다.
+
+**의존성 점검(2026-11-01):** `npm audit`의 moderate 18건은 모두 `minimatch`(glob 패턴 처리 서비스 거부) 한 경로다. 16건은 기존 ESLint 체인(`eslint`·`eslint-config-next`), 2건은 01에서 추가한 `openapi-typescript` → `@redocly/openapi-core`. 모두 개발 도구라 운영 번들에 포함되지 않고 패턴은 설정 파일에서만 들어온다. 제시된 수정안은 주 버전을 낮추는 것이라 적용하지 않았다(`npm audit fix --force` 금지). 상위 패키지가 고친 버전을 내면 갱신한다.
+
 **주의:** 이 PC에서는 Windows 애플리케이션 제어 정책이 `.venv`의 실행 파일(`pytest.exe` 등)을 간헐적으로 차단한다(2026-10-31 한 차례 `uv run pytest` 실패, 이후 재확인 시 실행됨). 안정적으로 `uv run python -m pytest`, `uv run python -m alembic …`처럼 `python -m` 형태를 사용한다.
 
 기본 주소는 프런트엔드 `http://localhost:3000`, 백엔드 `http://localhost:8000`이며 API 문서는 `/docs`, 상태 확인은 `/health`다. 기본 Google Fonts는 빌드 시 네트워크 접근이 필요하다(Figma 글꼴 확정 시 01에서 교체).
@@ -398,7 +406,7 @@ src/
 
 - **진행 단계:** A 백엔드 기반(DB·마이그레이션·응답/오류 형식·공통 의존성·API-Football 클라이언트 골격·수집 실행기) → B 프런트엔드 기반(rewrites·API 래퍼·생성 타입·Query Provider·토큰·글꼴·공통 UI) → C 전역 화면(헤더·TOP 5 띠·푸터·모바일 하단 고정 영역·의견 보내기). 단계마다 검사 통과 후 커밋하고, Codex 교차 검증은 01 전체 완료 후 한 번 받는다.
 - **`feedback` 테이블:** `users` 테이블이 아직 없으므로 `user_id uuid NULL`을 외래 키 없이 만든다. 02가 `users` 생성 시 외래 키를 추가한다(삭제 시 처리 방식은 P-03 결정 후). 01의 제출 API는 항상 비회원 익명 제출로 저장하고, 로그인 회원 연결은 02가 인증 의존성으로 붙인다. IP 주소는 테이블에 저장하지 않는다.
-- **요청 제한:** 단일 인스턴스 기준 메모리 기반 제한기로 구현하고 키 함수를 교체할 수 있게 한다. 브라우저 요청은 Next.js `rewrites`를 거치므로 실제 클라이언트 IP는 `X-Forwarded-For`에서 얻되, 신뢰할 프록시(로컬 Next.js) 뒤에서만 이 헤더를 믿도록 설정값으로 둔다. 의견 제출 기본값은 P-10 제안값(분당 3회·일 20회)이며 확정 전임을 코드 주석과 §10에 유지한다. `X-Forwarded-For` 위조 대비로 클라이언트와 무관한 전역 상한(`RateLimit(..., global_limits=)`, 의견은 분당 20회·일 300회)을 함께 둔다(C-08).
+- **요청 제한:** 단일 인스턴스 기준 메모리 기반 제한기로 구현하고 키 함수를 교체할 수 있게 한다. 브라우저 요청은 Next.js `rewrites`를 거치므로 실제 클라이언트 IP는 `X-Forwarded-For`에서 얻되, 신뢰할 프록시(로컬 Next.js) 뒤에서만 이 헤더를 믿도록 설정값으로 둔다. 의견 제출 제한값은 사용자 확정(2026-10-31): IP별 분당 3회·일 20회, `X-Forwarded-For` 위조 대비 전역 분당 20회·일 300회(C-08). 두 한도를 모두 통과한 요청만 집계해 거부된 요청이 새 클라이언트 상태를 만들지 않고, 저장 키는 최대 10,000개(오래 안 쓰인 키부터 정리)로 제한한다. 남은 미확정은 02의 회원·비회원 차등값과 보존 기간(§10.1 P-10).
 - **CSRF 헤더:** `X-KickTab-Client: web` 검사는 공개 변경 요청인 의견 제출에도 적용한다. 프런트엔드 API 래퍼가 변경 요청에 이 헤더를 자동으로 붙인다.
 - **API-Football 클라이언트:** 01에서는 실제 외부 호출을 하지 않는다(0회). 모의 전송으로 속도 제한·일일 예산·HTTP 200 + `errors` 실패 처리·재시도 상한·키 비노출을 테스트한다. 실제 호출은 03부터.
 - **헤더 인증 영역:** 02 전까지 비회원 상태(로그인·회원가입 버튼)만 표시하고, 02가 `useAuth()`로 연결할 수 있게 컴포넌트 경계를 둔다. 모바일 메뉴의 회원용 변형(`62:1475`, `81:3209`)은 02에서 연결한다.
@@ -433,7 +441,7 @@ src/
 | P-07 | 경기 상태 변경 시 기존 평가 처리(D-07 잔여) | 04 | 종료→중단·취소 등 평가 불가 상태로 바뀌면 숨김 처리 후 원복 시 재노출 |
 | P-08 | 뉴스 대회/팀 분류 세부 규칙, 언론사명 매핑 방식(D-09) | 03 | 원문 도메인→언론사명 매핑 표, 매핑 없으면 도메인 표시 |
 | P-09 | 북마크 중복 키·보존 범위(D-10) | 03·09 | 원문 링크 정규화 해시를 중복 키로 사용, 보관 항목은 설정값 |
-| P-10 | 의견 스팸 방지·보존 정책(D-11 잔여) | 01·02 | **01 적용(사용자 결정 2026-10-31):** ① IP별 분당 3회·일 20회 + 서비스 전체 분당 20회·일 300회(메모리 기반, IP는 DB에 저장하지 않음, 형식 오류 요청도 횟수에 포함) ② 허니팟 입력칸(`website`, 사람에게는 보이지 않음 — 값이 있으면 저장·알림 없이 400) ③ 중복 본문 차단(공백·대소문자를 정규화한 SHA-256을 `feedback.body_hash`에 저장, 24시간 안의 같은 본문은 발신자와 무관하게 409 `FEEDBACK_DUPLICATE`). **02 예정:** 회원·비회원 차등 제한 — 회원은 사용자 ID 기준, 비회원은 IP 기준으로 더 엄격하게(제안값: 회원 분당 3회·일 20회, 비회원 분당 2회·일 5회, 02에서 확정). `RateLimit`의 `key_func`·제한값을 인증 상태에 따라 고르는 의존성으로 구현. CAPTCHA는 실제 남용이 확인될 때만 검토. 보존 기간은 운영 전 결정. 의견 본문이 디스코드로 전송되므로 개인정보처리방침(P-12)에 외부 전송 사실을 반영 |
+| P-10 | 의견 스팸 방지·보존 정책(D-11 잔여) | 01·02 | **01 적용(사용자 결정 2026-10-31):** ① IP별 분당 3회·일 20회 + 서비스 전체 분당 20회·일 300회(메모리 기반, IP는 DB에 저장하지 않음, 잘못된 JSON을 포함한 형식 오류 요청도 횟수에 포함) ② 허니팟 입력칸(`website`, 사람에게는 보이지 않음 — 값이 있으면 저장·알림 없이 400) ③ 중복 본문 차단(공백·대소문자를 정규화한 SHA-256을 `feedback.body_hash`에 저장, 24시간 안의 같은 본문은 발신자와 무관하게 409 `FEEDBACK_DUPLICATE`, 동시 제출은 본문 해시별 트랜잭션 잠금으로 직렬화). **02 예정:** 회원·비회원 차등 제한 — 회원은 사용자 ID 기준, 비회원은 IP 기준으로 더 엄격하게(제안값: 회원 분당 3회·일 20회, 비회원 분당 2회·일 5회, 02에서 확정). `RateLimit`의 `key_func`·제한값을 인증 상태에 따라 고르는 의존성으로 구현. CAPTCHA는 실제 남용이 확인될 때만 검토. 보존 기간은 운영 전 결정. 의견 본문이 디스코드로 전송되므로 개인정보처리방침(P-12)에 외부 전송 사실을 반영 |
 | P-11 | 팀 별칭 사전 구축·관리 방식(D-16) | 03 | 시드 파일(`app/seed/team_aliases.*`)로 버전 관리하고 마이그레이션·시드 명령으로 적재 |
 | P-12 | 이용약관·개인정보 처리방침 문서(가입 동의 화면 필요) | 02 | 문서 작성 주체와 버전 관리 방식 결정 필요 |
 | P-13 | 분석 지표 도구·동의·익명 식별(D-12) | 최종 | 기능 완료 후 별도 결정 |
@@ -463,10 +471,10 @@ src/
 | D-01-2 | TOP 5 펼침 목록 | 해결(2026-10-31): 데스크톱 `128:3145`·`128:3474`·`128:3700`(헤더 아래 전체 폭 패널 + 12% 배경), 모바일 `128:3574`·`128:4408`(핸들 있는 하단 시트) 반영 | — |
 | D-01-3 | 모바일 메뉴의 위치 미지정(`62:1427`) | TOP 5·의견 보내기와 같은 하단 시트. 계정 버튼은 Figma `133:4134`대로 로그인(ghost)·회원가입(primary) 가로 배치 | 위치 |
 | D-01-4 | 푸터 리디자인(`49:532`·`49:1012`, 2026-10-31)에서 '맨 위로'·브랜드 소개 문구·'서비스 소개'·권리 고지 문장 제거 ↔ COM-003 5번·PRD 7장 푸터 구성(브랜드 소개, 맨 위로, 이미지 출처·권리 고지 포함) | Figma대로 구현 | 기능 명세서·PRD 푸터 항목 갱신 또는 디자인 보완 |
-| D-01-5 | 푸터 운영자·출처 문구 11px(Figma) ↔ 보조 설명 12px 이상(컬러 가이드) | Figma대로 11px/19px | 글자 크기 |
+| D-01-5 | 푸터 운영자·출처 문구 11px(Figma) ↔ 보조 설명 12px 이상(컬러 가이드) | Figma대로 11px/19px | 글자 크기(Codex 의견: 12px/20px 통일 권장) |
 | D-01-8 | TOP 5는 항상 표시(P-06 사용자 결정) ↔ 기능 명세서 TOP-002·TOP-003의 '선정 결과 없음·빈 상태' 예외 | 01은 빈 상태 화면을 선정 실패 대비로만 유지 | 04에서 선정 작업 구현 시 기획 문서 갱신 |
 | D-01-9 | 의견 유형 필수(사용자 결정 2026-10-31) ↔ 기능 명세서 FEED-002·PRD 21장 '유형 선택(선택)', Figma 의견 모달 '의견 유형 · 선택' | 화면 표기 '의견 유형 · 필수', 유형을 고르기 전에는 전송 버튼 비활성·안내 문구, API도 `type` 필수. DB 컬럼은 기존 행 때문에 NULL 허용 유지 | 기획 문서·Figma 표기 갱신 |
-| D-01-6 | 의견 전달 완료 상태 아이콘이 검색 아이콘(`62:1882`) | Figma대로 사용 | 아이콘 교체 여부 |
+| D-01-6 | 의견 전달 완료 상태 아이콘이 검색 아이콘(`62:1882`) | Figma대로 사용 | 아이콘 교체 여부(Codex 의견: 체크 아이콘) |
 | D-01-7 | 뉴스 출처 BI 표시(COM-003) | 텍스트 'NAVER'만 표시, 이미지 권리 문구는 Figma 문구를 임시 사용 | V-09·V-10 확인 후 반영 |
 
 ### 10.4 공개 전 필수 확인(기존 검증 문서 유지)

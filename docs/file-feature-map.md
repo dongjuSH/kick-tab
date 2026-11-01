@@ -1,6 +1,6 @@
 # KickTab 파일별 구현 기능
 
-기준: 2026-10-31 (토), 브랜치 `feat/01-header-footer`. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+기준: 2026-11-01 (일, 01 교차 검증 보완 반영), 브랜치 `feat/01-header-footer`. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -21,7 +21,7 @@
 | `.python-version`, `.gitignore` | Python 3.12 지정, 백엔드 전용 제외 목록 | — | 완료 |
 | `certs/supabase-ca.crt` | Supabase TLS(`verify-full`) CA 인증서 | `app/database.py`, `app/db/session.py` | 완료 |
 | `app/config.py` | `Settings`: `.env` 로딩, CORS·신뢰 프록시·스케줄러·API-Football 한도·비밀 값(`SecretStr`)·디스코드 웹후크 | 전 모듈 | 완료 |
-| `app/main.py` | FastAPI 앱, CORS, 예외 처리기·`/api/v1` 라우터 등록, `/health`, 스케줄러 수명 주기 | `app/api/*`, `app/sync/scheduler.py` | 완료 |
+| `app/main.py` | FastAPI 앱, 예외 처리(먼저)·CORS·`/api/v1` 라우터 등록, `/health`, 스케줄러 수명 주기 | `app/api/*`, `app/sync/scheduler.py` | 완료 |
 | `app/database.py` | psycopg 직접 연결(검증 TLS), CA 경로 상수 | `check_database.py`, `db/session.py` | 완료(00) |
 | `app/check_database.py` | `python -m app.check_database`: 읽기 전용 연결·TLS 확인 | `database.py` | 완료(00) |
 
@@ -45,10 +45,10 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `app/api/router.py` | `/api/v1` 라우터, 전 라우트에 CSRF 검사·오류 응답 문서화 | `main.py`, `routes/*` | 완료 |
-| `app/api/errors.py` | `ApiError`, 오류 응답 형식, 검증·HTTP·미처리 예외 처리기(내부 정보 비노출) | 전 라우트 | 완료 |
-| `app/api/deps.py` | `require_csrf`(헤더·Origin), `RateLimit`(클라이언트별 + 전역 상한, `key_func` 교체 가능) | `router.py`, `routes/feedback.py` | 완료(02가 회원·비회원 차등) |
-| `app/core/rate_limit.py` | `RateLimiter`(슬라이딩 윈도), `client_ip`(신뢰 프록시 뒤에서만 `X-Forwarded-For`), `Retry-After` 값 | `api/deps.py` | 완료 |
-| `app/api/routes/feedback.py` | `POST /api/v1/feedback`: 허니팟 거부, 중복 409, 저장 후 디스코드 알림 예약, 요청 제한 값 | `services/feedback.py`, `notifications/discord.py` | 완료 |
+| `app/api/errors.py` | `ApiError`, 오류 응답 형식, 검증·HTTP 예외 처리기, `UnhandledErrorMiddleware`(미처리 예외를 500으로, 서버 로그에는 종류만) | 전 라우트 | 완료 |
+| `app/api/deps.py` | `require_csrf`(헤더·Origin), `RateLimit`(클라이언트별 + 전역 상한, 둘 다 통과 시에만 집계, `route_class()`로 본문 해석 전 적용, `key_func` 교체 가능) | `router.py`, `routes/feedback.py` | 완료(02가 회원·비회원 차등) |
+| `app/core/rate_limit.py` | `RateLimiter`(슬라이딩 윈도, `check`·`record`·`hit`, 최근 사용 순 정리·최대 10,000키), `client_ip`(신뢰 프록시 뒤에서만 `X-Forwarded-For`), `Retry-After` 값 | `api/deps.py` | 완료 |
+| `app/api/routes/feedback.py` | `POST /api/v1/feedback`: 요청 제한(라우트 클래스, 확정값), 허니팟 거부, 중복 409, 저장 후 디스코드 알림 예약 | `services/feedback.py`, `notifications/discord.py` | 완료 |
 | `app/api/routes/top_matches.py` | `GET /api/v1/top-matches/current` | `services/top_matches.py` | 완료(계약) |
 
 ### 스키마·서비스·연동
@@ -59,10 +59,10 @@
 | `app/schemas/match.py` | `TeamRef`, `CompetitionRef`, `MatchScore`, `MatchSummary` | `top_matches.py`, 03·04 | 골격(03이 실제 데이터로 채움) |
 | `app/schemas/top_matches.py` | `TopMatches`, `TopMatchItem`(순위·경기·평균 평점·평가 수), `TopMatchesPeriod` | `services/top_matches.py` | 완료(계약) |
 | `app/schemas/feedback.py` | `FeedbackCreate`(본문·유형 필수, 페이지 경로, 허니팟 `website`), `FeedbackReceipt` | `routes/feedback.py` | 완료 |
-| `app/services/feedback.py` | `create_feedback`, `normalize_body`·`body_hash`, `is_duplicate`(24시간), `DuplicateFeedbackError` | `routes/feedback.py` | 완료 |
+| `app/services/feedback.py` | `create_feedback`, `normalize_body`·`body_hash`, `lock_body_hash`(본문 해시별 트랜잭션 잠금), `is_duplicate`(24시간), `DuplicateFeedbackError` | `routes/feedback.py` | 완료 |
 | `app/services/top_matches.py` | `get_current_top_matches()` — 현재 항상 빈 결과 | `routes/top_matches.py` | 골격(04가 선정 로직으로 교체) |
 | `app/notifications/discord.py` | `notify_feedback`(웹후크 전송, 실패 무시), `build_payload`(멘션 차단), `FeedbackNotice`, httpx 로그의 웹후크 주소 가림 | `routes/feedback.py`, `config.py` | 완료 |
-| `app/providers/api_football.py` | `ApiFootballClient.get`, `MinuteRateLimiter`, `DailyBudget`, 공용 보호 장치, 오류 클래스 | `sync/registry.py` | 골격(03이 엔드포인트별 함수 추가) |
+| `app/providers/api_football.py` | `ApiFootballClient.get`(401·403·429는 본문 형식과 무관하게 이후 호출 중단), `MinuteRateLimiter`, `DailyBudget`, 공용 보호 장치, 오류 클래스 | `sync/registry.py` | 골격(03이 엔드포인트별 함수 추가) |
 
 ### 수집 실행기
 
@@ -80,12 +80,13 @@
 | --- | --- |
 | `tests/conftest.py` | 실제 HTTP 호출 차단, 로컬 웹후크 설정 무시 |
 | `tests/test_setup.py` | `/health`·CORS, 설정 로딩·비밀 값 마스킹, DB 연결 TLS, 연결 확인 명령(00 작성, 01에서 비밀 값 목록 보강) |
-| `tests/test_api_foundation.py` | 응답·오류 형식, CSRF·Origin, 요청 제한, 의견 검증·허니팟·중복·익명 저장, OpenAPI camelCase |
-| `tests/test_rate_limit.py` | 분·일 윈도, 거부 요청 비집계, 신뢰 프록시·`X-Forwarded-For` 처리 |
-| `tests/test_api_football.py` | 성공·쿼터 기록, `errors` 실패, 재시도 상한, 중단 조건, 일일 예산, 분당 대기, 키 비노출(모의 전송) |
+| `tests/test_api_foundation.py` | 응답·오류 형식, CSRF·Origin, 요청 제한(잘못된 JSON 포함), 의견 검증·허니팟·중복·잠금 순서·익명 저장, OpenAPI camelCase |
+| `tests/test_server_logging.py` | 실제 Uvicorn 서버로 미처리 예외 메시지가 로그·응답에 남지 않는지 확인 |
+| `tests/test_rate_limit.py` | 분·일 윈도, 거부 요청 비집계, 미등록 키 상태 미생성, 키 수 상한, 신뢰 프록시·`X-Forwarded-For` 처리 |
+| `tests/test_api_football.py` | 성공·쿼터 기록, `errors` 실패, 재시도 상한, 중단 조건(JSON·비JSON 401·403·429), 일일 예산, 분당 대기, 키 비노출(모의 전송) |
 | `tests/test_sync_runner.py` | 성공·실패·건너뜀 기록, 잠금 키, CLI, 스케줄러 |
-| `tests/test_feedback_notifications.py` | 디스코드 페이로드·주소 검사·실패 처리·토큰 비노출, 라우트 알림 예약, 전역 상한 |
-| `tests/test_db.py` | 접속 주소·TLS, 모델 구조, `KICKTAB_DB_TESTS=1`일 때 개발 DB 제약·중복·RLS 확인(롤백) |
+| `tests/test_feedback_notifications.py` | 디스코드 페이로드·주소 검사·실패 처리·토큰 비노출, 라우트 알림 예약, 전역 상한·전역 거부 시 버킷 미생성 |
+| `tests/test_db.py` | 접속 주소·TLS, 모델 구조, `KICKTAB_DB_TESTS=1`일 때 개발 DB 제약·중복·RLS·동시 제출 잠금 확인(롤백) |
 
 ## 프런트엔드 (`frontend/`)
 
@@ -116,7 +117,7 @@
 | `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, primary·secondary·ghost | 완료 |
 | `Badge.tsx` | 상태 뱃지(info·live·neutral·warning·error) | 완료 |
 | `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
-| `Tooltip.tsx` | 데스크톱 호버·모바일 탭 툴팁 | 완료(04 후기 주의사항 등에서 사용 예정) |
+| `Tooltip.tsx` | 마우스 호버·클릭 시 표시 유지, 터치 탭 토글, 키보드 포커스 표시, Escape·바깥 탭 닫기 | 완료(04 후기 주의사항 등에서 사용 예정) |
 | `Tabs.tsx` | 키보드 지원 탭·`TabPanel` | 완료(04·08에서 사용 예정) |
 | `Dropdown.tsx` | 단일 선택 목록(시즌·리그) | 완료(05·06에서 사용 예정) |
 | `Pagination.tsx` | URL 기반 페이지 이동 | 완료(05·07에서 사용 예정) |
@@ -143,13 +144,13 @@
 
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
-| `top5/queries.ts` | `currentTopMatchesQuery`(5분 캐시) | `apiFetch`, `query-keys.ts` | 완료 |
-| `top5/Top5Strip.tsx` | TOP 5 띠, 데스크톱 패널(배경 딤·Escape·포커스), 모바일 시트, 로딩·실패·빈 상태 | `Top5List`, `Dialog` | 완료 |
+| `top5/queries.ts` | `currentTopMatchesQuery`(5분 신선도, 화면이 보일 때 30분 주기, 창 포커스 재조회) | `apiFetch`, `query-keys.ts` | 완료 |
+| `top5/Top5Strip.tsx` | TOP 5 띠(클릭 영역 45px), 펼칠 때 오래된 결과 재조회, 데스크톱 패널(배경 딤·Escape·포커스), 모바일 시트, 로딩·실패·빈 상태 | `Top5List`, `Dialog` | 완료 |
 | `top5/Top5List.tsx` | 펼침 목록 본문(순위·대회·킥오프·대진·스코어·PK·평균 평점·평가 수, 빈 상태, 안내 문구) | `TeamCrest`, `kst.ts` | 완료 |
 | `feedback/FeedbackProvider.tsx` | 전역 의견 모달 1개, `useFeedback().openFeedback()` | `layout.tsx` | 완료 |
 | `feedback/FeedbackButton.tsx` | 의견 보내기 진입 버튼 | 푸터·하단 고정 영역 | 완료 |
-| `feedback/FeedbackDialog.tsx` | 의견 입력·검증·전송·실패/중복/요청 제한/성공 상태, 허니팟 | `apiFetch`, `draft.ts` | 완료 |
-| `feedback/draft.ts` | 미전송 초안 sessionStorage 저장·복원(오류 무시) | `FeedbackDialog` | 완료 |
+| `feedback/FeedbackDialog.tsx` | 의견 입력·검증·전송·실패/중복/요청 제한/성공 상태, 허니팟, 열기 단위 세션(지난 요청 결과가 새 초안을 바꾸지 않음), 전송 중 입력 잠금, 저장소 불가 안내 | `apiFetch`, `draft.ts` | 완료 |
+| `feedback/draft.ts` | 미전송 초안 sessionStorage 저장·복원, 저장 실패 여부 반환, `sameDraft` | `FeedbackDialog` | 완료 |
 
 ### 라이브러리 (`src/lib/`)
 
