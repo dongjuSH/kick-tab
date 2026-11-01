@@ -47,7 +47,7 @@
 | `app/api/router.py` | `/api/v1` 라우터, 전 라우트에 CSRF 검사·오류 응답 문서화 | `main.py`, `routes/*` | 완료 |
 | `app/api/errors.py` | `ApiError`, 오류 응답 형식, 검증·HTTP 예외 처리기, `UnhandledErrorMiddleware`(미처리 예외를 500으로, 서버 로그에는 종류만) | 전 라우트 | 완료 |
 | `app/api/deps.py` | `require_csrf`(헤더·Origin), `RateLimit`(클라이언트별 + 전역 상한, 둘 다 통과 시에만 집계, `route_class()`로 본문 해석 전 적용, `key_func` 교체 가능) | `router.py`, `routes/feedback.py` | 완료(02가 회원·비회원 차등) |
-| `app/core/rate_limit.py` | `RateLimiter`(슬라이딩 윈도, `check`·`record`·`hit`, 최근 사용 순 정리·최대 10,000키), `client_ip`(신뢰 프록시 뒤에서만 `X-Forwarded-For`), `Retry-After` 값 | `api/deps.py` | 완료 |
+| `app/core/rate_limit.py` | `RateLimiter`(슬라이딩 윈도, `check`·`record`·`hit` 각각 단일 잠금 — `hit`은 검사·기록 원자적, 최근 사용 순 정리·최대 10,000키), `client_ip`(신뢰 프록시 뒤에서만 `X-Forwarded-For`), `Retry-After` 값 | `api/deps.py` | 완료 |
 | `app/api/routes/feedback.py` | `POST /api/v1/feedback`: 요청 제한(라우트 클래스, 확정값), 허니팟 거부, 중복 409, 저장 후 디스코드 알림 예약 | `services/feedback.py`, `notifications/discord.py` | 완료 |
 | `app/api/routes/top_matches.py` | `GET /api/v1/top-matches/current` | `services/top_matches.py` | 완료(계약) |
 
@@ -82,7 +82,7 @@
 | `tests/test_setup.py` | `/health`·CORS, 설정 로딩·비밀 값 마스킹, DB 연결 TLS, 연결 확인 명령(00 작성, 01에서 비밀 값 목록 보강) |
 | `tests/test_api_foundation.py` | 응답·오류 형식, CSRF·Origin, 요청 제한(잘못된 JSON 포함), 의견 검증·허니팟·중복·잠금 순서·익명 저장, OpenAPI camelCase |
 | `tests/test_server_logging.py` | 실제 Uvicorn 서버로 미처리 예외 메시지가 로그·응답에 남지 않는지 확인 |
-| `tests/test_rate_limit.py` | 분·일 윈도, 거부 요청 비집계, 미등록 키 상태 미생성, 키 수 상한, 신뢰 프록시·`X-Forwarded-For` 처리 |
+| `tests/test_rate_limit.py` | 분·일 윈도, 거부 요청 비집계, 미등록 키 상태 미생성, 키 수 상한, 같은 키 동시 `hit()`·`RateLimit` 동시 호출, 신뢰 프록시·`X-Forwarded-For` 처리 |
 | `tests/test_api_football.py` | 성공·쿼터 기록, `errors` 실패, 재시도 상한, 중단 조건(JSON·비JSON 401·403·429), 일일 예산, 분당 대기, 키 비노출(모의 전송) |
 | `tests/test_sync_runner.py` | 성공·실패·건너뜀 기록, 잠금 키, CLI, 스케줄러 |
 | `tests/test_feedback_notifications.py` | 디스코드 페이로드·주소 검사·실패 처리·토큰 비노출, 라우트 알림 예약, 전역 상한·전역 거부 시 버킷 미생성 |
@@ -117,7 +117,7 @@
 | `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, primary·secondary·ghost | 완료 |
 | `Badge.tsx` | 상태 뱃지(info·live·neutral·warning·error) | 완료 |
 | `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
-| `Tooltip.tsx` | 마우스 호버·클릭 시 표시 유지, 터치 탭 토글, 키보드 포커스 표시, Escape·바깥 탭 닫기 | 완료(04 후기 주의사항 등에서 사용 예정) |
+| `Tooltip.tsx` | 마우스 호버·클릭 시 표시 유지, 터치 탭 토글, 키보드 포커스 표시, Escape·바깥 탭 닫기, 누른 포인터 정보는 클릭·취소·바깥 놓기·포커스 이탈 때 정리 | 완료(04 후기 주의사항 등에서 사용 예정) |
 | `Tabs.tsx` | 키보드 지원 탭·`TabPanel` | 완료(04·08에서 사용 예정) |
 | `Dropdown.tsx` | 단일 선택 목록(시즌·리그) | 완료(05·06에서 사용 예정) |
 | `Pagination.tsx` | URL 기반 페이지 이동 | 완료(05·07에서 사용 예정) |

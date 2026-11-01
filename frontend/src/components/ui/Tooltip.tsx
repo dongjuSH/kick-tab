@@ -18,7 +18,8 @@ interface TooltipProps {
  * Keyboard: shows on focus; Enter/Space toggles. Escape or a tap elsewhere closes it.
  *
  * Focus from a pointer press is ignored so "focus opens, then click toggles" can't close
- * it on the first click or tap (cross-review #9).
+ * it on the first click or tap (cross-review #9). The press is forgotten on click,
+ * pointercancel, release outside the button, or blur, so it never blocks keyboard focus.
  */
 export function Tooltip({ label, trigger, children, align = "start", className }: TooltipProps) {
   const [open, setOpen] = useState(false);
@@ -56,6 +57,17 @@ export function Tooltip({ label, trigger, children, align = "start", className }
         className="inline-flex size-11 items-center justify-center rounded-control hover:bg-subtle"
         onPointerDown={(event) => {
           pressedBy.current = event.pointerType;
+          // A press released outside the button produces no click: forget it then, so a
+          // later keyboard focus still opens the tooltip (re-review B). A release on the
+          // button keeps it for the click that follows.
+          const button = event.currentTarget;
+          const onRelease = (up: PointerEvent) => {
+            if (!button.contains(up.target as Node)) pressedBy.current = null;
+          };
+          window.addEventListener("pointerup", onRelease, { capture: true, once: true });
+        }}
+        onPointerCancel={() => {
+          pressedBy.current = null;
         }}
         onClick={() => {
           const by = pressedBy.current;
@@ -65,7 +77,10 @@ export function Tooltip({ label, trigger, children, align = "start", className }
         onFocus={() => {
           if (pressedBy.current === null) setOpen(true);
         }}
-        onBlur={() => setOpen(false)}
+        onBlur={() => {
+          pressedBy.current = null;
+          setOpen(false);
+        }}
       >
         {trigger}
       </button>

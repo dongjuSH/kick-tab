@@ -57,33 +57,42 @@ class RateLimiter:
         """
         now = self._clock()
         with self._lock:
-            self._expire(now)
-            return self._wait(self._hits.get(key), now)
+            return self._check_locked(key, now)
 
     def record(self, key: str) -> None:
         now = self._clock()
         with self._lock:
-            hits = self._hits.get(key)
-            if hits is None:
-                hits = self._hits[key] = deque()
-            else:
-                self._hits.move_to_end(key)
-            hits.append(now)
-            while len(hits) > self._keep:  # older entries can no longer decide a window
-                hits.popleft()
-            while len(self._hits) > self._max_keys:
-                self._hits.popitem(last=False)
+            self._record_locked(key, now)
 
     def hit(self, key: str) -> float | None:
-        """check() then record() when allowed. Rejected requests are not counted."""
-        retry_after = self.check(key)
-        if retry_after is None:
-            self.record(key)
-        return retry_after
+        """Check and record as one step (one lock). Rejected requests are not counted."""
+        now = self._clock()
+        with self._lock:
+            retry_after = self._check_locked(key, now)
+            if retry_after is None:
+                self._record_locked(key, now)
+            return retry_after
 
     def reset(self) -> None:
         with self._lock:
             self._hits.clear()
+
+    # The *_locked helpers assume self._lock is held; they never take it themselves.
+    def _check_locked(self, key: str, now: float) -> float | None:
+        self._expire(now)
+        return self._wait(self._hits.get(key), now)
+
+    def _record_locked(self, key: str, now: float) -> None:
+        hits = self._hits.get(key)
+        if hits is None:
+            hits = self._hits[key] = deque()
+        else:
+            self._hits.move_to_end(key)
+        hits.append(now)
+        while len(hits) > self._keep:  # older entries can no longer decide a window
+            hits.popleft()
+        while len(self._hits) > self._max_keys:
+            self._hits.popitem(last=False)
 
     def _wait(self, hits: deque[float] | None, now: float) -> float | None:
         if not hits:

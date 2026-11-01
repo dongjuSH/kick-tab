@@ -83,3 +83,15 @@ Codex 교차 검증 결과(치명 0·높음 1·중간 7·낮음 3)를 재현 또
 - 브라우저: 2·6·8·9·10번 재현 후 수정 확인, 1920·375px 회귀(헤더 129/113px, 푸터 147px, 버튼 간격 12px, TOP 5 패널 1280px, Escape·포커스 복귀) 유지.
 - `npm audit`: moderate 18건 모두 개발 도구의 `minimatch` 경로(01 추가분 2건), 수정 미적용(가이드 §7).
 - 외부 호출 0회, 디스코드 전송 0회(화면 확인은 fetch 가로채기), 영구 DB 저장 0건(feedback 2행·sync_runs 0행 유지).
+
+### Codex 재검증 후 최종 보완 (2026-11-01)
+
+Codex 재검증 결과: 기존 11건 중 10건 해결·1건(Tooltip) 부분 해결, 낮은 심각도 2건 추가. 두 건 모두 재현 후 보완했다. Codex 최종 재검증 전.
+
+| 항목 | 변경 파일·함수 | 재현 → 검증 |
+| --- | --- | --- |
+| A. `RateLimiter.hit()` 검사·기록 비원자 | `backend/app/core/rate_limit.py`(`hit`, `_check_locked`, `_record_locked`) | 분당 1회 제한·8개 스레드 동시 `hit()`에서 여러 건 허용을 재현. 수정 후 1건만 허용(5회 반복), `RateLimit` 경로 동시성 테스트 추가(`tests/test_rate_limit.py`) |
+| B. Tooltip 포인터 상태 잔류 | `frontend/src/components/ui/Tooltip.tsx`(`onPointerDown`의 바깥 놓기 처리, `onPointerCancel`, `onBlur`) | 실제 브라우저에서 누른 채 바깥에서 놓은 뒤 Tab 포커스가 열리지 않는 것을 재현. 수정 후 실제 입력으로 키보드 포커스·Enter·Space·Escape·포커스 이탈·마우스 첫 클릭 유지·바깥 클릭 닫힘 확인, pointercancel·터치/펜 탭은 이벤트 모의로 확인. 확인용 임시 페이지는 삭제 |
+
+- 검증: 백엔드 `ruff` 통과·`pytest` 88 통과·2 건너뜀, 프런트 `lint` 통과·기본 `npm run build`(Turbopack) 통과, `git diff --check` 통과.
+- 외부 호출 0회, 디스코드 전송 0회, 영구 DB 저장 0건(이번 보완은 DB를 쓰지 않음).
