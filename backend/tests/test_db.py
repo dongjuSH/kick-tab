@@ -74,3 +74,39 @@ def test_feedback_constraints_on_dev_database():
             assert rls is True
         finally:
             transaction.rollback()
+
+
+@pytest.mark.skipif(
+    os.environ.get("KICKTAB_DB_TESTS") != "1",
+    reason="opt-in: set KICKTAB_DB_TESTS=1 to run against the dev database (rolled back)",
+)
+def test_concurrent_same_body_waits_for_the_first_transaction():
+    """A second submission of the same body blocks until the first transaction ends."""
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.orm import Session
+
+    from app.db.session import get_engine
+    from app.schemas.feedback import FeedbackCreate
+    from app.services.feedback import body_hash, create_feedback, duplicate_lock_key
+
+    body = f"동시 제출 확인 {uuid.uuid4()}"
+    key = duplicate_lock_key(body_hash(body))
+    engine = get_engine()
+    with engine.connect() as first, engine.connect() as second:
+        first_tx = first.begin()
+        second_tx = second.begin()
+        try:
+            session = Session(bind=first, join_transaction_mode="create_savepoint")
+            create_feedback(session, FeedbackCreate(body=body, type="other"))
+            # The first transaction still holds the lock (its row is not committed).
+            assert second.execute(
+                text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": key}
+            ).scalar() is False
+            second.execute(text("SET LOCAL lock_timeout = '300ms'"))
+            other = Session(bind=second, join_transaction_mode="create_savepoint")
+            with pytest.raises(OperationalError):
+                create_feedback(other, FeedbackCreate(body=body, type="bug"))
+        finally:
+            second_tx.rollback()
+            first_tx.rollback()

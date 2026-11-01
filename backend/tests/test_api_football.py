@@ -181,3 +181,23 @@ def test_key_is_not_exposed_in_errors_or_logs(caplog):
     assert exc.value.__cause__ is None
     assert KEY not in caplog.text
     assert KEY not in repr(client.__dict__)
+
+
+@pytest.mark.parametrize("status", [401, 403, 429])
+@pytest.mark.parametrize(
+    "response_kwargs",
+    [{"text": "<html>Too Many Requests</html>"}, {"json": {"errors": {"token": "bad"}}}],
+    ids=["non-json", "json"],
+)
+def test_auth_and_rate_limit_statuses_stop_even_without_json(status, response_kwargs):
+    recorder = Recorder(
+        httpx.Response(status, **response_kwargs), httpx.Response(200, json=OK_BODY)
+    )
+    with make_client(recorder) as client:
+        with pytest.raises(ApiFootballResponseError) as exc:
+            client.get("/fixtures")
+        assert exc.value.status_code == status
+        with pytest.raises(ApiFootballStopped):
+            client.get("/fixtures")
+    assert len(recorder.requests) == 1
+    assert client.request_count == 1

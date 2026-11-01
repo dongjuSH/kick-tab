@@ -23,7 +23,7 @@ const PANEL_TITLE = `${TITLE} TOP 5`;
  * below 1024px it opens a bottom sheet (Figma 128:4408).
  */
 export function Top5Strip() {
-  const { data, isPending, error, refetch } = useQuery(currentTopMatchesQuery);
+  const { data, isPending, error, refetch, isStale } = useQuery(currentTopMatchesQuery);
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -74,15 +74,21 @@ export function Top5Strip() {
 
   return (
     <div className="border-b border-line bg-surface">
-      <div className="kt-container py-2">
+      <div className="kt-container">
         <button
           ref={toggle}
           type="button"
           aria-expanded={open}
           aria-controls={isDesktop ? panelId : undefined}
           aria-haspopup={isDesktop ? undefined : "dialog"}
-          onClick={() => setOpen((value) => !value)}
-          className="flex min-h-[27px] w-full items-center gap-3 rounded-control text-left"
+          onClick={() => {
+            // Expanding shows the latest selection when the cached one is older than 5 min.
+            if (!open && isStale) void refetch();
+            setOpen((value) => !value);
+          }}
+          // The strip is 43px tall (Figma); the ::before overhang makes the hit area 45px
+          // without changing the header's 113/129px height (guide §6.6 44px touch target).
+          className="relative flex min-h-[43px] w-full items-center gap-3 rounded-control py-2 text-left before:absolute before:inset-x-0 before:-inset-y-px before:content-['']"
         >
           <Badge tone="info">TOP 5</Badge>
           <span className="shrink-0 whitespace-pre text-small font-medium text-fg">

@@ -22,6 +22,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="KickTab API", version="0.1.0", lifespan=lifespan)
 
+# Error handling first so CORS (added after) wraps even the unhandled-error response.
+register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -29,7 +31,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-register_exception_handlers(app)
 app.include_router(api_router)
 
 

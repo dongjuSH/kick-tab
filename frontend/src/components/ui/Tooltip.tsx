@@ -14,13 +14,18 @@ interface TooltipProps {
 }
 
 /**
- * Desktop shows on hover/focus; touch devices toggle on tap (REV-004 rules pattern).
- * Escape or a tap elsewhere closes it.
+ * Mouse: shows on hover and stays open on click. Touch/pen: each tap toggles.
+ * Keyboard: shows on focus; Enter/Space toggles. Escape or a tap elsewhere closes it.
+ *
+ * Focus from a pointer press is ignored so "focus opens, then click toggles" can't close
+ * it on the first click or tap (cross-review #9).
  */
 export function Tooltip({ label, trigger, children, align = "start", className }: TooltipProps) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const root = useRef<HTMLSpanElement>(null);
+  // Pointer type of the press in progress; null for keyboard-originated focus/clicks.
+  const pressedBy = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -40,8 +45,8 @@ export function Tooltip({ label, trigger, children, align = "start", className }
     <span
       ref={root}
       className={cx("relative inline-flex", className)}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onPointerEnter={(event) => event.pointerType === "mouse" && setOpen(true)}
+      onPointerLeave={(event) => event.pointerType === "mouse" && setOpen(false)}
     >
       <button
         type="button"
@@ -49,8 +54,17 @@ export function Tooltip({ label, trigger, children, align = "start", className }
         aria-describedby={open ? id : undefined}
         aria-expanded={open}
         className="inline-flex size-11 items-center justify-center rounded-control hover:bg-subtle"
-        onClick={() => setOpen((value) => !value)}
-        onFocus={() => setOpen(true)}
+        onPointerDown={(event) => {
+          pressedBy.current = event.pointerType;
+        }}
+        onClick={() => {
+          const by = pressedBy.current;
+          pressedBy.current = null;
+          setOpen((value) => (by === "mouse" ? true : !value));
+        }}
+        onFocus={() => {
+          if (pressedBy.current === null) setOpen(true);
+        }}
         onBlur={() => setOpen(false)}
       >
         {trigger}

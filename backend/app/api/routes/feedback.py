@@ -15,23 +15,22 @@ from app.services.feedback import DuplicateFeedbackError, create_feedback
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/feedback", tags=["feedback"])
-
-# P-10 proposal (not yet decided): 3 per minute and 20 per day per client IP, plus a
-# service-wide ceiling of 20 per minute and 300 per day against forged client IPs (C-08).
-# Chat 02 splits members (key = user id) and guests (stricter) — see guide §10.1 P-10.
+# P-10, decided by the user (2026-10-31): 3 per minute and 20 per day per client IP, plus
+# a service-wide ceiling of 20 per minute and 300 per day against forged client IPs (C-08).
+# Still open: chat 02 splits members (key = user id) and guests — see guide §10.1 P-10.
 feedback_rate_limit = RateLimit(
     "feedback",
     [Limit(3, 60), Limit(20, 24 * 60 * 60)],
     global_limits=[Limit(20, 60), Limit(300, 24 * 60 * 60)],
 )
 
-
-@router.post(
-    "",
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(feedback_rate_limit)],
+# The limit runs in the route class (before body parsing) so malformed JSON counts too.
+router = APIRouter(
+    prefix="/feedback", tags=["feedback"], route_class=feedback_rate_limit.route_class()
 )
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
 def submit_feedback(
     payload: FeedbackCreate,
     db: Annotated[Session, Depends(get_db)],

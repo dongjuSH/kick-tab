@@ -1,8 +1,11 @@
 """Shared FastAPI dependencies: CSRF header check and per-client request limits."""
 
-from collections.abc import Callable, Sequence
+import threading
+from collections.abc import Callable, Coroutine, Sequence
+from typing import Any
 
-from fastapi import Request
+from fastapi import Request, Response
+from fastapi.routing import APIRoute
 
 from app.api.errors import ApiError
 from app.config import settings
@@ -29,10 +32,15 @@ def require_csrf(request: Request) -> None:
 
 
 class RateLimit:
-    """Dependency factory. Key = scope + client IP; replace `key_func` to key by user, etc.
+    """Per-client limits plus optional scope-wide limits (key = scope + client IP).
 
-    `global_limits` cap the whole scope regardless of client. They are the safety net for a
-    forged X-Forwarded-For (guide §10.2 C-08): rotating fake IPs still hits this ceiling.
+    Replace `key_func` to key by user etc. `global_limits` cap the whole scope regardless
+    of client: the safety net for a forged X-Forwarded-For (guide §10.2 C-08). A request is
+    counted only when both pass, so rejected requests never create client state.
+
+    Use `route_class()` on the router so the limit runs before the body is parsed: a
+    malformed JSON body then still counts (P-10). Calling the instance directly also works
+    (e.g. as a dependency) for routes without a body.
     """
 
     def __init__(
@@ -46,6 +54,7 @@ class RateLimit:
         self.limiter = RateLimiter(limits)
         self.global_limiter = RateLimiter(global_limits) if global_limits else None
         self.key_func = key_func or (lambda request: client_ip(request, settings.trusted_proxies))
+        self._lock = threading.Lock()
 
     def reset(self) -> None:
         self.limiter.reset()
@@ -53,14 +62,36 @@ class RateLimit:
             self.global_limiter.reset()
 
     def __call__(self, request: Request) -> None:
-        # Per-client first, so requests a client is already refused don't use global slots.
-        retry_after = self.limiter.hit(f"{self.scope}:{self.key_func(request)}")
-        if retry_after is None and self.global_limiter:
-            retry_after = self.global_limiter.hit(self.scope)
-        if retry_after is not None:
-            raise ApiError(
-                429,
-                "RATE_LIMITED",
-                "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
-                headers={"Retry-After": retry_after_header(retry_after)},
-            )
+        key = f"{self.scope}:{self.key_func(request)}"
+        with self._lock:
+            waits = [self.limiter.check(key)]
+            if self.global_limiter:
+                waits.append(self.global_limiter.check(self.scope))
+            blocked = [wait for wait in waits if wait is not None]
+            if not blocked:
+                self.limiter.record(key)
+                if self.global_limiter:
+                    self.global_limiter.record(self.scope)
+                return
+        raise ApiError(
+            429,
+            "RATE_LIMITED",
+            "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
+            headers={"Retry-After": retry_after_header(max(blocked))},
+        )
+
+    def route_class(self) -> type[APIRoute]:
+        """APIRoute subclass that applies this limit before request parsing."""
+        limit = self
+
+        class RateLimitedRoute(APIRoute):
+            def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+                handler = super().get_route_handler()
+
+                async def limited(request: Request) -> Response:
+                    limit(request)
+                    return await handler(request)
+
+                return limited
+
+        return RateLimitedRoute

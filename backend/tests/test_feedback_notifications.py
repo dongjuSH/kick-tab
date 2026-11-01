@@ -145,3 +145,20 @@ def test_global_cap_stops_rotating_client_ips():
         limit(request)
     assert exc.value.status_code == 429
     assert int(exc.value.headers["Retry-After"]) >= 1
+
+
+def test_global_rejection_does_not_create_client_buckets():
+    counter = iter(range(20_000))
+    limit = RateLimit(
+        "probe",
+        [Limit(3, 60)],
+        key_func=lambda request: f"10.0.{next(counter)}",
+        global_limits=[Limit(1, 60)],
+    )
+    request = Request({"type": "http", "headers": []})
+    limit(request)
+    for _ in range(10_050):
+        with pytest.raises(ApiError):
+            limit(request)
+    assert limit.limiter.size == 1
+    assert limit.global_limiter is not None and limit.global_limiter.size == 1

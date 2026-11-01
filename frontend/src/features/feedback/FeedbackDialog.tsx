@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StateMessage } from "@/components/ui/DataState";
 import { Dialog } from "@/components/ui/Dialog";
@@ -10,7 +10,7 @@ import { cx } from "@/components/ui/cx";
 import { apiFetch } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import type { FeedbackCreate, FeedbackReceipt, FeedbackType } from "@/lib/api/types";
-import { EMPTY_DRAFT, clearDraft, loadDraft, saveDraft, type FeedbackDraft } from "./draft";
+import { EMPTY_DRAFT, clearDraft, loadDraft, sameDraft, saveDraft, type FeedbackDraft } from "./draft";
 
 const FEEDBACK_MAX_LENGTH = 1000;
 
@@ -22,7 +22,14 @@ const TYPES: { value: FeedbackType; label: string }[] = [
 
 const FAIL_MESSAGE = "전송하지 못했습니다. 입력한 내용은 유지되었으니 다시 시도해 주세요.";
 
-function submitFeedback(payload: FeedbackCreate) {
+interface Submission {
+  payload: FeedbackCreate;
+  /** Dialog session that sent it; a later session must not be changed by its result. */
+  session: number;
+  draft: FeedbackDraft;
+}
+
+function submitFeedback({ payload }: Submission) {
   return apiFetch<FeedbackReceipt>("/feedback", { method: "POST", body: payload });
 }
 
@@ -30,7 +37,9 @@ function submitFeedback(payload: FeedbackCreate) {
  * Feedback modal (FEED-002; Figma 62:1822·1851·1882, mobile sheet 62:1593·1622·1653·1672).
  * Body (1~1,000 chars, whitespace-only rejected) and type are both required; the type is
  * required by user decision (2026-10-31), so the Figma label "선택" reads "필수" here.
- * On failure the input stays; the draft also survives closing the dialog.
+ * On failure the input stays; the draft also survives closing the dialog. Each open/close
+ * is a session: a request still in flight after closing never rewrites a newer draft or
+ * screen (cross-review #2).
  */
 export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
@@ -38,6 +47,10 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
     typeof window === "undefined" ? EMPTY_DRAFT : loadDraft(),
   );
   const [touched, setTouched] = useState(false);
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
+  const session = useRef(0);
+  const latestDraft = useRef(draft);
+  const isOpen = useRef(open);
   // Honeypot (hidden from people): bots that fill every field get refused by the API.
   const honeypot = useRef<HTMLInputElement>(null);
   const [sent, setSent] = useState(false);
@@ -46,25 +59,44 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
   const errorId = useId();
   const typeErrorId = useId();
 
+  useEffect(() => {
+    isOpen.current = open;
+  }, [open]);
+
+  const replaceDraft = (next: FeedbackDraft) => {
+    latestDraft.current = next;
+    setDraftState(next);
+  };
+
   const mutation = useMutation({
     mutationFn: submitFeedback,
-    onSuccess: () => {
-      clearDraft();
-      setDraftState(EMPTY_DRAFT);
-      setTouched(false);
-      setSent(true);
+    onSuccess: (_receipt, submission) => {
+      if (submission.session === session.current) {
+        clearDraft();
+        replaceDraft(EMPTY_DRAFT);
+        setTouched(false);
+        setSent(true);
+        return;
+      }
+      // Finished after its dialog was closed: drop the draft only if it is exactly what
+      // was sent and the dialog is still closed; never touch a newer draft or screen.
+      if (!isOpen.current && sameDraft(latestDraft.current, submission.draft)) {
+        clearDraft();
+        replaceDraft(EMPTY_DRAFT);
+      }
     },
   });
 
   const setDraft = (next: FeedbackDraft) => {
-    setDraftState(next);
-    saveDraft(next);
+    replaceDraft(next);
+    if (!saveDraft(next)) setStorageUnavailable(true);
     if (mutation.isError) mutation.reset();
   };
 
   const close = () => {
     onClose();
-    // Next open starts from the form again; an unsent draft is kept.
+    // Next open is a new session that starts from the form; an unsent draft is kept.
+    session.current += 1;
     setSent(false);
     setTouched(false);
     mutation.reset();
@@ -89,10 +121,14 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
     setTouched(true);
     if (!trimmed || !draft.type || mutation.isPending) return;
     mutation.mutate({
-      body: draft.body,
-      type: draft.type,
-      pagePath: pathname,
-      website: honeypot.current?.value || undefined,
+      payload: {
+        body: draft.body,
+        type: draft.type,
+        pagePath: pathname,
+        website: honeypot.current?.value || undefined,
+      },
+      session: session.current,
+      draft,
     });
   };
 
@@ -137,6 +173,7 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
                     key={type.value}
                     type="button"
                     aria-pressed={selected}
+                    disabled={mutation.isPending}
                     // Required: choosing again keeps the selection instead of clearing it.
                     onClick={() => !selected && setDraft({ ...draft, type: type.value })}
                     className={cx(
@@ -167,6 +204,8 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
               value={draft.body}
               maxLength={FEEDBACK_MAX_LENGTH}
               required
+              // Locked while sending so the text sent and the text shown never differ.
+              readOnly={mutation.isPending}
               placeholder="서비스를 사용하며 느낀 점을 적어주세요."
               aria-invalid={fieldError ? true : undefined}
               aria-describedby={cx(hintId, fieldError && errorId)}
@@ -186,6 +225,13 @@ export function FeedbackDialog({ open, onClose }: { open: boolean; onClose: () =
               </p>
             )}
           </div>
+
+          {storageUnavailable && (
+            <p role="status" className="rounded-control bg-warning-bg p-3 text-label text-warning">
+              이 브라우저에서는 작성 중인 내용을 임시 저장할 수 없습니다. 새로고침하거나 페이지를
+              떠나면 입력한 내용이 사라질 수 있어요. 의견은 그대로 보낼 수 있습니다.
+            </p>
+          )}
 
           {failed && (
             <p role="alert" className="rounded-control bg-error-bg p-3 text-label text-error">

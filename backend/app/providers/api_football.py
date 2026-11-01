@@ -32,6 +32,7 @@ QUOTA_HEADERS = (
     "x-ratelimit-remaining",
 )
 _STOP_WORDS = ("rate limit", "ratelimit", "request limit", "too many", "quota", "suspended")
+STOP_STATUSES = frozenset({401, 403, 429})
 
 
 class ApiFootballError(Exception):
@@ -236,27 +237,39 @@ class ApiFootballClient:
     def _parse(
         self, endpoint: str, params: dict[str, Any], response: httpx.Response
     ) -> ApiFootballResult:
+        status = response.status_code
         try:
             body = response.json()
         except ValueError:
             body = None
+        errors = body.get("errors") if isinstance(body, dict) else None
+        error_keys = _error_keys(errors)
+
+        # Auth/rate-limit statuses stop this client whatever the body looks like (HTML or
+        # text bodies included), before any other check can raise first.
+        if status in STOP_STATUSES:
+            self._stop_reason = (
+                f"API-Football stopped after HTTP {status} ({', '.join(error_keys) or 'auth'})"
+            )
+            raise ApiFootballResponseError(
+                f"API-Football {endpoint} returned HTTP {status}",
+                status_code=status,
+                error_keys=error_keys,
+            )
         if not isinstance(body, dict):
             raise ApiFootballResponseError(
                 f"API-Football {endpoint} returned a non-JSON body",
-                status_code=response.status_code,
+                status_code=status,
                 error_keys=["decode"],
             )
-        errors = body.get("errors")
-        status = response.status_code
-        if status in (401, 403, 429) or (errors not in (None, [], {})):
-            error_keys = _error_keys(errors)
+        if errors not in (None, [], {}):
             text = str(errors).lower()  # only matched against keywords, never logged
-            if status in (401, 403, 429) or any(word in text for word in _STOP_WORDS):
+            if any(word in text for word in _STOP_WORDS):
                 self._stop_reason = (
-                    f"API-Football stopped after HTTP {status} ({', '.join(error_keys) or 'auth'})"
+                    f"API-Football stopped after quota errors ({', '.join(error_keys)})"
                 )
             raise ApiFootballResponseError(
-                f"API-Football {endpoint} returned errors: {', '.join(error_keys) or status}",
+                f"API-Football {endpoint} returned errors: {', '.join(error_keys)}",
                 status_code=status,
                 error_keys=error_keys,
             )

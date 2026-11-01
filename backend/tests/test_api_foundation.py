@@ -242,3 +242,35 @@ def test_body_hash_ignores_case_and_whitespace():
     assert body_hash("팀 검색이\n  안 돼요 OK") == body_hash("  팀 검색이 안 돼요 ok ")
     assert body_hash("팀 검색이 안 돼요") != body_hash("팀 검색이 안 돼요!")
     assert len(body_hash("x")) == 64
+
+
+@pytest.mark.parametrize(
+    ("content", "content_type"),
+    [("{", "application/json"), ('{"body": "", "type": "bug"}', "application/json")],
+)
+def test_malformed_or_invalid_bodies_count_toward_the_limit(client, stored, content, content_type):
+    """P-10: format errors count too, including JSON that fails to parse."""
+    headers = {**WEB, "Content-Type": content_type}
+    codes = [
+        client.post("/api/v1/feedback", content=content, headers=headers).status_code
+        for _ in range(4)
+    ]
+    assert codes == [422, 422, 422, 429]
+    assert stored == []
+
+
+def test_duplicate_check_runs_under_a_body_hash_lock():
+    """Lock first, then check, then insert — so concurrent equal bodies are serialised."""
+    from unittest.mock import MagicMock
+
+    from app.schemas.feedback import FeedbackCreate
+    from app.services.feedback import body_hash, create_feedback, duplicate_lock_key
+
+    session = MagicMock()
+    session.scalar.return_value = None
+    create_feedback(session, FeedbackCreate(body="같은 의견", type="bug"))
+    calls = [call[0] for call in session.mock_calls if call[0] in ("execute", "scalar", "add")]
+    assert calls[:3] == ["execute", "scalar", "add"]
+    lock_sql, lock_params = session.execute.call_args.args
+    assert "pg_advisory_xact_lock" in str(lock_sql)
+    assert lock_params == {"key": duplicate_lock_key(body_hash("같은 의견"))}

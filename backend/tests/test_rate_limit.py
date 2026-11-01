@@ -64,3 +64,21 @@ def test_forwarded_for_from_trusted_proxy_uses_right_most_untrusted_hop():
 def test_trusted_proxy_without_header_falls_back_to_peer():
     assert client_ip(make_request("::1"), TRUSTED) == "::1"
     assert client_ip(make_request("127.0.0.1", "not-an-ip"), TRUSTED) == "127.0.0.1"
+
+
+def test_check_does_not_create_buckets_for_unknown_keys():
+    limiter = RateLimiter([Limit(1, 60)])
+    assert limiter.check("new") is None
+    assert limiter.size == 0
+    limiter.record("new")
+    assert limiter.size == 1
+
+
+def test_key_count_is_bounded_and_oldest_keys_are_evicted():
+    clock = FakeClock()
+    limiter = RateLimiter([Limit(5, 86400)], clock=clock, max_keys=100)
+    for index in range(1000):
+        clock.now += 0.001
+        limiter.hit(f"k{index}")
+    assert limiter.size == 100
+    assert limiter.check("k999") is None  # most recent keys are kept
