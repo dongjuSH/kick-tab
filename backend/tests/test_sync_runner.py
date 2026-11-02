@@ -164,7 +164,11 @@ def test_scheduler_starts_only_when_enabled(monkeypatch, temp_job):
     assert scheduler.start_scheduler() is None
 
     built = scheduler.build_scheduler()
-    assert [job.id for job in built.get_jobs()] == ["test-scheduled"]
-    job = built.get_jobs()[0]
+    ids = [job.id for job in built.get_jobs()]
+    assert "test-scheduled" in ids and "test-manual" not in ids
+    # Chat 03 jobs: manual-only alias reload stays out of the schedule.
+    assert {"reference", "fixtures", "fixtures_live", "news"} <= set(ids)
+    assert "team_aliases" not in ids
+    job = built.get_job("test-scheduled")
     assert job.max_instances == 1
     assert job.coalesce is True

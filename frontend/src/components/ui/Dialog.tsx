@@ -29,6 +29,8 @@ interface DialogProps {
    * title, and the sheet never grows past its max height: children decide what scrolls.
    */
   compact?: boolean;
+  /** Drag handle on the bottom sheet only (Figma competition picker 187:1372, 2026-11-02). */
+  handle?: boolean;
   /** Where focus starts on open: the dialog itself (default) or its close button. */
   initialFocus?: "dialog" | "close";
   id?: string;
@@ -52,6 +54,7 @@ export function Dialog({
   width = 520,
   closeLabel = "닫기",
   compact = false,
+  handle = false,
   initialFocus = "dialog",
   id,
   className,
@@ -130,8 +133,21 @@ export function Dialog({
       }}
     >
       {open && (
-        <div className={cx("flex flex-col", compact ? "min-h-0 gap-3 overflow-y-auto p-4" : "gap-4 p-6")}>
-          {compact && <span aria-hidden className="mx-auto h-1 w-8 shrink-0 rounded-full bg-line-strong" />}
+        <div
+          className={cx(
+            "flex flex-col",
+            compact ? "min-h-0 gap-3 overflow-y-auto p-4" : handle ? "gap-3 p-4 lg:gap-4 lg:p-6" : "gap-4 p-6",
+          )}
+        >
+          {(compact || (handle && layout !== "center")) && (
+            <span
+              aria-hidden
+              className={cx(
+                "mx-auto h-1 w-8 shrink-0 rounded-full bg-line-strong",
+                !compact && layout === "responsive" && "lg:hidden",
+              )}
+            />
+          )}
           <div className="flex items-center gap-2">
             <h2 id={titleId} className={cx("min-w-0 flex-1 font-bold", compact ? "text-lead" : "text-title")}>
               {title}

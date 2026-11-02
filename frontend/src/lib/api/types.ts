@@ -14,6 +14,16 @@ export type TopMatches = Schemas["TopMatches"];
 export type TopMatchItem = Schemas["TopMatchItem"];
 export type TopMatchesState = TopMatches["state"];
 
+export type CompetitionItem = Schemas["CompetitionItem"];
+export type CompetitionGroup = CompetitionItem["group"];
+export type ScheduleMeta = Schemas["ScheduleMeta"];
+export type FavoriteSchedule = Schemas["FavoriteSchedule"];
+export type TeamSchedule = Schemas["TeamSchedule"];
+export type NewsItem = Schemas["NewsItem"];
+export type NewsBadge = NonNullable<NewsItem["badge"]>;
+export type NewsMeta = Schemas["NewsMeta"];
+export type NewsLink = Schemas["NewsLink"];
+
 export type FeedbackCreate = Schemas["FeedbackCreate"];
 export type FeedbackType = NonNullable<FeedbackCreate["type"]>;
 export type FeedbackReceipt = Schemas["FeedbackReceipt"];

@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     api_football_daily_budget: int = 7000
     api_football_per_minute: int = 250
 
+    # Current season as the API season value (2026 = 2026-27, CMP-003). Main schedule,
+    # team search and the team-detail allow set use it.
+    current_season: int = 2026
+    # true: crest/logo URLs are sent only for rights-cleared assets (V-10). None is cleared
+    # yet, so every image falls back to the placeholder. false (local default): API URLs.
+    image_rights_enforced: bool = False
+    # How long collected news metadata is kept and shown (V-09 decides the final value).
+    news_retention_hours: int = 72
+    naver_news_base_url: str = "https://naverapihub.apigw.ntruss.com"
+
     api_football_key: SecretStr = SecretStr("")
     naver_client_id: SecretStr = SecretStr("")
     naver_client_secret: SecretStr = SecretStr("")

@@ -3,11 +3,12 @@ import { cx } from "./cx";
 
 /**
  * Figma 55:27 status badges. Colour is never the only signal: always pass a text label
- * such as "진행 중 63분" or "경기 중단" (guide §6.6).
- * 12px text (TOP 5 badges, Figma 159:924). Tone "accent" is the action-soft badge of the
- * TOP 5 strip/panel ("AI 선정", rank).
+ * such as "진행 중 63′" or "경기 중단" (guide §6.6).
+ * Tone "accent" is the action-soft badge of the TOP 5 strip/panel ("AI 선정", rank).
+ * Size "small" = 12px (status badges, Figma 159:924·187:591); "caption" = 11px (news, 49:457).
  */
 export type BadgeTone = "accent" | "live" | "neutral" | "warning";
+export type BadgeSize = "small" | "caption";
 
 const TONES: Record<BadgeTone, string> = {
   accent: "bg-action-soft text-action",
@@ -16,19 +17,27 @@ const TONES: Record<BadgeTone, string> = {
   warning: "bg-warning-bg text-warning",
 };
 
+const SIZES: Record<BadgeSize, string> = {
+  small: "text-small",
+  caption: "text-caption",
+};
+
 export function Badge({
   tone = "neutral",
+  size = "small",
   className,
   children,
 }: {
   tone?: BadgeTone;
+  size?: BadgeSize;
   className?: string;
   children: ReactNode;
 }) {
   return (
     <span
       className={cx(
-        "inline-flex shrink-0 items-center whitespace-nowrap rounded-badge px-2 py-1 text-small font-medium",
+        "inline-flex shrink-0 items-center whitespace-nowrap rounded-badge px-2 py-1 font-medium",
+        SIZES[size],
         TONES[tone],
         className,
       )}

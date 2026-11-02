@@ -99,9 +99,10 @@
   --text-heading: 28px;
   --text-heading--line-height: 38px;
 
-  /* Badge 4px, button/input 8px, card/dialog 16px. */
+  /* Badge 4px, button/input 8px, news card 12px, card/dialog 16px. */
   --radius-badge: 4px;
   --radius-control: 8px;
+  --radius-tile: 12px;
   --radius-card: 16px;
 }
 
@@ -115,6 +116,17 @@
     color: var(--color-fg);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * Tailwind v4 resets buttons to the default arrow cursor; every enabled control shows the
+   * hand so it reads as clickable (date/competition/news chips, menus, TOP 5 strip).
+   */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="option"],
+  summary {
+    cursor: pointer;
   }
 
   /* 3px focus ring for keyboard users (Figma 55:27). */

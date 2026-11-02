@@ -37,6 +37,145 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/competitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Competitions */
+        get: operations["read_competitions_api_v1_competitions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fixtures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Fixtures
+         * @description Matches of every supported competition on one KST calendar date (SCH-002).
+         *
+         *     Competition/team filters are applied on screen to this list, so "no matches that day"
+         *     and "no matches for the filter" stay distinguishable.
+         */
+        get: operations["read_fixtures_api_v1_fixtures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fixtures/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Favorite Schedule
+         * @description FAV-004: the live or nearest upcoming match of each favourite team.
+         */
+        get: operations["read_favorite_schedule_api_v1_fixtures_next_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fixtures/team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team Schedule
+         * @description Team view of the main schedule: the team's stored matches today .. today+13 KST.
+         *     Competition filters are applied on screen; `failedCompetitionIds` tells which
+         *     competitions may be incomplete, so "no matches" is never claimed for them.
+         */
+        get: operations["read_team_schedule_api_v1_fixtures_team_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Team Search */
+        get: operations["read_team_search_api_v1_teams_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read News
+         * @description NEWS-001·002: classified Korean articles, newest first; `nextCursor` loads more.
+         */
+        get: operations["read_news_api_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news/{article_id}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read News Link
+         * @description NEWS-004: the stored original link and whether it answers right now.
+         */
+        get: operations["read_news_link_api_v1_news__article_id__link_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -58,6 +197,21 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** CompetitionItem */
+        CompetitionItem: {
+            /** Id */
+            id: number;
+            /** Nameko */
+            nameKo: string | null;
+            /** Shortname */
+            shortName: string;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "EPL" | "LaLiga" | "SerieA" | "Bundesliga" | "Ligue1" | "UEFA";
+            currentSeason: components["schemas"]["CompetitionSeasonInfo"] | null;
+        };
         /** CompetitionRef */
         CompetitionRef: {
             /** Id */
@@ -66,6 +220,27 @@ export interface components {
             nameKo: string | null;
             /** Shortname */
             shortName: string;
+        };
+        /** CompetitionSeasonInfo */
+        CompetitionSeasonInfo: {
+            /** Season */
+            season: number;
+            /** Label */
+            label: string;
+            /**
+             * Availability
+             * @enum {string}
+             */
+            availability: "available" | "no_data";
+        };
+        /** CompetitionsResponse */
+        CompetitionsResponse: {
+            /** Data */
+            data: components["schemas"]["CompetitionItem"][];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
         };
         /** DataResponse[FeedbackReceipt] */
         DataResponse_FeedbackReceipt_: {
@@ -101,6 +276,18 @@ export interface components {
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
         };
+        /** FavoriteSchedule */
+        FavoriteSchedule: {
+            /** Teams */
+            teams: components["schemas"]["TeamRef"][];
+            /** Matches */
+            matches: components["schemas"]["MatchSummary"][];
+        };
+        /** FavoriteScheduleResponse */
+        FavoriteScheduleResponse: {
+            data: components["schemas"]["FavoriteSchedule"];
+            meta: components["schemas"]["ScheduleMeta"];
+        };
         /** FeedbackCreate */
         FeedbackCreate: {
             /** Body */
@@ -124,6 +311,12 @@ export interface components {
              * Format: date-time
              */
             createdAt: string;
+        };
+        /** FixturesResponse */
+        FixturesResponse: {
+            /** Data */
+            data: components["schemas"]["MatchSummary"][];
+            meta: components["schemas"]["ScheduleMeta"];
         };
         /** MatchScore */
         MatchScore: {
@@ -171,6 +364,66 @@ export interface components {
             away: components["schemas"]["TeamRef"];
             score: components["schemas"]["MatchScore"];
         };
+        /** NewsItem */
+        NewsItem: {
+            /** Id */
+            id: number;
+            /** Badge */
+            badge: ("EPL" | "LaLiga" | "SerieA" | "Bundesliga" | "Ligue1" | "UEFA") | null;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string | null;
+            /** Url */
+            url: string;
+            /** Sourcedomain */
+            sourceDomain: string;
+            /**
+             * Publishedat
+             * Format: date-time
+             */
+            publishedAt: string;
+        };
+        /** NewsLink */
+        NewsLink: {
+            /** Url */
+            url: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "reachable" | "gone" | "unknown";
+        };
+        /** NewsLinkResponse */
+        NewsLinkResponse: {
+            data: components["schemas"]["NewsLink"];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        /** NewsMeta */
+        NewsMeta: {
+            /** Nextcursor */
+            nextCursor: string | null;
+            /** Updatedat */
+            updatedAt: string | null;
+            /** Stale */
+            stale: boolean;
+        };
+        /** NewsResponse */
+        NewsResponse: {
+            /** Data */
+            data: components["schemas"]["NewsItem"][];
+            meta: components["schemas"]["NewsMeta"];
+        };
+        /** ScheduleMeta */
+        ScheduleMeta: {
+            /** Updatedat */
+            updatedAt: string | null;
+            /** Failedcompetitionids */
+            failedCompetitionIds: number[];
+        };
         /** TeamRef */
         TeamRef: {
             /** Id */
@@ -183,6 +436,36 @@ export interface components {
             crestUrl: string | null;
             /** Detailavailable */
             detailAvailable: boolean | null;
+        };
+        /** TeamSchedule */
+        TeamSchedule: {
+            team: components["schemas"]["TeamRef"];
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Matches */
+            matches: components["schemas"]["MatchSummary"][];
+        };
+        /** TeamScheduleResponse */
+        TeamScheduleResponse: {
+            data: components["schemas"]["TeamSchedule"];
+            meta: components["schemas"]["ScheduleMeta"];
+        };
+        /** TeamSearchResponse */
+        TeamSearchResponse: {
+            /** Data */
+            data: components["schemas"]["TeamRef"][];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
         };
         /** TopMatchItem */
         TopMatchItem: {
@@ -288,6 +571,289 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DataResponse_TopMatches_"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_competitions_api_v1_competitions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompetitionsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_fixtures_api_v1_fixtures_get: {
+        parameters: {
+            query?: {
+                /** @description KST date (YYYY-MM-DD) */
+                date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixturesResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_favorite_schedule_api_v1_fixtures_next_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated team ids, at most 5 */
+                teams: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FavoriteScheduleResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team_schedule_api_v1_fixtures_team_get: {
+        parameters: {
+            query: {
+                /** @description Team id */
+                team: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamScheduleResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team_search_api_v1_teams_search_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamSearchResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_news_api_v1_news_get: {
+        parameters: {
+            query?: {
+                badge?: ("EPL" | "LaLiga" | "SerieA" | "Bundesliga" | "Ligue1" | "UEFA") | null;
+                cursor?: string | null;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_news_link_api_v1_news__article_id__link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                article_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsLinkResponse"];
                 };
             };
             /** @description Client error */

@@ -42,7 +42,7 @@ export function StateMessage({
   title: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
-  /** neutral = search icon (Figma empty/success state), plain = no icon. */
+  /** neutral = search icon (Figma empty/success state), error = info icon (57:150), plain = no icon. */
   tone?: "neutral" | "plain" | "error";
   className?: string;
 }) {
@@ -52,7 +52,8 @@ export function StateMessage({
       className={cx("flex flex-col items-center gap-3 p-6 text-center", className)}
     >
       {tone === "neutral" && <Icon name="search" />}
-      <p className={cx("text-lead font-bold", tone === "error" ? "text-error" : "text-fg")}>{title}</p>
+      {tone === "error" && <Icon name="info" />}
+      <p className="text-lead font-bold text-fg">{title}</p>
       {description && <p className="text-body text-fg-secondary">{description}</p>}
       {action}
     </div>
@@ -94,7 +95,7 @@ export function DataState({
         className={className}
         title={errorTitle}
         description={isApiError(error) ? error.message : DEFAULT_ERROR}
-        action={onRetry && <Button onClick={onRetry}>다시 시도</Button>}
+        action={onRetry && <Button onClick={onRetry}>다시 확인</Button>}
       />
     );
   }

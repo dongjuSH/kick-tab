@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models.sync_run import SyncRun
 from app.providers.api_football import ApiFootballError
-from app.sync.registry import JOBS, JobContext
+from app.sync.registry import JOBS, JobContext, JobPartialFailure
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def pg_advisory_lock(engine: Engine) -> LockFactory:
 
 def _summary(exc: BaseException) -> str:
     # Our own provider errors are written to be safe to store; others keep the type only.
-    if isinstance(exc, ApiFootballError):
+    if isinstance(exc, ApiFootballError | JobPartialFailure):
         return f"{type(exc).__name__}: {str(exc)[:300]}"
     return type(exc).__name__
 
@@ -85,6 +85,11 @@ def run_job(
 
         session_factory = session_factory or get_sessionmaker()
         lock_factory = lock_factory or pg_advisory_lock(get_engine())
+
+    if spec.precheck is not None:
+        with session_factory() as check_session:
+            if not spec.precheck(check_session, merged):
+                return RunOutcome(name, "skipped", None, 0, "Precheck: nothing to do")
 
     with lock_factory(name) as acquired:
         with session_factory() as record_session:

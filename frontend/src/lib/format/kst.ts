@@ -100,6 +100,30 @@ export function formatPeriod(start: string, end: string): string {
   return `${formatShortDate(start)}–${formatShortDate(end)}`;
 }
 
+/** Today's KST calendar date as "2026-11-02". */
+export function kstTodayIso(now: Date = new Date()): string {
+  const p = kstParts(now)!;
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}
+
+/** Calendar arithmetic on "YYYY-MM-DD" (no timezone involved). */
+export function addDaysIso(value: string, days: number): string {
+  const p = parseIsoDate(value);
+  if (!p) return value;
+  return new Date(Date.UTC(p.year, p.month - 1, p.day + days)).toISOString().slice(0, 10);
+}
+
+/** "방금 전" / "12분 전" / "3시간 전", then "11/1(일) 13:00" from one day old. */
+export function formatRelativeKst(value: string, now: Date = new Date()): string {
+  const date = toDate(value);
+  if (!date) return MISSING;
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}시간 전`;
+  return formatKstMonthDayTime(date);
+}
+
 /** Shown for values the provider did not supply (guide §4). */
 export const MISSING = "—";
 

@@ -11,6 +11,21 @@ export const queryKeys = {
     all: ["top-matches"] as const,
     current: () => ["top-matches", "current"] as const,
   },
+  competitions: {
+    all: ["competitions"] as const,
+  },
+  fixtures: {
+    byDate: (date: string) => ["fixtures", "date", { date }] as const,
+    team: (teamId: number, today: string) => ["fixtures", "team", { teamId, today }] as const,
+    next: (teamIds: readonly number[]) => ["fixtures", "next", { teams: teamIds.join(",") }] as const,
+  },
+  teams: {
+    search: (q: string) => ["teams", "search", { q }] as const,
+  },
+  news: {
+    list: (badge: string | null) => ["news", "list", { badge }] as const,
+    link: (id: number) => ["news", "link", { id }] as const,
+  },
   me: {
     all: ["me"] as const,
   },

@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { MatchStatusBadge } from "@/components/common/MatchStatusBadge";
 import { Badge } from "@/components/ui/Badge";
 import { DataState } from "@/components/ui/DataState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import type { TopMatchItem, TopMatches } from "@/lib/api/types";
 import { formatKstDateTime } from "@/lib/format/kst";
+import { scoreText, teamName } from "@/lib/format/match";
 import {
   NOTICES,
   POLICY_NOTICE,
@@ -12,9 +14,6 @@ import {
   changeText,
   kickoffText,
   noticeOf,
-  scoreText,
-  statusBadge,
-  teamName,
   weekText,
   type Top5Notice,
 } from "./model";
@@ -24,7 +23,6 @@ type Top5Layout = "desktop" | "mobile";
 /** One selected match (Figma TOP5 Row 126:141). The whole row opens the match detail. */
 function Top5Row({ item, layout, onSelect }: { item: TopMatchItem; layout: Top5Layout; onSelect: () => void }) {
   const { match } = item;
-  const status = statusBadge(match);
   const change = changeText(match);
   const desktop = layout === "desktop";
   const teams = (
@@ -54,9 +52,7 @@ function Top5Row({ item, layout, onSelect }: { item: TopMatchItem; layout: Top5L
             {item.rank}
           </Badge>
           <span className="min-w-0 flex-1 truncate text-small text-fg-secondary">{match.competition.shortName}</span>
-          <Badge tone={status.tone}>
-            {status.label}
-          </Badge>
+          <MatchStatusBadge match={match} size="small" />
         </span>
         {desktop ? (
           <span className="flex items-center gap-4">
