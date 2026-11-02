@@ -1,14 +1,12 @@
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
+from app.core.kst import kst_today
 from app.schemas.top_matches import TopMatches, TopMatchesWeek
-
-# Korea has no daylight saving time, so a fixed offset needs no tz database.
-KST = timezone(timedelta(hours=9), "KST")
 
 
 def current_kst_week(now: datetime | None = None) -> TopMatchesWeek:
     """KST Monday–Sunday containing `now` (default: the current time)."""
-    today = (now or datetime.now(UTC)).astimezone(KST).date()
+    today = kst_today(now)
     start = today - timedelta(days=today.weekday())
     return TopMatchesWeek(start=start, end=start + timedelta(days=6))
 

@@ -34,6 +34,14 @@ class JobContext:
 
 
 JobFunc = Callable[[JobContext], None]
+# Cheap DB-only check before a scheduled run, e.g. "is any match live?". False skips the run
+# without a sync_runs row so frequent idle checks do not flood the table.
+Precheck = Callable[[Session, Mapping[str, Any]], bool]
+
+
+class JobPartialFailure(Exception):
+    """Some units of a job failed while others were saved. The message must be safe to
+    store (identifiers and counts only), because the runner keeps it in sync_runs."""
 
 
 @dataclass(frozen=True)
@@ -45,6 +53,7 @@ class JobSpec:
     # None = manual only (CLI).
     schedule: Mapping[str, Any] | None = None
     default_params: Mapping[str, Any] = field(default_factory=dict)
+    precheck: Precheck | None = None
 
 
 JOBS: dict[str, JobSpec] = {}
@@ -56,13 +65,16 @@ def register_job(
     description: str = "",
     schedule: Mapping[str, Any] | None = None,
     default_params: Mapping[str, Any] | None = None,
+    precheck: Precheck | None = None,
 ) -> Callable[[JobFunc], JobFunc]:
     """Register an idempotent job function `func(ctx: JobContext) -> None`."""
 
     def decorator(func: JobFunc) -> JobFunc:
         if name in JOBS:
             raise ValueError(f"Duplicate sync job: {name}")
-        JOBS[name] = JobSpec(name, func, description, schedule, dict(default_params or {}))
+        JOBS[name] = JobSpec(
+            name, func, description, schedule, dict(default_params or {}), precheck
+        )
         return func
 
     return decorator

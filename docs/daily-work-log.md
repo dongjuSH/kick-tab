@@ -1,5 +1,37 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-02 (월) — 03 경기 일정(메인)
+
+브랜치 `feat/03-schedule`(최신 `dev`에서 분기)에 커밋·push. Codex 교차 검증 2회(1차 수정 필요 6건 → 보완 → 2차 통과). `dev` 병합은 00 확인 후.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 기준 데이터 | `models/reference.py`, 마이그레이션 `0003_reference_data`, `seed/competitions.py`·`team_aliases.json`, `services/reference.py`(`apply_alias_seed`·`team_detail_lookup`·`team_ref`), `sync/reference.py`(`reference`·`team_aliases`) | 14개 대회·2026 시즌·5대 리그 96팀·별칭 371개(P-11), 팀 상세 허용 집합(`detailAvailable`) |
+| 경기 수집 | `models/fixture.py`, `0004_fixtures`, `services/match_status.py`(`map_status`), `services/fixtures.py`(`upsert_fixtures`·`sync_state`·`team_schedule` 등), `sync/fixtures.py`(`fixtures`·`fixtures_live`), `sync/registry.py`·`runner.py`(`precheck`·`JobPartialFailure`) | 오늘−1~+15일 289건, 상태 변환·KST 묶음, 실패 대회는 기존 행 유지, 진행·임박 경기가 없으면 실시간 작업 호출 0 |
+| 뉴스 | `models/news.py`, `0005_news`, `providers/naver_news.py`, `services/news_classify.py`·`news.py`·`news_link.py`, `sync/news.py` | 네이버 8개 검색어, 규칙 기반 분류(P-08 주제 기준), 72시간 보관, 원문 확인(NEWS-004) |
+| API | `api/routes/schedule.py`, `schemas/schedule.py`, `frontend/src/lib/api/schema.d.ts`·`types.ts`·`query-keys.ts` | `/competitions`·`/fixtures`·`/fixtures/next`·`/fixtures/team`·`/teams/search`·`/news`·`/news/{id}/link` |
+| 메인 화면 | `app/page.tsx`, `features/schedule/*`(`ScheduleSection`·`useScheduleParams`·`queries`·`DateBar`·`ScheduleNotice`), `components/common/CompetitionFilter`·`TeamSearch`·`MatchCard`·`MatchStatusBadge`, `lib/format/match.ts` | 날짜 보기, 대회 직접 선택·보조 다중 초안, 팀 14일 모아 보기·해제 복귀, URL 뒤로가기, 빈 결과·실패·일부 실패 구분, 임박 폴링, KST 자정 전환 |
+| 관심 팀·뉴스 화면 | `features/favorites/*`(`store`·`useFavorites`·`FavoriteToggle`·`FavoriteSchedule`), `features/news/MainNews`·`OriginalRedirect`, `components/common/NewsCard`, `app/news/original/page.tsx` | 비회원 관심 팀(최대 5개·저장 불가 안내), 관심 팀 일정, 뉴스 분류 칩·6개씩 더 보기·원문 이동 |
+| 공통 UI | `globals.css`(포인터 커서·`rounded-tile`), `Badge`(`info` 삭제), `Dialog`(`handle`), `DataState`(정보 아이콘·'다시 확인'), `Icon`, `ui/chip.ts`, `TeamCrest`(고정 크기), TOP 5 `Top5List`·`model.ts`(`MatchStatusBadge`·공용 표기 사용) | Figma 개정 반영, TOP 5와 일정의 상태 표기 통일 |
+
+- **사용자 피드백 반영:** 버튼 포인터 커서, 손흥민 기사가 EPL로 묶이던 뉴스 분류를 주제 기준으로 변경(표본 40건 중 37건 적합), 대회 그룹 칩 → 단일 버튼 직접 선택, 팀 검색 시 하루 → 14일 모아 보기(문서·Figma 개정 후 구현).
+- **Codex 1차 지적 보완:** 초기화 시 검색어·표시 개수 초기화, 임박 구간 진입 시 폴링 시작, 뉴스 추가 조회 실패 시 기존 기사 유지, 관심 팀 일정 일부 실패 안내, `/fixtures/next` 0·음수 ID 422, 여자 축구 기사를 팀 연결 전에 제외. 함께 발견해 고친 것: '프리메라리가 FC바르셀로나'를 Liga F로 오인하던 오탐, 일정 재조회 실패 시 목록이 사라지던 문제. 디자인 차이 3건(선택창 560px·모바일 손잡이·날짜 칸 배경) 시안에 맞춤.
+- **마무리 간소화:** 테스트 전용이던 `competition_badges()`를 테스트로 이동, 대회 필터에 남아 있던 `chipClass()`를 `components/ui/chip.ts`로 이동, 파일 내부 전용 `statusLabel()`·`needsLiveRefresh()` export 제거.
+- **실제 실행 검수:** 1280·375·320에서 날짜·대회·팀·관심 팀·초기화·뒤로가기·빈/실패/일부 실패(DB 값 일시 변경 후 복구)·대회 선택창 스크롤, 자정 전환·임박 폴링은 브라우저 시계 조작으로 확인. **미검증:** 실제 진행 경기 실시간 갱신, 실제 자정 경과.
+- **검사:** 백엔드 ruff·pytest 185 통과(DB 포함)·alembic check, 프런트 lint·tsc·build·`git diff --check` 통과. 외부 호출 누적 API-Football 57회, 네이버 40회, 언론사 원문 확인 약 13회(교차 검증 보완 단계는 0회).
+
+## 2026-11-02 (월) — TOP 5 재시도·공개 UI 정책 개정
+
+- 00:00 첫 시도·실패 시 00:05 자동 재시도 1회, 재실패 후 지연 안내·운영 알림·수동 복구로 확정했다. 새 결과 공개 전 지난주 결과를 실제 기간으로 유지한다. 사용자 UI는 목록·경기 일정 없음·지연 안내의 3종이다.
+- PRD·기능 명세·유저 플로우·와이어프레임·개발 가이드를 최신화했다. [정책](../../docs/TOP5_POLICY_2026-11-01.md)을 우선한다. 아래 기존 7가지 상태·현재 주 pending 고정 반환은 실제 코드 이력이며 신규 정책 구현 완료를 뜻하지 않는다.
+- 실제 앱·Figma·주간 작업·재시도·운영 알림은 이번 범위에서 실행/수정하지 않았다. 04 및 관련 UI의 후속 구현·통합 검증 대상이다.
+
+## 2026-11-02 (월) — 일정 탐색 정책·와이어프레임 개정
+
+- 사용자 승인에 따라 대회 직접 단일 선택·보조 다중 선택, 메인 팀 검색/관심 팀 선택 시 오늘 포함 14일 모아 보기로 확정했다. 검색 해제는 이전 날짜·막대 위치와 현재 대회 복귀, 전체 초기화는 오늘·전체·팀 없음이다.
+- PRD·기능 명세·유저 플로우(그림 4 포함)·와이어프레임·개발 가이드를 반영했다. [확정 정책](../../docs/SCHEDULE_UX_POLICY_2026-11-02.md)과 [검수](../../wireframe/SCHEDULE_UX_REVIEW_2026-11-02.md)를 우선한다.
+- 이 단계는 문서·와이어프레임 작업이었고, 실제 앱 반영은 위 03 항목에서 완료했다.
+
 ## 2026-11-02 (월) — 01 재검수
 
 브랜치 `feat/01-header-footer`에 커밋·push 후 `dev` 병합. Codex 교차 검증 2회(1차 보완 필요 → 재검증 통과).

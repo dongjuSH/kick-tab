@@ -30,6 +30,8 @@ function RemoteImage({ src, name, size = 20, className, rounded }: RemoteImagePr
       // External crests/photos are served as-is; no optimisation proxy.
       unoptimized
       onError={() => setFailedSrc(src ?? null)}
+      // Fixed box: the global img reset (height: auto) would otherwise warn and reflow.
+      style={{ width: size, height: size }}
       className={cx("shrink-0 object-contain", rounded && "rounded-full object-cover", className)}
     />
   );

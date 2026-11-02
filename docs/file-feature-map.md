@@ -1,6 +1,8 @@
 # KickTab 파일별 구현 기능
 
-기준: 2026-11-02 (월, 01 재검수 완료 — AI 주간 TOP 5 화면·응답 계약 반영, 미사용 코드 삭제), 브랜치 `feat/01-header-footer` → `dev` 병합. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+> TOP 5 후속 정책(2026-11-02)은 [00:00/00:05·지난주 유지·UI 3종](../../docs/TOP5_POLICY_2026-11-01.md)을 따른다. 아래 앱 파일은 기존 5개 응답 상태·7가지 UI 상태의 구현 현황이다. 공개 결과/대상 주 분리·버전 교체·2회 실패 후 지연 안내·운영 알림·수동 복구와 Figma 반영은 후속 작업이다.
+
+기준: 2026-11-02 (월, 03 경기 일정(메인) 완료 — Codex 교차 검증 통과, [일정 UX 정책](../../docs/SCHEDULE_UX_POLICY_2026-11-02.md) 반영), 브랜치 `feat/03-schedule`. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -20,7 +22,8 @@
 | `pyproject.toml` | 의존성(FastAPI, SQLAlchemy 2.1.6, Alembic 1.20.1, APScheduler 3.11.3 등)과 ruff·pytest 설정 | `uv.lock` | 완료 |
 | `.python-version`, `.gitignore` | Python 3.12 지정, 백엔드 전용 제외 목록 | — | 완료 |
 | `certs/supabase-ca.crt` | Supabase TLS(`verify-full`) CA 인증서 | `app/database.py`, `app/db/session.py` | 완료 |
-| `app/config.py` | `Settings`: `.env` 로딩, CORS·신뢰 프록시·스케줄러·API-Football 한도·비밀 값(`SecretStr`)·디스코드 웹후크 | 전 모듈 | 완료 |
+| `app/config.py` | `Settings`: `.env` 로딩, CORS·신뢰 프록시·스케줄러·API-Football 한도·비밀 값(`SecretStr`)·디스코드 웹후크, 03: `current_season`(2026)·네이버 키/주소·`news_retention_hours`(72)·`image_rights_enforced` | 전 모듈 | 완료 |
+| `app/core/kst.py` | `kst_today()`·`kst_date()`(KST 고정 오프셋) | 일정·뉴스·TOP 5 | 완료 |
 | `app/main.py` | FastAPI 앱, 예외 처리(먼저)·CORS·`/api/v1` 라우터 등록, `/health`, 스케줄러 수명 주기 | `app/api/*`, `app/sync/scheduler.py` | 완료 |
 | `app/database.py` | psycopg 직접 연결(검증 TLS), CA 경로 상수 | `check_database.py`, `db/session.py` | 완료(00) |
 | `app/check_database.py` | `python -m app.check_database`: 읽기 전용 연결·TLS 확인 | `database.py` | 완료(00) |
@@ -34,11 +37,19 @@
 | `app/models/__init__.py` | 모든 모델 import(Alembic 인식용) | `migrations/env.py` | 완료 |
 | `app/models/feedback.py` | `Feedback`: user_id(외래 키 없음)·type·body(1~1,000자)·page_path·body_hash·created_at, 제약·인덱스 | `services/feedback.py` | 완료(02가 user_id 외래 키 추가) |
 | `app/models/sync_run.py` | `SyncRun`: 수집 실행 기록(job·params·상태·API 요청 수·오류 요약) | `sync/runner.py` | 완료 |
+| `app/models/reference.py` | `Competition`·`CompetitionSeason`(availability·fixtures_synced/failed_at)·`Team`·`TeamCompetitionSeason`·`TeamAlias`(for_search·for_news·ambiguous) | 03 서비스·수집 | 완료 |
+| `app/models/fixture.py` | `Fixture`: 대회·시즌·킥오프(UTC)·KST 날짜·변환 상태·종료 유형·원본 상태·경과 분·스코어 jsonb·경기장 | `services/fixtures.py` | 완료(04가 이벤트·상세 테이블 추가) |
+| `app/models/news.py` | `NewsArticle`(url_hash unique·출처 도메인·뱃지·만료 시각), `NewsArticleTeam` | `services/news.py`, `sync/news.py` | 완료 |
 | `alembic.ini` | Alembic 설정(접속 주소는 `env.py`가 `.env`에서 읽음) | `migrations/` | 완료 |
 | `migrations/env.py` | `DATABASE_URL`·TLS로 온라인 마이그레이션, 오프라인 SQL 출력 | `app.db.*`, `app.models` | 완료 |
 | `migrations/script.py.mako` | 새 리비전 템플릿(RLS 활성화 안내 포함) | — | 완료 |
 | `migrations/versions/20261031_0001_sync_runs_feedback.py` | `sync_runs`·`feedback` 생성, RLS 활성화 | — | 개발 DB 적용 |
 | `migrations/versions/20261031_0002_feedback_body_hash.py` | `feedback.body_hash` 컬럼·길이 제약·인덱스 | — | 개발 DB 적용 |
+| `migrations/versions/20261102_0003_reference_data.py` | 대회·시즌·팀·참가·별칭 테이블, RLS 활성화 | — | 개발 DB 적용 |
+| `migrations/versions/20261102_0004_fixtures.py` | `fixtures`, KST 날짜·팀·상태 인덱스, RLS | — | 개발 DB 적용 |
+| `migrations/versions/20261102_0005_news.py` | `news_articles`·`news_article_teams`, RLS | — | 개발 DB 적용 |
+| `app/seed/competitions.py` | 14개 대회 한국어 이름·그룹·정렬, `LEAGUE_IDS`·`UEFA_IDS`, `season_label` | `services/reference.py`, `sync/*` | 완료 |
+| `app/seed/team_aliases.json` | 5대 리그 96팀 한국어 이름·별칭(P-11), `searchOnly`·모호 별칭 묶음 | `apply_alias_seed` | 완료(검수된 별칭 추가 시 갱신) |
 
 ### API
 
@@ -50,29 +61,42 @@
 | `app/core/rate_limit.py` | `RateLimiter`(슬라이딩 윈도, `check`·`record`·`hit` 각각 단일 잠금 — `hit`은 검사·기록 원자적, 최근 사용 순 정리·최대 10,000키), `client_ip`(신뢰 프록시 뒤에서만 `X-Forwarded-For`), `Retry-After` 값 | `api/deps.py` | 완료 |
 | `app/api/routes/feedback.py` | `POST /api/v1/feedback`: 요청 제한(라우트 클래스, 확정값), 허니팟 거부, 중복 409, 저장 후 디스코드 알림 예약 | `services/feedback.py`, `notifications/discord.py` | 완료 |
 | `app/api/routes/top_matches.py` | `GET /api/v1/top-matches/current` | `services/top_matches.py` | 완료(계약) |
+| `app/api/routes/schedule.py` | `GET /competitions`, `/fixtures?date=`, `/fixtures/next?teams=`(양의 정수 1~5개), `/fixtures/team?team=`(오늘~+13일), `/teams/search?q=`, `/news`, `/news/{id}/link`(요청 제한). 미수집 503·일부 실패 `failedCompetitionIds` | `services/fixtures.py`·`news.py`·`news_link.py`·`team_search.py` | 완료 |
 
 ### 스키마·서비스·연동
 
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `app/schemas/common.py` | `ApiModel`(camelCase), `DataResponse[T]`, `ErrorBody`·`ErrorResponse` | 전 스키마 | 완료 |
-| `app/schemas/match.py` | `TeamRef`, `CompetitionRef`, `MatchScore`, `MatchSummary` | `top_matches.py`, 03·04 | 골격(03이 실제 데이터로 채움) |
+| `app/schemas/match.py` | `TeamRef`(`detailAvailable`), `CompetitionRef`, `MatchScore`, `MatchSummary` | `top_matches.py`, 03·04 | 완료(03이 실제 데이터로 채움) |
+| `app/schemas/schedule.py` | `CompetitionItem`, `ScheduleMeta`, `FavoriteSchedule`, `TeamSchedule`, `NewsItem`·`NewsMeta`·`NewsLink`와 각 응답 | `routes/schedule.py` | 완료 |
 | `app/schemas/top_matches.py` | `TopMatches`(`week`·`state`·`selectedAt`·`items`), `TopMatchItem`(순위·선정 이유·경기), `TopMatchesWeek`, `TopMatchesState` | `services/top_matches.py` | 완료(계약, 2026-11-02 AI 주간 정책) |
 | `app/schemas/feedback.py` | `FeedbackCreate`(본문·유형 필수, 페이지 경로, 허니팟 `website`), `FeedbackReceipt` | `routes/feedback.py` | 완료 |
 | `app/services/feedback.py` | `create_feedback`, `normalize_body`·`body_hash`, `lock_body_hash`(본문 해시별 트랜잭션 잠금), `is_duplicate`(24시간), `DuplicateFeedbackError` | `routes/feedback.py` | 완료 |
-| `app/services/top_matches.py` | `get_current_top_matches()` — 현재 주 `pending`·빈 목록, `current_kst_week()` — KST 월~일 주 키 | `routes/top_matches.py` | 골격(04가 선정 로직으로 교체) |
+| `app/services/top_matches.py` | `get_current_top_matches()` — 현재 주 `pending`·빈 목록, `current_kst_week()` — KST 월~일 주 키(`core/kst.py` 사용) | `routes/top_matches.py` | 골격(04가 선정 로직으로 교체) |
+| `app/services/match_status.py` | `map_status()`: 제공사 상태 → scheduled·live·finished·postponed·cancelled·abandoned·unknown, 종료 유형, 시각 확정 여부 | `services/fixtures.py` | 완료 |
+| `app/services/reference.py` | `normalize_name`, 대회·팀·참가 upsert, `apply_alias_seed`, `team_detail_lookup`(팀 상세 허용 집합), `team_ref`·`competition_ref`·`crest` | 전 03 서비스 | 완료 |
+| `app/services/fixtures.py` | `upsert_fixtures`, `live_targets`·`needs_live_sync`, `to_summary`(예정·연기·취소 스코어 null), `sync_state`(실패 대회), `fixtures_on`, `team_schedule`·`team_schedule_window`(14일), `next_for_teams` | 라우트·수집 | 완료 |
+| `app/services/team_search.py` | `search_teams()`: 별칭·이름 검색, 여러 팀 후보, 최대 10개(현재 시즌) | `routes/schedule.py` | 완료(05가 시즌 범위 추가) |
+| `app/services/news_classify.py` | 규칙 기반 분류(P-08): `AliasIndex`, `subject_competitions`(주제 기준), `classify`(다른 종목·여자 축구·근거 없음 제외), `plain_text` | `sync/news.py` | 완료 |
+| `app/services/news.py` | 커서 페이지 분할 `list_news`, `collection_state`(최근 수집 실패·오래됨) | `routes/schedule.py` | 완료(08이 팀 조건 추가) |
+| `app/services/news_link.py` | `check_link()`: 원문 HEAD→GET 헤더 1회, 404·410만 gone, 공개 주소만 | `routes/schedule.py` | 완료 |
+| `app/providers/naver_news.py` | `NaverNewsClient.search()`(키 없으면 요청 없음, 인증·한도 오류 시 중단, 요청 수 집계) | `sync/news.py` | 완료 |
 | `app/notifications/discord.py` | `notify_feedback`(웹후크 전송, 실패 무시), `build_payload`(멘션 차단), `FeedbackNotice`, httpx 로그의 웹후크 주소 가림 | `routes/feedback.py`, `config.py` | 완료 |
-| `app/providers/api_football.py` | `ApiFootballClient.get`(401·403·429는 본문 형식과 무관하게 이후 호출 중단), `MinuteRateLimiter`, `DailyBudget`, 공용 보호 장치, 오류 클래스 | `sync/registry.py` | 골격(03이 엔드포인트별 함수 추가) |
+| `app/providers/api_football.py` | `ApiFootballClient.get`(401·403·429는 본문 형식과 무관하게 이후 호출 중단), `MinuteRateLimiter`, `DailyBudget`, 공용 보호 장치, 오류 클래스 | `sync/registry.py` | 완료(03 수집 작업이 `get()`으로 사용) |
 
 ### 수집 실행기
 
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
-| `app/sync/registry.py` | `@register_job`, `JobSpec`, `JobContext`(세션·파라미터·`api_football()` 요청 수 집계) | 작업 모듈, `runner.py` | 완료 |
-| `app/sync/runner.py` | `run_job`: advisory lock → `sync_runs` 기록 → 작업 실행 → 상태 저장 | `registry.py`, `db/session.py` | 완료 |
+| `app/sync/registry.py` | `@register_job`(03: `precheck` — False면 호출·기록 없이 건너뜀), `JobSpec`, `JobContext`(세션·파라미터·`api_football()` 요청 수 집계), `JobPartialFailure`(일부 단위 실패) | 작업 모듈, `runner.py` | 완료 |
+| `app/sync/runner.py` | `run_job`: 사전 확인 → advisory lock → `sync_runs` 기록 → 작업 실행 → 상태 저장(일부 실패 요약 포함) | `registry.py`, `db/session.py` | 완료 |
+| `app/sync/reference.py` | `reference`(매일 04:00, `/leagues` 14회 + `/teams` 8회, 별칭 시드 적용), `team_aliases`(0회) | `services/reference.py` | 완료 |
+| `app/sync/fixtures.py` | `fixtures`(30분, 대회별 오늘−1~+15일 14회, 실패 대회는 기존 행 유지), `fixtures_live`(1분, 진행·임박 경기 없으면 사전 확인에서 건너뜀) | `services/fixtures.py` | 완료 |
+| `app/sync/news.py` | `news`(30분, 네이버 8개 검색어), `normalize_url`·`url_hash`(중복 제거), 72시간 보관 | `services/news_classify.py`, `providers/naver_news.py` | 완료 |
 | `app/sync/scheduler.py` | `SCHEDULER_ENABLED`일 때만 APScheduler 시작, 중복·누락 실행 방지 | `main.py` | 완료 |
 | `app/sync/__main__.py` | CLI `python -m app.sync <job> [key=value] / --list` | `runner.py` | 완료 |
-| `app/sync/jobs.py` | 작업 모듈 import 지점(현재 등록 작업 없음) | `__main__.py`, `scheduler.py` | 골격(03 이후 추가) |
+| `app/sync/jobs.py` | 작업 모듈 import 지점(03: `fixtures`·`news`·`reference`) | `__main__.py`, `scheduler.py` | 완료(기능 채팅이 모듈 추가) |
 
 ### 테스트
 
@@ -87,6 +111,9 @@
 | `tests/test_sync_runner.py` | 성공·실패·건너뜀 기록, 잠금 키, CLI, 스케줄러 |
 | `tests/test_feedback_notifications.py` | 디스코드 페이로드·주소 검사·실패 처리·토큰 비노출, 라우트 알림 예약, 전역 상한·전역 거부 시 버킷 미생성 |
 | `tests/test_db.py` | 접속 주소·TLS, 모델 구조, `KICKTAB_DB_TESTS=1`일 때 개발 DB 제약·중복·RLS·동시 제출 잠금 확인(롤백) |
+| `tests/test_schedule_rules.py` | 상태 변환 표, 스코어 null 규칙, 이름 정규화, 뉴스 분류(주제·제외·여자 축구·Liga F 오탐), URL 중복 제거, 커서 |
+| `tests/test_schedule_sources.py` | 네이버 클라이언트(모의 전송·중단 조건·키 없음), 사전 확인 건너뜀, 원문 확인(리다이렉트·내부 주소 거부), 일정·뉴스 API 입력 검증(날짜·팀 ID·분류 422), OpenAPI 메타 타입 |
+| `tests/test_schedule_db.py` | `KICKTAB_DB_TESTS=1`일 때 KST 날짜·상태·연기, 관심 팀 일정(진행 우선·맞대결 1회), 별칭 검색, 실패 대회 기존 행 유지, 팀 14일 범위(롤백) |
 
 ## 프런트엔드 (`frontend/`)
 
@@ -104,9 +131,10 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `layout.tsx` | `lang="ko"`, 글꼴, 메타데이터, Provider·의견 Provider·헤더·`main`·푸터·모바일 하단 고정 영역 배치 | 아래 컴포넌트 전부 | 완료 |
-| `globals.css` | Figma 색상 토큰(`--kt-*`)·Tailwind 테마(색·글자·반경), 포커스 3px, `kt-container` | 전 컴포넌트 | 완료 |
+| `globals.css` | Figma 색상 토큰(`--kt-*`)·Tailwind 테마(색·글자·반경, 03: `rounded-tile`), 포커스 3px, `kt-container`, 버튼류 포인터 커서(03) | 전 컴포넌트 | 완료 |
 | `providers.tsx` | TanStack Query 클라이언트(4xx 재시도 안 함) | `layout.tsx` | 완료 |
-| `page.tsx` | 메인 자리 표시(제목·안내) | — | 골격(03이 일정 화면으로 교체) |
+| `page.tsx` | 메인: 일정(Suspense)·관심 팀 일정·뉴스 그리드(간소 순위 자리는 06) | `features/schedule`·`favorites`·`news` | 완료 |
+| `news/original/page.tsx` | `/news/original?id=` 원문 이동 전환 화면(NEWS-004) | `OriginalRedirect` | 완료 |
 | `not-found.tsx` | 없는 경로 안내(준비 전 메뉴 경로 포함) | — | 완료 |
 | `icon.svg` | 파비콘(로고 심벌 기반) | — | 완료 |
 
@@ -116,10 +144,11 @@
 | --- | --- | --- |
 | `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, primary·secondary·ghost | 완료 |
 | `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning, 12px) | 완료 |
-| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
+| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
+| `chip.ts` | `chipClass()` 필터 칩(관심 팀·뉴스 분류, Figma 49:171/49:173) | 완료 |
 | `Skeleton.tsx` | 로딩 자리 | 완료 |
-| `DataState.tsx` | `DataState`(로딩·정상·빈 결과·일부 미제공·실패+재시도·권한 거부), `StateMessage` | 완료 |
-| `Icon.tsx` | `public/icons/` SVG 아이콘 | 완료 |
+| `DataState.tsx` | `DataState`(로딩·정상·빈 결과·일부 미제공·실패+'다시 확인'·권한 거부), `StateMessage`(오류는 정보 아이콘, Figma 57:150) | 완료 |
+| `Icon.tsx` | `public/icons/` SVG 아이콘(03: chevron-left·right, info 추가) | 완료 |
 | `cx.ts` | 클래스 결합 | 완료 |
 
 ### 공통·레이아웃 컴포넌트
@@ -127,7 +156,12 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `components/common/Logo.tsx` | 로고 심벌 + 워드마크(헤더 36·모바일 32·푸터 24px) | 헤더·푸터 | 완료 |
-| `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지 | 03 이후(새 TOP 5 행은 엠블럼 없음) | 완료 |
+| `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지, 고정 크기 | 경기 카드·팀 검색 | 완료 |
+| `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크 | 일정·관심 팀(04·05·08 재사용) | 완료 |
+| `components/common/MatchStatusBadge.tsx` | 상태 뱃지(진행 중 `63′`·예정/종료 회색·변경 주황) | `MatchCard`, TOP 5 | 완료 |
+| `components/common/CompetitionFilter.tsx` | 대회 단일 버튼 + 선택창(직접 선택 즉시 적용·'전체 대회 보기'·여러 대회 초안·0개 적용 불가), 데스크톱 560px·모바일 시트 | 메인(05 재사용) | 완료 |
+| `components/common/TeamSearch.tsx` | 팀 검색 combobox(별칭·여러 후보·일치 없음), ×·전체 삭제 시 선택 해제 | 메인(05·07 재사용) | 완료 |
+| `components/common/NewsCard.tsx` | 뉴스 카드(분류·제목·설명·도메인·상대 시각·원문 보기), `NEWS_BADGE_LABELS` | `MainNews`(08 재사용) | 완료(02가 북마크 버튼 추가) |
 | `components/layout/SiteHeader.tsx` | 고정 헤더(본문 건너뛰기 링크, 로고, 메뉴, 인증 영역, 모바일 메뉴) + TOP 5 띠 | `layout.tsx` | 완료 |
 | `components/layout/MainNav.tsx` | 데스크톱 메뉴 4개, 현재 페이지 밑줄 | `nav.ts` | 완료 |
 | `components/layout/MobileMenu.tsx` | 모바일 메뉴 버튼·하단 시트, 현재 페이지 강조 | `nav.ts`, `HeaderAuth.tsx` | 완료 |
@@ -142,8 +176,18 @@
 | --- | --- | --- | --- |
 | `top5/queries.ts` | `currentTopMatchesQuery`(5분 신선도, 화면이 보일 때 30분 주기, 창 포커스 재조회) | `apiFetch`, `query-keys.ts` | 완료 |
 | `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(데스크톱 60px·모바일 84px, 주간·상태 요약), 펼칠 때 오래된 결과 재조회, 데스크톱 패널(헤더 아래 1280px·배경 딤·배경 inert·첫 포커스 닫기·Tab 순환·Escape/바깥/화살표 닫기·포커스 복귀), 모바일 시트, 로딩·조회 실패 | `Top5List`, `model.ts`, `Dialog` | 완료 |
-| `top5/Top5List.tsx` | 펼침 본문(주간·선정 시각, 고정 순서·대회·현재 상태·킥오프·대진·VS/스코어/—·선정 이유·변경 일시, 상태 안내 상자, 후보 부족 안내, 선정 정책 안내, 목록만 스크롤) | `model.ts`, `kst.ts` | 완료 |
-| `top5/model.ts` | 7가지 상태(five·few·none·loading·source-error·ai-error·changed) 판정과 문구, 띠 요약, 상태 표기·스코어·변경 일시 규칙 | `kst.ts` | 완료 |
+| `top5/Top5List.tsx` | 펼침 본문(주간·선정 시각, 고정 순서·대회·현재 상태(`MatchStatusBadge`)·킥오프·대진·VS/스코어/—·선정 이유·변경 일시, 상태 안내 상자, 후보 부족 안내, 선정 정책 안내, 목록만 스크롤) | `model.ts`, `kst.ts` | 완료 |
+| `top5/model.ts` | 7가지 상태(five·few·none·loading·source-error·ai-error·changed) 판정과 문구, 띠 요약, 스코어·변경 일시 규칙(상태 표기는 `lib/format/match.ts` 공용) | `kst.ts`, `match.ts` | 완료 |
+| `schedule/ScheduleSection.tsx` | 메인 일정: 날짜 보기(5개씩 더 보기)·팀 14일 날짜별 보기, 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 | 아래 파일, `MatchCard` | 완료 |
+| `schedule/useScheduleParams.ts` | URL 조건(`date`·`competitions`·`team`), push/replace 규칙, `useKstToday()`(KST 자정 전환) | `ScheduleSection` | 완료 |
+| `schedule/queries.ts` | `competitionsQuery`, `fixturesByDateQuery`, `favoriteScheduleQuery`, `teamScheduleQuery`, `liveRefetchInterval`(진행 60초·임박 진입 시 시작·숨김 탭 정지) | `apiFetch` | 완료 |
+| `schedule/DateBar.tsx` | 14일 날짜 막대(데스크톱 화살표·모바일 터치 스크롤) | `ScheduleSection` | 완료 |
+| `schedule/ScheduleNotice.tsx` | 일정 안내 상자(neutral·warning·error, Figma 225:2374), `failedNames()` | 일정·관심 팀 | 완료 |
+| `favorites/store.ts`·`useFavorites.ts` | 비회원 관심 팀 localStorage(`kt-fav-guest`, 최대 5개, 저장 불가 처리, 다른 탭 반영) | 관심 팀 UI | 완료(02가 회원 DB 동기화) |
+| `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시) | 07·08이 사용 | 완료(사전 제작) |
+| `favorites/FavoriteSchedule.tsx` | 관심 팀 일정 패널(팀별 진행 중·가장 가까운 예정 1경기, 일부 실패·재조회 실패 안내, 빈 상태 `/teams` 이동) | `favoriteScheduleQuery` | 완료 |
+| `news/MainNews.tsx` | 주요 뉴스(분류 칩, 6개씩 더 보기, 추가 조회·재조회 실패 시 기존 기사 유지, 출처 안내) | `NewsCard` | 완료 |
+| `news/OriginalRedirect.tsx` | 원문 확인 후 이동, 404·410만 접근 불가 안내 | `/news/{id}/link` | 완료 |
 | `feedback/FeedbackProvider.tsx` | 전역 의견 모달 1개, `useFeedback().openFeedback()` | `layout.tsx` | 완료 |
 | `feedback/FeedbackButton.tsx` | 의견 보내기 진입 버튼 | 푸터·하단 고정 영역 | 완료 |
 | `feedback/FeedbackDialog.tsx` | 의견 입력·검증·전송·실패/중복/요청 제한/성공 상태, 허니팟, 열기 단위 세션(지난 요청 결과가 새 초안을 바꾸지 않음), 전송 중 입력 잠금, 저장소 불가 안내 | `apiFetch`, `draft.ts` | 완료 |
@@ -155,9 +199,10 @@
 | --- | --- | --- |
 | `api/client.ts` | `apiFetch`(브라우저 같은 출처·서버는 `BACKEND_ORIGIN`, 변경 요청 CSRF 헤더, 401 갱신 연결 `setUnauthorizedHandler`) | 완료(02가 갱신 로직 등록) |
 | `api/errors.ts` | `ApiError`(code·message·fieldErrors·retryAfter), 응답·네트워크 오류 변환 | 완료 |
-| `api/types.ts` | 생성 타입의 이름 별칭(`MatchSummary`, `TopMatches`, `FeedbackCreate` 등) | 완료 |
-| `api/query-keys.ts` | query key 규칙과 `topMatches`·`me` 키 | 완료(기능 채팅이 키 추가) |
-| `format/kst.ts` | KST 시각·날짜·주간(`10/26(월)–11/1(일)`)·`10/29(목) 03:30`·`2026-10-26 00:00` 포맷, 누락값 `—` | 완료 |
+| `api/types.ts` | 생성 타입의 이름 별칭(`MatchSummary`, `TopMatches`, `FeedbackCreate`, 03: `CompetitionItem`·`ScheduleMeta`·`FavoriteSchedule`·`TeamSchedule`·`NewsItem` 등) | 완료 |
+| `api/query-keys.ts` | query key 규칙과 `topMatches`·`competitions`·`fixtures`(date·team(오늘 포함)·next)·`teams.search`·`news`·`me` 키 | 완료(기능 채팅이 키 추가) |
+| `format/kst.ts` | KST 시각·날짜·주간(`10/26(월)–11/1(일)`)·`10/29(목) 03:30`·`2026-10-26 00:00` 포맷, 누락값 `—`, 03: `kstTodayIso`·`addDaysIso`·`formatRelativeKst` | 완료 |
+| `format/match.ts` | 경기 표기 공용 규칙: `teamName`·`competitionName`·`scoreText`·`penaltyText`·`kickoffTime`·`isChanged`·`statusWord` | 완료 |
 | `hooks/useMediaQuery.ts` | 미디어 쿼리 구독, `DESKTOP_QUERY`(1024px) | 완료 |
 | `site.ts` | 푸터 운영자 정보 설정값(`SITE_OPERATOR_*`) | 완료 |
 
@@ -167,4 +212,4 @@
 | --- | --- |
 | `brand/symbol.svg` | 로고 심벌(Figma 55:22) |
 | `placeholder.svg` | 공통 대체 이미지(Figma 55:26) |
-| `icons/chevron-down.svg`, `menu.svg`, `x.svg`, `search.svg` | Figma 아이콘 |
+| `icons/chevron-down.svg`, `chevron-left.svg`, `chevron-right.svg`, `menu.svg`, `x.svg`, `search.svg`, `info.svg` | Figma 아이콘 |
