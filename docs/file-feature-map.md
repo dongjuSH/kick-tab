@@ -1,6 +1,6 @@
 # KickTab 파일별 구현 기능
 
-기준: 2026-11-01 (일, 01 완료 — 교차 검증 보완·미사용 `Tooltip` 삭제 반영), 브랜치 `feat/01-header-footer`. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+기준: 2026-11-02 (월, 01 재검수 완료 — AI 주간 TOP 5 화면·응답 계약 반영, 미사용 코드 삭제), 브랜치 `feat/01-header-footer` → `dev` 병합. 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -57,10 +57,10 @@
 | --- | --- | --- | --- |
 | `app/schemas/common.py` | `ApiModel`(camelCase), `DataResponse[T]`, `ErrorBody`·`ErrorResponse` | 전 스키마 | 완료 |
 | `app/schemas/match.py` | `TeamRef`, `CompetitionRef`, `MatchScore`, `MatchSummary` | `top_matches.py`, 03·04 | 골격(03이 실제 데이터로 채움) |
-| `app/schemas/top_matches.py` | `TopMatches`, `TopMatchItem`(순위·경기·평균 평점·평가 수), `TopMatchesPeriod` | `services/top_matches.py` | 완료(계약) |
+| `app/schemas/top_matches.py` | `TopMatches`(`week`·`state`·`selectedAt`·`items`), `TopMatchItem`(순위·선정 이유·경기), `TopMatchesWeek`, `TopMatchesState` | `services/top_matches.py` | 완료(계약, 2026-11-02 AI 주간 정책) |
 | `app/schemas/feedback.py` | `FeedbackCreate`(본문·유형 필수, 페이지 경로, 허니팟 `website`), `FeedbackReceipt` | `routes/feedback.py` | 완료 |
 | `app/services/feedback.py` | `create_feedback`, `normalize_body`·`body_hash`, `lock_body_hash`(본문 해시별 트랜잭션 잠금), `is_duplicate`(24시간), `DuplicateFeedbackError` | `routes/feedback.py` | 완료 |
-| `app/services/top_matches.py` | `get_current_top_matches()` — 현재 항상 빈 결과 | `routes/top_matches.py` | 골격(04가 선정 로직으로 교체) |
+| `app/services/top_matches.py` | `get_current_top_matches()` — 현재 주 `pending`·빈 목록, `current_kst_week()` — KST 월~일 주 키 | `routes/top_matches.py` | 골격(04가 선정 로직으로 교체) |
 | `app/notifications/discord.py` | `notify_feedback`(웹후크 전송, 실패 무시), `build_payload`(멘션 차단), `FeedbackNotice`, httpx 로그의 웹후크 주소 가림 | `routes/feedback.py`, `config.py` | 완료 |
 | `app/providers/api_football.py` | `ApiFootballClient.get`(401·403·429는 본문 형식과 무관하게 이후 호출 중단), `MinuteRateLimiter`, `DailyBudget`, 공용 보호 장치, 오류 클래스 | `sync/registry.py` | 골격(03이 엔드포인트별 함수 추가) |
 
@@ -80,7 +80,7 @@
 | --- | --- |
 | `tests/conftest.py` | 실제 HTTP 호출 차단, 로컬 웹후크 설정 무시 |
 | `tests/test_setup.py` | `/health`·CORS, 설정 로딩·비밀 값 마스킹, DB 연결 TLS, 연결 확인 명령(00 작성, 01에서 비밀 값 목록 보강) |
-| `tests/test_api_foundation.py` | 응답·오류 형식, CSRF·Origin, 요청 제한(잘못된 JSON 포함), 의견 검증·허니팟·중복·잠금 순서·익명 저장, OpenAPI camelCase |
+| `tests/test_api_foundation.py` | 응답·오류 형식, CSRF·Origin, 요청 제한(잘못된 JSON 포함), 의견 검증·허니팟·중복·잠금 순서·익명 저장, TOP 5 응답 계약·KST 주 경계, OpenAPI camelCase |
 | `tests/test_server_logging.py` | 실제 Uvicorn 서버로 미처리 예외 메시지가 로그·응답에 남지 않는지 확인 |
 | `tests/test_rate_limit.py` | 분·일 윈도, 거부 요청 비집계, 미등록 키 상태 미생성, 키 수 상한, 같은 키 동시 `hit()`·`RateLimit` 동시 호출, 신뢰 프록시·`X-Forwarded-For` 처리 |
 | `tests/test_api_football.py` | 성공·쿼터 기록, `errors` 실패, 재시도 상한, 중단 조건(JSON·비JSON 401·403·429), 일일 예산, 분당 대기, 키 비노출(모의 전송) |
@@ -115,11 +115,8 @@
 | 파일 | 역할 | 상태 |
 | --- | --- | --- |
 | `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, primary·secondary·ghost | 완료 |
-| `Badge.tsx` | 상태 뱃지(info·live·neutral·warning·error) | 완료 |
-| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
-| `Tabs.tsx` | 키보드 지원 탭·`TabPanel` | 완료(04·08에서 사용 예정) |
-| `Dropdown.tsx` | 단일 선택 목록(시즌·리그) | 완료(05·06에서 사용 예정) |
-| `Pagination.tsx` | URL 기반 페이지 이동 | 완료(05·07에서 사용 예정) |
+| `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning, 12px) | 완료 |
+| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
 | `Skeleton.tsx` | 로딩 자리 | 완료 |
 | `DataState.tsx` | `DataState`(로딩·정상·빈 결과·일부 미제공·실패+재시도·권한 거부), `StateMessage` | 완료 |
 | `Icon.tsx` | `public/icons/` SVG 아이콘 | 완료 |
@@ -130,7 +127,7 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `components/common/Logo.tsx` | 로고 심벌 + 워드마크(헤더 36·모바일 32·푸터 24px) | 헤더·푸터 | 완료 |
-| `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지 | TOP 5, 03 이후 | 완료 |
+| `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지 | 03 이후(새 TOP 5 행은 엠블럼 없음) | 완료 |
 | `components/layout/SiteHeader.tsx` | 고정 헤더(본문 건너뛰기 링크, 로고, 메뉴, 인증 영역, 모바일 메뉴) + TOP 5 띠 | `layout.tsx` | 완료 |
 | `components/layout/MainNav.tsx` | 데스크톱 메뉴 4개, 현재 페이지 밑줄 | `nav.ts` | 완료 |
 | `components/layout/MobileMenu.tsx` | 모바일 메뉴 버튼·하단 시트, 현재 페이지 강조 | `nav.ts`, `HeaderAuth.tsx` | 완료 |
@@ -144,8 +141,9 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `top5/queries.ts` | `currentTopMatchesQuery`(5분 신선도, 화면이 보일 때 30분 주기, 창 포커스 재조회) | `apiFetch`, `query-keys.ts` | 완료 |
-| `top5/Top5Strip.tsx` | TOP 5 띠(클릭 영역 45px), 펼칠 때 오래된 결과 재조회, 데스크톱 패널(배경 딤·Escape·포커스), 모바일 시트, 로딩·실패·빈 상태 | `Top5List`, `Dialog` | 완료 |
-| `top5/Top5List.tsx` | 펼침 목록 본문(순위·대회·킥오프·대진·스코어·PK·평균 평점·평가 수, 빈 상태, 안내 문구) | `TeamCrest`, `kst.ts` | 완료 |
+| `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(데스크톱 60px·모바일 84px, 주간·상태 요약), 펼칠 때 오래된 결과 재조회, 데스크톱 패널(헤더 아래 1280px·배경 딤·배경 inert·첫 포커스 닫기·Tab 순환·Escape/바깥/화살표 닫기·포커스 복귀), 모바일 시트, 로딩·조회 실패 | `Top5List`, `model.ts`, `Dialog` | 완료 |
+| `top5/Top5List.tsx` | 펼침 본문(주간·선정 시각, 고정 순서·대회·현재 상태·킥오프·대진·VS/스코어/—·선정 이유·변경 일시, 상태 안내 상자, 후보 부족 안내, 선정 정책 안내, 목록만 스크롤) | `model.ts`, `kst.ts` | 완료 |
+| `top5/model.ts` | 7가지 상태(five·few·none·loading·source-error·ai-error·changed) 판정과 문구, 띠 요약, 상태 표기·스코어·변경 일시 규칙 | `kst.ts` | 완료 |
 | `feedback/FeedbackProvider.tsx` | 전역 의견 모달 1개, `useFeedback().openFeedback()` | `layout.tsx` | 완료 |
 | `feedback/FeedbackButton.tsx` | 의견 보내기 진입 버튼 | 푸터·하단 고정 영역 | 완료 |
 | `feedback/FeedbackDialog.tsx` | 의견 입력·검증·전송·실패/중복/요청 제한/성공 상태, 허니팟, 열기 단위 세션(지난 요청 결과가 새 초안을 바꾸지 않음), 전송 중 입력 잠금, 저장소 불가 안내 | `apiFetch`, `draft.ts` | 완료 |
@@ -159,7 +157,7 @@
 | `api/errors.ts` | `ApiError`(code·message·fieldErrors·retryAfter), 응답·네트워크 오류 변환 | 완료 |
 | `api/types.ts` | 생성 타입의 이름 별칭(`MatchSummary`, `TopMatches`, `FeedbackCreate` 등) | 완료 |
 | `api/query-keys.ts` | query key 규칙과 `topMatches`·`me` 키 | 완료(기능 채팅이 키 추가) |
-| `format/kst.ts` | KST 시각·날짜·기간(`10/26(월)~11/1(일)`)·`10/29 03:30` 포맷, 누락값 `—` | 완료 |
+| `format/kst.ts` | KST 시각·날짜·주간(`10/26(월)–11/1(일)`)·`10/29(목) 03:30`·`2026-10-26 00:00` 포맷, 누락값 `—` | 완료 |
 | `hooks/useMediaQuery.ts` | 미디어 쿼리 구독, `DESKTOP_QUERY`(1024px) | 완료 |
 | `site.ts` | 푸터 운영자 정보 설정값(`SITE_OPERATOR_*`) | 완료 |
 
@@ -169,4 +167,4 @@
 | --- | --- |
 | `brand/symbol.svg` | 로고 심벌(Figma 55:22) |
 | `placeholder.svg` | 공통 대체 이미지(Figma 55:26) |
-| `icons/chevron-down.svg`, `chevron-right.svg`, `menu.svg`, `x.svg`, `search.svg` | Figma 아이콘 |
+| `icons/chevron-down.svg`, `menu.svg`, `x.svg`, `search.svg` | Figma 아이콘 |

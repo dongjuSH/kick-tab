@@ -1,11 +1,10 @@
 import Image from "next/image";
 
 /** SVG icons exported from Figma into public/icons/. */
-export type IconName = "chevron-down" | "chevron-right" | "menu" | "x" | "search";
+export type IconName = "chevron-down" | "menu" | "x" | "search";
 
 const NATURAL_SIZE: Record<IconName, number> = {
   "chevron-down": 16,
-  "chevron-right": 16,
   menu: 18,
   x: 18,
   search: 24,

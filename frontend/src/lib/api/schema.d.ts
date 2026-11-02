@@ -188,20 +188,28 @@ export interface components {
         TopMatchItem: {
             /** Rank */
             rank: number;
+            /** Reason */
+            reason: string;
             match: components["schemas"]["MatchSummary"];
-            /** Averagerating */
-            averageRating: number | null;
-            /** Ratingcount */
-            ratingCount: number;
         };
         /** TopMatches */
         TopMatches: {
-            period: components["schemas"]["TopMatchesPeriod"] | null;
+            week: components["schemas"]["TopMatchesWeek"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "pending" | "no_candidates" | "source_error" | "ai_error";
+            /** Selectedat */
+            selectedAt: string | null;
             /** Items */
             items: components["schemas"]["TopMatchItem"][];
         };
-        /** TopMatchesPeriod */
-        TopMatchesPeriod: {
+        /**
+         * TopMatchesWeek
+         * @description KST Monday–Sunday the selection belongs to (the week key).
+         */
+        TopMatchesWeek: {
             /**
              * Start
              * Format: date

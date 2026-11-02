@@ -32,8 +32,8 @@
   --kt-brand-arrow: #2563eb;
   --kt-brand-rim: #cbd5e1;
 
-  /* Sticky header + TOP 5 strip height, used for scroll offsets. */
-  --kt-header-height: 113px;
+  /* Sticky header + TOP 5 strip height, used for scroll offsets (Figma 128:4408: 68+1+84+1). */
+  --kt-header-height: 154px;
   --kt-gutter: 16px;
 }
 
@@ -45,7 +45,8 @@
 
 @media (min-width: 1024px) {
   :root {
-    --kt-header-height: 129px;
+    /* Figma 128:3700: 84+1+60+1. */
+    --kt-header-height: 146px;
   }
 }
 

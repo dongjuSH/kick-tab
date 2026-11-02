@@ -24,12 +24,18 @@ interface DialogProps {
   /** Max width of the centred card in px (Figma: 520 for feedback). */
   width?: number;
   closeLabel?: string;
-  /** Compact sheet (Figma TOP 5 sheet 128:3574): drag handle, 16px padding, 18px title. */
+  /**
+   * Compact sheet (Figma TOP 5 sheet 159:924 mobile): drag handle, 16px padding, 16px
+   * title, and the sheet never grows past its max height: children decide what scrolls.
+   */
   compact?: boolean;
+  /** Where focus starts on open: the dialog itself (default) or its close button. */
+  initialFocus?: "dialog" | "close";
+  id?: string;
   className?: string;
 }
 
-const SHEET = "mt-auto mb-0 w-full max-w-none rounded-b-none max-h-[85dvh]";
+const SHEET = "mt-auto mb-0 w-full max-w-none rounded-b-none";
 const CENTER = "m-auto w-[calc(100%-32px)] max-h-[calc(100dvh-32px)]";
 const LAYOUTS: Record<DialogLayout, string> = {
   sheet: SHEET,
@@ -46,6 +52,8 @@ export function Dialog({
   width = 520,
   closeLabel = "닫기",
   compact = false,
+  initialFocus = "dialog",
+  id,
   className,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -63,13 +71,14 @@ export function Dialog({
     if (open && !dialog.open) {
       returnFocus.current = document.activeElement as HTMLElement | null;
       dialog.showModal();
-      // Start on the dialog itself so no control shows a focus ring until the user tabs.
-      dialog.focus();
+      // Default: start on the dialog itself so no control shows a focus ring until the user tabs.
+      const close = initialFocus === "close" ? dialog.querySelector<HTMLElement>("[data-dialog-close]") : null;
+      (close ?? dialog).focus();
       document.documentElement.style.overflow = "hidden";
     } else if (!open && dialog.open) {
       dialog.close();
     }
-  }, [open]);
+  }, [open, initialFocus]);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -97,13 +106,21 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
+      id={id}
       tabIndex={-1}
       aria-labelledby={titleId}
       style={{ "--kt-dialog-width": `${width}px` } as CSSProperties}
       className={cx(
-        "overflow-y-auto overscroll-contain rounded-card border border-line bg-surface p-0 text-fg outline-none",
+        "overscroll-contain rounded-card border border-line bg-surface p-0 text-fg outline-none",
+        // The compact sheet never scrolls as a whole: a flex <dialog> reports extra scroll
+        // height even when its content fits, so its body scrolls inside instead.
+        compact ? "overflow-clip" : "overflow-y-auto",
         "backdrop:bg-fg/12 lg:max-w-(--kt-dialog-width)",
         layout === "center" && "max-w-(--kt-dialog-width)",
+        // Sheet height: 85% of the screen; the compact sheet stops at the bottom of the sticky
+        // header + TOP 5 strip instead (Figma 128:4408).
+        layout !== "center" &&
+          (compact ? "open:flex open:flex-col max-h-[calc(100dvh-var(--kt-header-height))]" : "max-h-[85dvh]"),
         LAYOUTS[layout],
         className,
       )}
@@ -113,13 +130,13 @@ export function Dialog({
       }}
     >
       {open && (
-        <div className={cx("flex flex-col", compact ? "gap-3 p-4" : "gap-4 p-6")}>
-          {compact && <span aria-hidden className="mx-auto h-1 w-10 rounded-full bg-line-strong" />}
+        <div className={cx("flex flex-col", compact ? "min-h-0 gap-3 overflow-y-auto p-4" : "gap-4 p-6")}>
+          {compact && <span aria-hidden className="mx-auto h-1 w-8 shrink-0 rounded-full bg-line-strong" />}
           <div className="flex items-center gap-2">
-            <h2 id={titleId} className={cx("min-w-0 flex-1 font-bold", compact ? "text-subtitle" : "text-title")}>
+            <h2 id={titleId} className={cx("min-w-0 flex-1 font-bold", compact ? "text-lead" : "text-title")}>
               {title}
             </h2>
-            <IconButton icon="x" label={closeLabel} onClick={onClose} />
+            <IconButton icon="x" label={closeLabel} onClick={onClose} data-dialog-close />
           </div>
           {children}
         </div>
