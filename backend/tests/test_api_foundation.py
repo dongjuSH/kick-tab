@@ -10,6 +10,7 @@ from app.api.routes.feedback import feedback_rate_limit
 from app.db.session import get_db
 from app.main import app
 from app.models.feedback import Feedback
+from app.services.top_matches import current_kst_week
 
 WEB = {"X-KickTab-Client": "web"}
 HELLO = {"body": "hello", "type": "other"}
@@ -57,10 +58,33 @@ def client():
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_top_matches_contract_is_empty_until_policy_is_decided(client):
+def test_top_matches_is_pending_for_the_current_kst_week_until_selection_exists(client):
     response = client.get("/api/v1/top-matches/current")
     assert response.status_code == 200
-    assert response.json() == {"data": {"period": None, "items": []}, "meta": {"updatedAt": None}}
+    week = current_kst_week()
+    assert response.json() == {
+        "data": {
+            "week": {"start": week.start.isoformat(), "end": week.end.isoformat()},
+            "state": "pending",
+            "selectedAt": None,
+            "items": [],
+        },
+        "meta": {"updatedAt": None},
+    }
+
+
+@pytest.mark.parametrize(
+    ("now", "start", "end"),
+    [
+        # Sunday 23:59 KST still belongs to the week that started on Monday.
+        (datetime(2026, 11, 1, 14, 59, tzinfo=UTC), "2026-10-26", "2026-11-01"),
+        # Monday 00:00 KST (Sunday 15:00 UTC) starts the next week.
+        (datetime(2026, 11, 1, 15, 0, tzinfo=UTC), "2026-11-02", "2026-11-08"),
+    ],
+)
+def test_current_kst_week_switches_at_monday_midnight_kst(now, start, end):
+    week = current_kst_week(now)
+    assert (week.start.isoformat(), week.end.isoformat()) == (start, end)
 
 
 def test_feedback_is_stored_anonymously_with_trimmed_body(client, stored):
@@ -198,9 +222,8 @@ def test_openapi_uses_camel_case_and_documents_error_envelope(client):
         "id", "nameKo", "nameEn", "crestUrl", "detailAvailable",
     }
     assert "pagePath" in components["FeedbackCreate"]["properties"]
-    assert {"rank", "match", "averageRating", "ratingCount"} == set(
-        components["TopMatchItem"]["properties"]
-    )
+    assert {"rank", "reason", "match"} == set(components["TopMatchItem"]["properties"])
+    assert {"week", "state", "selectedAt", "items"} == set(components["TopMatches"]["properties"])
     feedback_responses = schema["paths"]["/api/v1/feedback"]["post"]["responses"]
     assert "ErrorResponse" in str(feedback_responses["4XX"])
 

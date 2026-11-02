@@ -1,5 +1,26 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-02 (월) — 01 재검수
+
+브랜치 `feat/01-header-footer`에 커밋·push 후 `dev` 병합. Codex 교차 검증 2회(1차 보완 필요 → 재검증 통과).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| TOP 5 응답 | `backend/app/schemas/top_matches.py`(`TopMatches`·`TopMatchItem`·`TopMatchesWeek`·`TopMatchesState`), `backend/app/services/top_matches.py`(`current_kst_week`, `get_current_top_matches`), `routes/top_matches.py`, `tests/test_api_foundation.py`, `frontend/src/lib/api/schema.d.ts`·`types.ts` | 2026-11-01 AI 주간 정책 계약(`week`·`state`·`selectedAt`·`items[rank·reason·match]`)으로 교체, 평균 평점·평가 수·`period` 제거. 04 전까지 현재 KST 주 `pending`·빈 목록 |
+| TOP 5 화면 | `frontend/src/features/top5/model.ts`(새 파일), `Top5Strip.tsx`, `Top5List.tsx`, `queries.ts`, `src/app/globals.css`(헤더 높이 146/154px) | Figma `159:923`·`159:924` 7가지 상태, 선정 이유·주간·선정 시각·현재 상태·변경 일시·VS/—·정책 안내, `168:348` 열기·닫기·포커스 규칙(첫 포커스 닫기, Tab 순환, 배경 inert, 포커스 복귀) |
+| 공통 UI | `Dialog.tsx`(compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·`initialFocus`·`id`), `Badge.tsx`(accent 톤, 12px), `Icon.tsx`, `lib/format/kst.ts`(요일 포함 일시·선정 시각·주간 표기) | 새 TOP 5 디자인 반영 |
+| 삭제 | `Tabs.tsx`·`Dropdown.tsx`·`Pagination.tsx`, `public/icons/chevron-right.svg`, Badge `info`·`error` 톤·크기 옵션, TOP 5 평점·엠블럼·PK 표시와 43px 띠 클릭 영역 확장 | 01 화면과 §3.1 사전 작업에서 쓰지 않음(§4 작업 원칙 5) |
+
+- **실제 실행 검수:** 1280·375·320에서 헤더 고정·메뉴 이동·모바일 메뉴·푸터·404, TOP 5 7가지 상태(임시 응답 교체로 확인 후 삭제)·열기/닫기·키보드, 의견 실제 제출 2건(DB `feedback` id 96·97 저장, 디스코드 전송 실패 경고 없음)·빈 본문·1,000자 초과·유형 없음·중복·요청 제한·서버 중단 시 입력 유지.
+- **Codex 1차 지적 보완:** 모바일 시트 이중 스크롤(`<dialog>`가 스크롤 높이를 더 크게 보고 → compact는 시트 전체 스크롤 차단), 데스크톱 패널 좌우 여백 바깥 클릭, Badge 미사용 크기 옵션, 파일 끝 빈 줄.
+- **후속 결정(guide §10.3):** D-01-10 TOP 5 변경 일시(선정 당시 킥오프 필드 추가 여부, 04), D-01-11 320px 띠 문구 말줄임.
+- **검사:** 백엔드 ruff·pytest 90 통과·2 건너뜀·alembic check, 프런트 lint·tsc·기본 Turbopack build·`git diff --check` 통과. 외부 호출 API-Football 0회, 디스코드 2회.
+
+## 2026-11-01 (일) — TOP 5 기획·와이어프레임 변경
+
+- 사용자 확정에 따라 월요일 00:00(KST) 1회 AI 선정·해당 주 예정 경기 후보·한 주 ID/순서/이유 고정으로 변경했다. 선정 이유·AI 안내·후보 없음/준비/수집 실패/AI 실패를 문서 3개와 와이어프레임에 반영했다.
+- 최신 [정책](../../docs/TOP5_POLICY_2026-11-01.md)을 개발 가이드 P-05·P-06·수집 주기·응답 계약 인계에 반영했다. 아래 10/31의 ‘항상 표시’·평점/평가 수 계약은 당시 구현 이력이다.
+
 ## 2026-10-31 (토) — 01 헤더·푸터 + 공통 기반
 
 브랜치 `feat/01-header-footer`(최신 `dev`에서 분기). 커밋 10개, 원격 기능 브랜치에 push. `dev` 병합과 Codex 교차 검증은 하지 않았다.

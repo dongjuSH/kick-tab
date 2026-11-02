@@ -12,7 +12,7 @@ export type FinishType = NonNullable<MatchSummary["finishType"]>;
 
 export type TopMatches = Schemas["TopMatches"];
 export type TopMatchItem = Schemas["TopMatchItem"];
-export type TopMatchesPeriod = Schemas["TopMatchesPeriod"];
+export type TopMatchesState = TopMatches["state"];
 
 export type FeedbackCreate = Schemas["FeedbackCreate"];
 export type FeedbackType = NonNullable<FeedbackCreate["type"]>;

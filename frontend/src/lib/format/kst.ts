@@ -1,6 +1,6 @@
 /**
  * Korea Standard Time formatting (guide §6.4/§6.6). The API sends UTC ISO strings; the
- * screen shows KST without a timezone label.
+ * screen shows KST. Callers add a "KST" label where the design shows one (TOP 5).
  */
 export const KST_TIME_ZONE = "Asia/Seoul";
 
@@ -57,10 +57,18 @@ export function formatKstTime(value: string | Date): string {
   return date ? timeFormatter.format(date) : MISSING;
 }
 
-/** "10/29 03:30" (KST month/day + time). */
+/** "10/29(목) 03:30" (KST month/day, weekday and time). */
 export function formatKstMonthDayTime(value: string | Date): string {
   const p = kstParts(value);
-  return p ? `${p.month}/${p.day} ${formatKstTime(value)}` : MISSING;
+  return p ? `${p.month}/${p.day}(${p.weekday}) ${formatKstTime(value)}` : MISSING;
+}
+
+/** "2026-10-26 00:00" (KST date and time, e.g. the TOP 5 selection time). */
+export function formatKstDateTime(value: string | Date): string {
+  const p = kstParts(value);
+  if (!p) return MISSING;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.year}-${pad(p.month)}-${pad(p.day)} ${formatKstTime(value)}`;
 }
 
 /** "10월 29일 목요일". */
@@ -70,7 +78,7 @@ export function formatKstLongDate(value: string | Date): string {
 }
 
 /**
- * Calendar date without time ("2026-10-26", e.g. kickoffDateKst or TOP 5 period).
+ * Calendar date without time ("2026-10-26", e.g. kickoffDateKst or the TOP 5 week).
  * Parsed as-is so no timezone shift can move the day.
  */
 export function parseIsoDate(value: string): KstDateParts | null {
@@ -87,9 +95,9 @@ export function formatShortDate(value: string): string {
   return p ? `${p.month}/${p.day}(${p.weekday})` : MISSING;
 }
 
-/** TOP 5 aggregation period, e.g. "10/26(월)~11/1(일)" (TOP-003). */
+/** TOP 5 selection week, e.g. "10/26(월)–11/1(일)" (Figma 159:923). */
 export function formatPeriod(start: string, end: string): string {
-  return `${formatShortDate(start)}~${formatShortDate(end)}`;
+  return `${formatShortDate(start)}–${formatShortDate(end)}`;
 }
 
 /** Shown for values the provider did not supply (guide §4). */

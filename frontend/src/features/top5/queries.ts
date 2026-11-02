@@ -6,10 +6,8 @@ import type { TopMatches } from "@/lib/api/types";
 /**
  * GET /api/v1/top-matches/current. The strip lives in the root layout and can stay on
  * screen for hours, so freshness is explicit (cross-review #6):
- * - polls every 30 minutes while the tab is visible (no background polling): a new
- *   selection (4-hour recompute, TOP-002) or a new week appears within 30 minutes. The
- *   week-boundary time zone is still open (P-06), so the client does not schedule its own
- *   boundary refetch;
+ * - polls every 30 minutes while the tab is visible (no background polling): the Monday
+ *   00:00 KST selection, a new week and the latest match status/score appear within 30 min;
  * - refetches when the window regains focus or the list is expanded, if older than 5 min.
  */
 const TOP5_STALE_MS = 5 * 60_000;
