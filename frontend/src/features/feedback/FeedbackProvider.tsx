@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { Suspense, createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { FeedbackDialog } from "./FeedbackDialog";
 
 interface FeedbackContextValue {
@@ -17,7 +17,10 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
   return (
     <FeedbackContext.Provider value={value}>
       {children}
-      <FeedbackDialog open={open} onClose={() => setOpen(false)} />
+      {/* The dialog reads the current path; Suspense keeps dynamic pages prerenderable. */}
+      <Suspense>
+        <FeedbackDialog open={open} onClose={() => setOpen(false)} />
+      </Suspense>
     </FeedbackContext.Provider>
   );
 }

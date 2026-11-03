@@ -37,6 +37,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/top-matches/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Top Matches Version
+         * @description Public version only, polled by open screens to replace the list right away.
+         */
+        get: operations["read_top_matches_version_api_v1_top_matches_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/competitions": {
         parameters: {
             query?: never;
@@ -176,6 +196,83 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fixtures/{fixture_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Match */
+        get: operations["read_match_api_v1_fixtures__fixture_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fixtures/{fixture_id}/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Match Records
+         * @description Timeline, team statistics, lineups and provider player ratings (MAT-002·004).
+         */
+        get: operations["read_match_records_api_v1_fixtures__fixture_id__detail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fixtures/{fixture_id}/head-to-head": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Match Head To Head
+         * @description Last official meetings and both teams' recent form, before kickoff only (MAT-005).
+         */
+        get: operations["read_match_head_to_head_api_v1_fixtures__fixture_id__head_to_head_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/fixtures/{fixture_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Match Reviews
+         * @description Public member ratings and reviews of a normally finished match (REV-004).
+         */
+        get: operations["read_match_reviews_api_v1_fixtures__fixture_id__reviews_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -250,14 +347,6 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /** DataResponse[TopMatches] */
-        DataResponse_TopMatches_: {
-            data: components["schemas"]["TopMatches"];
-            /** Meta */
-            meta?: {
-                [key: string]: unknown;
-            };
-        };
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -275,6 +364,16 @@ export interface components {
          */
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
+        };
+        /** EventsBlock */
+        EventsBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "not_yet" | "unavailable";
+            /** Data */
+            data: components["schemas"]["MatchEvent"][] | null;
         };
         /** FavoriteSchedule */
         FavoriteSchedule: {
@@ -317,6 +416,125 @@ export interface components {
             /** Data */
             data: components["schemas"]["MatchSummary"][];
             meta: components["schemas"]["ScheduleMeta"];
+        };
+        /** FormBlock */
+        FormBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "not_yet" | "unavailable";
+            /** Data */
+            data: components["schemas"]["FormMatch"][] | null;
+        };
+        /** FormMatch */
+        FormMatch: {
+            /**
+             * Kickoffdatekst
+             * Format: date
+             */
+            kickoffDateKst: string;
+            /** Competition */
+            competition: string;
+            /** Opponentname */
+            opponentName: string;
+            /**
+             * Venue
+             * @enum {string}
+             */
+            venue: "home" | "away";
+            /** Goalsfor */
+            goalsFor: number | null;
+            /** Goalsagainst */
+            goalsAgainst: number | null;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "W" | "D" | "L";
+        };
+        /** HeadToHead */
+        HeadToHead: {
+            meetings: components["schemas"]["MeetingsBlock"];
+            homeForm: components["schemas"]["FormBlock"];
+            awayForm: components["schemas"]["FormBlock"];
+        };
+        /** HeadToHeadResponse */
+        HeadToHeadResponse: {
+            data: components["schemas"]["HeadToHead"];
+            meta: components["schemas"]["UpdatedMeta"];
+        };
+        /** LineupPlayer */
+        LineupPlayer: {
+            /** Number */
+            number: number | null;
+            /** Name */
+            name: string;
+            /** Position */
+            position: string | null;
+        };
+        /** LineupsBlock */
+        LineupsBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "not_yet" | "unavailable";
+            /** Data */
+            data: components["schemas"]["TeamLineup"][] | null;
+        };
+        /** MatchEvent */
+        MatchEvent: {
+            /** Elapsed */
+            elapsed: number | null;
+            /** Extra */
+            extra: number | null;
+            /** Side */
+            side: ("home" | "away") | null;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "goal" | "card" | "subst" | "var" | "other";
+            /** Detail */
+            detail: string | null;
+            /** Player */
+            player: string | null;
+            /** Assist */
+            assist: string | null;
+        };
+        /** MatchInfo */
+        MatchInfo: {
+            match: components["schemas"]["MatchSummary"];
+            /** Round */
+            round: string | null;
+            /** Seasonlabel */
+            seasonLabel: string;
+            /** Statuslong */
+            statusLong: string | null;
+            /** Statuscode */
+            statusCode: string;
+            /** Reviewsavailable */
+            reviewsAvailable: boolean;
+            /** Headtoheadavailable */
+            headToHeadAvailable: boolean;
+        };
+        /** MatchInfoResponse */
+        MatchInfoResponse: {
+            data: components["schemas"]["MatchInfo"];
+            meta: components["schemas"]["UpdatedMeta"];
+        };
+        /** MatchRecords */
+        MatchRecords: {
+            events: components["schemas"]["EventsBlock"];
+            statistics: components["schemas"]["StatisticsBlock"];
+            lineups: components["schemas"]["LineupsBlock"];
+            players: components["schemas"]["PlayersBlock"];
+        };
+        /** MatchRecordsResponse */
+        MatchRecordsResponse: {
+            data: components["schemas"]["MatchRecords"];
+            meta: components["schemas"]["UpdatedMeta"];
         };
         /** MatchScore */
         MatchScore: {
@@ -363,6 +581,26 @@ export interface components {
             home: components["schemas"]["TeamRef"];
             away: components["schemas"]["TeamRef"];
             score: components["schemas"]["MatchScore"];
+        };
+        /** MeetingSummary */
+        MeetingSummary: {
+            /** Homewins */
+            homeWins: number;
+            /** Draws */
+            draws: number;
+            /** Awaywins */
+            awayWins: number;
+        };
+        /** MeetingsBlock */
+        MeetingsBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "not_yet" | "unavailable";
+            /** Data */
+            data: components["schemas"]["PastMeeting"][] | null;
+            summary: components["schemas"]["MeetingSummary"] | null;
         };
         /** NewsItem */
         NewsItem: {
@@ -417,12 +655,145 @@ export interface components {
             data: components["schemas"]["NewsItem"][];
             meta: components["schemas"]["NewsMeta"];
         };
+        /** PastMeeting */
+        PastMeeting: {
+            /**
+             * Kickoffdatekst
+             * Format: date
+             */
+            kickoffDateKst: string;
+            /** Competition */
+            competition: string;
+            /** Homename */
+            homeName: string;
+            /** Awayname */
+            awayName: string;
+            /** Homeiscurrenthome */
+            homeIsCurrentHome: boolean;
+            /** Scorehome */
+            scoreHome: number | null;
+            /** Scoreaway */
+            scoreAway: number | null;
+            /** Penaltyhome */
+            penaltyHome: number | null;
+            /** Penaltyaway */
+            penaltyAway: number | null;
+        };
+        /** PlayerRating */
+        PlayerRating: {
+            /** Playerid */
+            playerId: number | null;
+            /** Name */
+            name: string;
+            /** Photourl */
+            photoUrl: string | null;
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "home" | "away";
+            /** Rating */
+            rating: number | null;
+        };
+        /** PlayersBlock */
+        PlayersBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "not_yet" | "unavailable";
+            /** Data */
+            data: components["schemas"]["PlayerRating"][] | null;
+        };
+        /** ReviewItem */
+        ReviewItem: {
+            /** Id */
+            id: number;
+            /** Authornickname */
+            authorNickname: string | null;
+            /** Rating */
+            rating: number;
+            /** Body */
+            body: string | null;
+            /** Likes */
+            likes: number;
+            /** Dislikes */
+            dislikes: number;
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /**
+             * Updatedat
+             * Format: date-time
+             */
+            updatedAt: string;
+        };
+        /** ReviewList */
+        ReviewList: {
+            summary: components["schemas"]["ReviewSummary"];
+            /** Items */
+            items: components["schemas"]["ReviewItem"][];
+        };
+        /** ReviewListResponse */
+        ReviewListResponse: {
+            data: components["schemas"]["ReviewList"];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ReviewSummary */
+        ReviewSummary: {
+            /** Average */
+            average: number | null;
+            /** Count */
+            count: number;
+        };
         /** ScheduleMeta */
         ScheduleMeta: {
             /** Updatedat */
             updatedAt: string | null;
             /** Failedcompetitionids */
             failedCompetitionIds: number[];
+        };
+        /** StatRow */
+        StatRow: {
+            /** Key */
+            key: string;
+            /** Home */
+            home: number | null;
+            /** Away */
+            away: number | null;
+            /** Percent */
+            percent: boolean;
+        };
+        /** StatisticsBlock */
+        StatisticsBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "not_yet" | "unavailable";
+            /** Data */
+            data: components["schemas"]["StatRow"][] | null;
+        };
+        /** TeamLineup */
+        TeamLineup: {
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "home" | "away";
+            /** Formation */
+            formation: string | null;
+            /** Coach */
+            coach: string | null;
+            /** Startxi */
+            startXi: components["schemas"]["LineupPlayer"][];
+            /** Substitutes */
+            substitutes: components["schemas"]["LineupPlayer"][];
         };
         /** TeamRef */
         TeamRef: {
@@ -473,24 +844,63 @@ export interface components {
             rank: number;
             /** Reason */
             reason: string;
+            /**
+             * Selectedkickoffat
+             * Format: date-time
+             */
+            selectedKickoffAt: string;
             match: components["schemas"]["MatchSummary"];
         };
         /** TopMatches */
         TopMatches: {
-            week: components["schemas"]["TopMatchesWeek"];
+            /** Version */
+            version: number | null;
             /**
-             * State
+             * View
              * @enum {string}
              */
-            state: "ready" | "pending" | "no_candidates" | "source_error" | "ai_error";
+            view: "list" | "none" | "delayed";
+            week: components["schemas"]["TopMatchesWeek"];
+            currentWeek: components["schemas"]["TopMatchesWeek"];
             /** Selectedat */
             selectedAt: string | null;
             /** Items */
             items: components["schemas"]["TopMatchItem"][];
         };
+        /** TopMatchesMeta */
+        TopMatchesMeta: {
+            /** Updatedat */
+            updatedAt: string | null;
+        };
+        /** TopMatchesResponse */
+        TopMatchesResponse: {
+            data: components["schemas"]["TopMatches"];
+            meta: components["schemas"]["TopMatchesMeta"];
+        };
+        /**
+         * TopMatchesVersion
+         * @description Cheap check for open screens: refetch the list when either value changes.
+         */
+        TopMatchesVersion: {
+            /** Version */
+            version: number | null;
+            /**
+             * Currentweekstart
+             * Format: date
+             */
+            currentWeekStart: string;
+        };
+        /** TopMatchesVersionResponse */
+        TopMatchesVersionResponse: {
+            data: components["schemas"]["TopMatchesVersion"];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * TopMatchesWeek
-         * @description KST Monday–Sunday the selection belongs to (the week key).
+         * @description KST Monday–Sunday.
          */
         TopMatchesWeek: {
             /**
@@ -503,6 +913,11 @@ export interface components {
              * Format: date
              */
             end: string;
+        };
+        /** UpdatedMeta */
+        UpdatedMeta: {
+            /** Updatedat */
+            updatedAt: string | null;
         };
     };
     responses: never;
@@ -570,7 +985,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DataResponse_TopMatches_"];
+                    "application/json": components["schemas"]["TopMatchesResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_top_matches_version_api_v1_top_matches_version_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopMatchesVersionResponse"];
                 };
             };
             /** @description Client error */
@@ -854,6 +1307,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NewsLinkResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_match_api_v1_fixtures__fixture_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Match (fixture) id */
+                fixture_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchInfoResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_match_records_api_v1_fixtures__fixture_id__detail_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Match (fixture) id */
+                fixture_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchRecordsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_match_head_to_head_api_v1_fixtures__fixture_id__head_to_head_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Match (fixture) id */
+                fixture_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeadToHeadResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_match_reviews_api_v1_fixtures__fixture_id__reviews_get: {
+        parameters: {
+            query?: {
+                sort?: "popular" | "latest";
+            };
+            header?: never;
+            path: {
+                /** @description Match (fixture) id */
+                fixture_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewListResponse"];
                 };
             };
             /** @description Client error */

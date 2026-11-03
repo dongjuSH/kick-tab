@@ -44,5 +44,15 @@ class Settings(BaseSettings):
     # Empty = notifications off (feedback is still stored).
     feedback_discord_webhook_url: SecretStr = SecretStr("")
 
+    # AI weekly TOP 5 (chat 04, docs/TOP5_POLICY). The key goes straight to the SDK client;
+    # GOOGLE_API_KEY is never read. Free tier: only public match data is sent.
+    gemini_api_key: SecretStr = SecretStr("")
+    top5_llm_model: str = "gemini-3.8-flash"
+    # Each automatic attempt must end (success, failure or timeout) before the next fixed
+    # slot: 00:00 -> 00:05 KST leaves 5 minutes, so the default stops at 4.
+    top5_attempt_timeout_seconds: int = 240
+    # Separate Discord channel for operator alerts (second failure). Empty = alerts off.
+    top5_alert_discord_webhook_url: SecretStr = SecretStr("")
+
 
 settings = Settings()

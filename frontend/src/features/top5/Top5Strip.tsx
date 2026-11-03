@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
@@ -11,10 +11,20 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { DESKTOP_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { Top5List } from "./Top5List";
-import { TOP5_TITLE, desktopSummary, mobileSummary, periodText, weekText } from "./model";
-import { currentTopMatchesQuery } from "./queries";
+import {
+  desktopSummary,
+  mobileListSummary,
+  noticeCopy,
+  noticeOf,
+  periodText,
+  titleOf,
+  weekText,
+} from "./model";
+import { currentTopMatchesQuery, isOutdated, topMatchesVersionQuery } from "./queries";
 
 const CLOSE_LABEL = "주목 경기 목록 닫기";
+// Before the first answer the strip names this week's list (the title follows the data).
+const DEFAULT_TITLE = "이번 주 주목 경기 TOP 5";
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** "AI 선정" badge over the title (Figma 159:924 header); read together as the heading. */
@@ -53,6 +63,9 @@ function inertOutside(keep: HTMLElement): () => void {
  */
 export function Top5Strip() {
   const { data, isPending, error, refetch, isStale } = useQuery(currentTopMatchesQuery);
+  const versionQuery = useQuery(topMatchesVersionQuery);
+  const version = versionQuery.data;
+  const queryClient = useQueryClient();
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -69,6 +82,19 @@ export function Top5Strip() {
     setLast({ pathname, isDesktop });
     setOpen(false);
   }
+
+  // A replaced public result (new week, delay notice, recovery) or a new KST week is
+  // fetched as soon as the version check sees it; the 30-minute refresh is not relied on.
+  useEffect(() => {
+    if (data && version && isOutdated(data, version)) {
+      // Successful checks can share the same data object. Retry a failed replacement on
+      // the next check, without cancelling a replacement that is already in flight.
+      void queryClient.invalidateQueries(
+        { queryKey: currentTopMatchesQuery.queryKey },
+        { cancelRefetch: false },
+      );
+    }
+  }, [data, version, versionQuery.dataUpdatedAt, queryClient]);
 
   const closePanel = () => {
     setOpen(false);
@@ -112,7 +138,8 @@ export function Top5Strip() {
     };
   }, [open, isDesktop]);
 
-  const title = <PanelTitle>{TOP5_TITLE}</PanelTitle>;
+  const titleText = data ? titleOf(data) : DEFAULT_TITLE;
+  const title = <PanelTitle>{titleText}</PanelTitle>;
   const list = (layout: "desktop" | "mobile") => (
     <Top5List
       layout={layout}
@@ -154,7 +181,7 @@ export function Top5Strip() {
               AI 선정
             </Badge>
             <span className="min-w-0 flex-1 text-small leading-[18px] font-bold text-fg lg:w-[310px] lg:flex-none lg:text-body lg:leading-[22px]">
-              {TOP5_TITLE}
+              {titleText}
             </span>
             <span className="hidden w-[180px] shrink-0 text-small text-fg-muted lg:block">
               {data && weekText(data)}
@@ -167,9 +194,17 @@ export function Top5Strip() {
             </span>
             <span className="sr-only">{open ? "목록 접기" : "목록 펼치기"}</span>
           </span>
-          <span className="flex w-full text-small text-fg-secondary lg:hidden">
-            {summary((value) => `${periodText(value)} · ${mobileSummary(value)}`, "h-4 w-56")}
-          </span>
+          {data && noticeOf(data) ? (
+            // Mobile none/delayed (Figma 159:708·159:795): period, then the notice; wraps.
+            <span className="flex w-full flex-col text-small text-fg-secondary lg:hidden">
+              <span>{weekText(data)}</span>
+              <span>{noticeCopy(noticeOf(data)!, data).short}</span>
+            </span>
+          ) : (
+            <span className="flex w-full text-small text-fg-secondary lg:hidden">
+              {summary((value) => `${periodText(value)} · ${mobileListSummary(value)}`, "h-4 w-56")}
+            </span>
+          )}
         </button>
       </div>
 
@@ -215,6 +250,32 @@ export function Top5Strip() {
           {list("mobile")}
         </BottomSheet>
       )}
+    </div>
+  );
+}
+
+/**
+ * The strip before the current path is known (pages with a runtime param, guide §3.1):
+ * same box and height, no data yet.
+ */
+export function Top5StripFallback() {
+  return (
+    <div className="border-b border-line bg-action-soft" aria-busy>
+      <div className="kt-container flex flex-col gap-1 py-2">
+        <span className="flex w-full items-center gap-2">
+          <Badge tone="accent">AI 선정</Badge>
+          <span className="min-w-0 flex-1 text-small leading-[18px] font-bold text-fg lg:w-[310px] lg:flex-none lg:text-body lg:leading-[22px]">
+            {DEFAULT_TITLE}
+          </span>
+          <span className="hidden min-w-0 flex-1 lg:flex">
+            <Skeleton className="h-4 w-64" />
+          </span>
+          <span className="size-11 shrink-0" />
+        </span>
+        <span className="flex w-full lg:hidden">
+          <Skeleton className="h-4 w-56" />
+        </span>
+      </div>
     </div>
   );
 }

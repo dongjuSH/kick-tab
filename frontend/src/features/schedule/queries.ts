@@ -28,7 +28,7 @@ function needsLiveRefresh(matches: readonly MatchSummary[]): boolean {
  * fetch when the next listed match enters it (30 minutes before kickoff), after which the
  * minute polling takes over. Never while the tab is hidden (refetchIntervalInBackground).
  */
-function liveRefetchInterval(matches: readonly MatchSummary[]): number | false {
+export function liveRefetchInterval(matches: readonly MatchSummary[]): number | false {
   if (matches.length === 0) return false; // no clock in the server prerender
   if (needsLiveRefresh(matches)) return LIVE_POLL_MS;
   const now = Date.now();
