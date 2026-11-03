@@ -1,5 +1,30 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-03 (화) — 04 경기 상세·AI 주간 TOP 5
+
+브랜치 `feat/04-match-detail`(03 병합 후 최신 `dev`에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 통과(1차 지적 11건 Codex 보완 → Claude 확인 중 회귀 1건 수정).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 경기 상세 데이터 | `models/match_detail.py`(`FixtureDetail`·`FixtureEvent`·`HeadToHead`·`TeamForm`), 마이그레이션 `0006_match_detail`, `services/match_detail.py`(`save_provider_items`·`ensure_records`·`detail_fetch_due`·`read_records`·`final_record_targets`), `services/head_to_head.py`(`ensure_meetings`·`ensure_form`·`fetch_meetings`·`fetch_form`·`recent_form`·`result_for`), `core/locks.py`(`single_flight`) | 이벤트·통계·라인업·선수 평점 저장, 요청 시 1회 보충(동시 요청 합치기·실패 쿨다운·실패로 덮어쓰지 않음), 상대 전적(친선 제외·범위 확대)·팀 최근 흐름 캐시 |
+| 수집 작업 | `sync/fixtures.py`(live 응답 이벤트·`ids` 응답 상세 저장, `fixture_details` 작업 추가) | 종료 전환 시 1회 최종 기록(20경기당 1회 요청), 진행 중 이벤트는 추가 요청 없이 갱신 |
+| 후기 조회 | `models/review.py`, `0007_reviews`, `services/reviews.py`(`list_reviews`·`reviews_available`) | 공개 조회·인기순(반응 3개 이상 비율순)·최신순·평균(0건 null), 행정 종료 보류(P-05)·상태 변경 시 숨김(P-07). 작성·반응은 02 |
+| 경기 상세 API | `api/routes/matches.py`(`/fixtures/{id}`·`/detail`·`/head-to-head`·`/reviews`), `schemas/match_detail.py`, `api/router.py`(schedule 뒤 등록) | 영역별 조회로 한 영역 실패가 다른 영역을 가리지 않음, 블록 상태 `available·not_provided·not_yet·unavailable` |
+| TOP 5 선정 | `models/top_matches.py`, `0008_top5`, `services/top5_selection.py`(`run_attempt`·`select_week`·`validate_picks`·`_publish`·`_fail`·`reconcile_attempts`), `sync/top5.py`(`top5_weekly`·`top5_retry`·`top5`·`top5_reconcile`), `providers/gemini.py`(`generate_structured`, google-genai 2.34.0), `notifications/discord.py`(`_post`·`notify_top5_delay`), `seed/top5_curation.json`, `config.py`(Gemini·알림·시간 제한 설정) | 주간 작업 상태와 공개 결과(버전) 분리, 00:00 첫 시도·00:05 고정 재시도, 주 잠금·시간 제한·게시 가드, 여섯 입력·Gemini 구조화 출력·서버 검증·원자적 게시, 두 번째 실패 지연 공개·디스코드 알림, 관리 명령 수동 복구, 중단 시도 정리 |
+| TOP 5 공개 API | `services/top_matches.py`(`shown_publication`·`current_version`·`get_current_top_matches`), `schemas/top_matches.py`, `api/routes/top_matches.py`(`/current`·`/version`), `services/fixtures.py`(`summaries_by_ids`) | 이번 주 공개본 → 지난주 list/none → 지연 안내, `selectedKickoffAt`(D-01-10 대안 A), `meta.updatedAt` |
+| 경기 상세 화면 | `app/matches/[id]/page.tsx`, `features/match/*`(`MatchDetail`·`Scoreboard`·`StatusNotice`·`MatchRecords`·`HeadToHeadSection`·`ReviewSection`·`model.ts`·`queries.ts`), `components/ui/Tabs.tsx`, `Badge`(error), `Icon`(thumbs) | 상태별 영역, 4탭(URL `?tab=`), 라인업 발표 전, 상대 전적·최근 흐름, 후기 정렬(URL `?sort=`)·주의사항 상시 노출, 진행 중 폴링·지연 경고, 제목 포커스, '경기 목록으로' 이전 목록 복귀 |
+| TOP 5 화면 | `features/top5/*`(`Top5Strip`·`Top5StripFallback`·`Top5List`·`model.ts`·`queries.ts`), `lib/api/types.ts`·`query-keys.ts`·`schema.d.ts` | UI 3종(목록·경기 없음·지연), 지난주 제목·기간·선정 시각·PreviousNotice, ShortListNotice, 변경 일시, 공개 버전 30초 확인으로 열린 화면 즉시 교체 |
+| 레이아웃 | `SiteHeader`·`MainNav`(`MainNavFallback`)·`FeedbackProvider`의 `<Suspense>` | 동적 경로 `/matches/[id]`가 정적 셸(Partial Prerender)을 갖도록 |
+
+- **사용자 결정:** 더비 40쌍·관심도(high 10·medium 22) 운영 시드 초안 확인(버전 `2026-11-03`). D-01-10은 대안 A(선정 당시 킥오프 저장·변경 일시 표시)로 반영.
+- **기획·디자인과 다르게 처리(guide §10.3 D-04-1~7):** 비회원 '로그인하고 평가하기' 버튼 생략(02 연결), 작성 주의사항을 후기 카드에 상시 표시, 지난주 '경기 없음' 문구를 '없었습니다'로, 상대 전적 표에 홈·원정 열, 타임라인 합성 행 제외, 평점 탭은 Figma대로 평점만, 닉네임 '—'.
+- **실제 실행 중 발견·수정:** 탭 전환 지연(`router.replace` 서버 왕복 → `history.replaceState`), 미출전 선수 평점 '0' 자리값 제외, 상대 전적·흐름 팀 이름 한국어화, 라운드 표기 한국어화, `none` 공개에 지난 항목이 섞이던 응답, 프롬프트 축소(238k → 148k자), 실패 시도의 후보 수 기록.
+- **Codex 1차 지적 보완(11건, Codex 수정):** 이번 주 공개본 우선 표시, 게시 직전 시각 재확인(마감·주 경계), 중단 시도 정리 작업 `top5_reconcile`과 재시도 슬롯 보존, 근거 수집 데몬 작업자·DB 대기 제한, 상태 전환 시 기록 재조회·라인업 10분 확인, 잠금 안 실패 쿨다운 재확인, 교체 조회 실패 후 재시도, 조회 실패를 '발표 전'으로 표시하지 않음, 지연 경고 시계 갱신, 부분 실패 재시도 버튼, 중단 경기 타임라인만. 백엔드·프런트 회귀 테스트(`npm test`) 추가.
+- **Claude 확인 중 수정(회귀 1건):** 예정 경기에서 조회 실패 후 연기되거나 킥오프가 미뤄지면 '조회 실패'가 영구히 남던 문제 → 지금 다시 조회하는 경우에만 `unavailable`(`_lookup_open`), 그 밖은 '라인업 발표 전'.
+- **실제 실행 검수:** 상태별 상세(종료·예정 실제, 행정 종료·취소·국내 컵 실제 2025·2026 표본, 중단·연기·확인 필요·진행 중은 테스트 상태로 확인 후 제공사 응답으로 복원), 4탭·라인업 발표 전·상대 전적·팀 링크/미제공, 후기 정렬·평균(테스트 후기 후 삭제), TOP 5 실제 Gemini: 첫 시도 실패(잘못된 모델명 404) → 00:05 재시도 실패(제공사 503) → 지연 공개·디스코드 알림(도착 사용자 확인) → 수동 복구 실패(503) → 복구 후 수동 공개 성공, 주 상태를 비운 뒤 첫 시도 실패 → 00:05 재시도 성공. 지난주 유지·경기 없음(지난주·이번 주)은 데이터 조작으로 재현. 공개 버전 변경 후 열린 화면 35초 안 교체, TOP 5·메인 → 상세 포커스·뒤로 가기, 1280·375·320. **미실행:** 실제 진행 경기 실시간 갱신(진행 경기 없음, 가능 시각 11/4(수) 02:45 KST), 실제 월요일 00:00·00:05 시각 경과(다음 실행 11/9 00:00·00:05 KST 확인).
+- **관찰(03 코드, 05 인계):** 메인 `CompetitionFilter` 하이드레이션 경합(브라우저 창이 숨겨졌을 때 개발 콘솔 오류, 화면 정상).
+- **검사:** 백엔드 ruff·pytest 240 통과(DB 포함, 롤백)·alembic check, 프런트 `npm test` 6·lint·tsc·build(`/matches/[id]` Partial Prerender)·`git diff --check` 통과. 외부 호출 누적 API-Football 약 468회(TOP 5 근거 첫 수집 391회 포함), Gemini 13회(성공 2·가용성 확인 성공 1), 디스코드 TOP 5 알림 1회. Codex 보완 단계 외부 호출 0회.
+
 ## 2026-11-02 (월) — 03 경기 일정(메인)
 
 브랜치 `feat/03-schedule`(최신 `dev`에서 분기)에 커밋·push. Codex 교차 검증 2회(1차 수정 필요 6건 → 보완 → 2차 통과). `dev` 병합은 00 확인 후.
