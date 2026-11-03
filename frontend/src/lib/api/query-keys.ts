@@ -10,6 +10,13 @@ export const queryKeys = {
   topMatches: {
     all: ["top-matches"] as const,
     current: () => ["top-matches", "current"] as const,
+    version: () => ["top-matches", "version"] as const,
+  },
+  matches: {
+    info: (id: number) => ["matches", "info", { id }] as const,
+    records: (id: number) => ["matches", "records", { id }] as const,
+    headToHead: (id: number) => ["matches", "head-to-head", { id }] as const,
+    reviews: (id: number, sort: string) => ["matches", "reviews", { id, sort }] as const,
   },
   competitions: {
     all: ["competitions"] as const,

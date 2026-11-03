@@ -200,6 +200,17 @@ def _summaries(session: Session, where: Sequence[Any]) -> list[tuple[Fixture, Ma
     return [(f, to_summary(f, c, h, a, lookup)) for f, c, h, a in rows]
 
 
+def summaries_by_ids(
+    session: Session, fixture_ids: Sequence[int]
+) -> tuple[dict[int, MatchSummary], datetime | None]:
+    """Latest summaries of given matches (TOP 5 items) and their last provider sync."""
+    if not fixture_ids:
+        return {}, None
+    rows = _summaries(session, [Fixture.id.in_(fixture_ids)])
+    updated = max((f.synced_at for f, _ in rows), default=None)
+    return {f.id: s for f, s in rows}, updated
+
+
 @dataclass(frozen=True)
 class SyncState:
     """Freshness of the stored schedule, so 'no matches' and 'not collected' differ."""

@@ -1,13 +1,15 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { Logo } from "@/components/common/Logo";
-import { Top5Strip } from "@/features/top5/Top5Strip";
+import { Top5Strip, Top5StripFallback } from "@/features/top5/Top5Strip";
 import { HeaderAuth } from "./HeaderAuth";
-import { MainNav } from "./MainNav";
+import { MainNav, MainNavFallback } from "./MainNav";
 import { MobileMenu } from "./MobileMenu";
 
 /**
  * Global header + TOP 5 strip, fixed together at the top while scrolling (COM-003).
- * Figma 49:58 (desktop, 129px) / 49:571 (mobile, 113px).
+ * Figma 49:58 (desktop, 129px) / 49:571 (mobile, 113px). Parts that read the current path
+ * sit in Suspense so pages with a runtime param (`/matches/[id]`) keep a prerendered shell.
  */
 export function SiteHeader() {
   return (
@@ -29,18 +31,24 @@ export function SiteHeader() {
             </span>
           </Link>
           <div className="hidden lg:block">
-            <MainNav />
+            <Suspense fallback={<MainNavFallback />}>
+              <MainNav />
+            </Suspense>
           </div>
           <div className="flex-1" />
           <div className="hidden lg:block">
             <HeaderAuth layout="desktop" />
           </div>
           <div className="lg:hidden">
-            <MobileMenu />
+            <Suspense fallback={<span className="block size-11" />}>
+              <MobileMenu />
+            </Suspense>
           </div>
         </div>
       </div>
-      <Top5Strip />
+      <Suspense fallback={<Top5StripFallback />}>
+        <Top5Strip />
+      </Suspense>
     </header>
   );
 }

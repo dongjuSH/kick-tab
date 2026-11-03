@@ -2,6 +2,7 @@
 
 from app.models.feedback import Feedback
 from app.models.fixture import Fixture
+from app.models.match_detail import FixtureDetail, FixtureEvent, HeadToHead, TeamForm
 from app.models.news import NewsArticle, NewsArticleTeam
 from app.models.reference import (
     Competition,
@@ -10,17 +11,29 @@ from app.models.reference import (
     TeamAlias,
     TeamCompetitionSeason,
 )
+from app.models.review import Review, ReviewReaction
 from app.models.sync_run import SyncRun
+from app.models.top_matches import Top5Attempt, Top5Publication, Top5Week, WeeklyTopMatch
 
 __all__ = [
     "Competition",
     "CompetitionSeason",
     "Feedback",
     "Fixture",
+    "FixtureDetail",
+    "FixtureEvent",
+    "HeadToHead",
     "NewsArticle",
     "NewsArticleTeam",
+    "Review",
+    "ReviewReaction",
     "SyncRun",
     "Team",
     "TeamAlias",
     "TeamCompetitionSeason",
+    "TeamForm",
+    "Top5Attempt",
+    "Top5Publication",
+    "Top5Week",
+    "WeeklyTopMatch",
 ]

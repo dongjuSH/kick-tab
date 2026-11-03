@@ -58,14 +58,23 @@ def client():
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_top_matches_is_pending_for_the_current_kst_week_until_selection_exists(client):
-    response = client.get("/api/v1/top-matches/current")
+def test_top_matches_shows_the_delay_notice_when_nothing_was_ever_published(client):
+    session = MagicMock()
+    session.scalar.return_value = None  # no publication at all
+    app.dependency_overrides[get_db] = lambda: session
+    try:
+        response = client.get("/api/v1/top-matches/current")
+    finally:
+        app.dependency_overrides.pop(get_db, None)
     assert response.status_code == 200
     week = current_kst_week()
+    period = {"start": week.start.isoformat(), "end": week.end.isoformat()}
     assert response.json() == {
         "data": {
-            "week": {"start": week.start.isoformat(), "end": week.end.isoformat()},
-            "state": "pending",
+            "version": None,
+            "view": "delayed",
+            "week": period,
+            "currentWeek": period,
             "selectedAt": None,
             "items": [],
         },
@@ -222,8 +231,12 @@ def test_openapi_uses_camel_case_and_documents_error_envelope(client):
         "id", "nameKo", "nameEn", "crestUrl", "detailAvailable",
     }
     assert "pagePath" in components["FeedbackCreate"]["properties"]
-    assert {"rank", "reason", "match"} == set(components["TopMatchItem"]["properties"])
-    assert {"week", "state", "selectedAt", "items"} == set(components["TopMatches"]["properties"])
+    item = set(components["TopMatchItem"]["properties"])
+    assert item == {"rank", "reason", "selectedKickoffAt", "match"}
+    assert set(components["TopMatches"]["properties"]) == {
+        "version", "view", "week", "currentWeek", "selectedAt", "items",
+    }
+    assert components["TopMatches"]["properties"]["view"]["enum"] == ["list", "none", "delayed"]
     feedback_responses = schema["paths"]["/api/v1/feedback"]["post"]["responses"]
     assert "ErrorResponse" in str(feedback_responses["4XX"])
 
