@@ -27,34 +27,24 @@ function competitionSummary(competitions: readonly CompetitionItem[], selected: 
   return chosen.length === 1 ? first : `${first} 외 ${chosen.length - 1}개`;
 }
 
-/**
- * Competition filter (SCH-004, CMP-002, schedule UX policy 2026-11-02; Figma 187:564
- * trigger, 187:1946 picker). One button opens the list: a competition name applies only
- * that competition at once. "여러 대회 선택" is the secondary mode: checks are a draft
- * that starts from the current explicit selection, needs at least one, and changes nothing
- * until "선택 적용". "전체 대회 보기" clears the condition. Cancel, Escape and outside
- * clicks keep the current condition. Desktop dialog, mobile bottom sheet.
- */
+/** A single draft for one or many competitions (Figma 187:1946). */
 export function CompetitionFilter({
   competitions,
   selected,
   onChange,
+  unavailable,
 }: {
   competitions: readonly CompetitionItem[];
   selected: readonly number[];
   onChange: (ids: number[]) => void;
+  unavailable?: ReadonlySet<number>;
 }) {
   const [open, setOpen] = useState(false);
-  const [multi, setMulti] = useState(false);
   const [draft, setDraft] = useState<number[]>([]);
 
   const openPicker = () => {
-    setMulti(false);
-    setOpen(true);
-  };
-  const startMulti = () => {
     setDraft(competitions.filter((c) => selected.includes(c.id)).map((c) => c.id));
-    setMulti(true);
+    setOpen(true);
   };
   const apply = (ids: number[]) => {
     onChange(ids);
@@ -78,25 +68,19 @@ export function CompetitionFilter({
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title={multi ? "여러 대회 선택" : "대회 선택"}
+        title="대회 선택"
         width={560}
         handle
       >
         <div className="flex flex-col gap-4">
           <p className="text-small text-fg-secondary">
-            {multi
-              ? "체크는 초안입니다. 선택 적용 전에는 기존 조건을 유지합니다."
-              : "대회 이름을 누르면 해당 대회만 바로 표시합니다."}
+            한 개 또는 여러 개를 체크한 뒤 적용하세요. 적용 전에는 기존 조건을 유지합니다.
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => apply([])}>전체 대회 보기</Button>
-            <Button variant="ghost" onClick={multi ? () => setMulti(false) : startMulti}>
-              {multi ? "한 대회 바로 선택" : "여러 대회 선택"}
-            </Button>
-          </div>
+          <Button fullWidth onClick={() => apply([])}>전체 대회 보기</Button>
 
-          <div className="gap-6 lg:columns-2">
-            {GROUPS.map((group) => {
+          <div className="max-h-[min(42dvh,340px)] overflow-y-auto overscroll-contain px-1">
+            <div className="gap-6 lg:columns-2">
+              {GROUPS.map((group) => {
               const items = competitions.filter((c) => c.group === group);
               if (!items.length) return null;
               return (
@@ -105,42 +89,26 @@ export function CompetitionFilter({
                   <ul className="flex flex-col gap-1">
                     {items.map((competition) => (
                       <li key={competition.id}>
-                        {multi ? (
-                          <DraftOption
-                            competition={competition}
-                            checked={draft.includes(competition.id)}
-                            onToggle={(on) =>
-                              setDraft((ids) =>
-                                on ? [...ids, competition.id] : ids.filter((id) => id !== competition.id),
-                              )
-                            }
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            aria-pressed={selected.length === 1 && selected[0] === competition.id}
-                            onClick={() => apply([competition.id])}
-                            className={cx(
-                              "flex min-h-11 w-full items-center gap-2 rounded-control px-2 text-left text-body",
-                              selected.length === 1 && selected[0] === competition.id
-                                ? "bg-selected font-medium text-action"
-                                : "text-fg hover:bg-subtle",
-                            )}
-                          >
-                            <span className="flex-1">{competitionName(competition)}</span>
-                            <NoData competition={competition} />
-                          </button>
-                        )}
+                        <DraftOption
+                          competition={competition}
+                          checked={draft.includes(competition.id)}
+                          noTeamMatch={unavailable?.has(competition.id) ?? false}
+                          onToggle={(on) =>
+                            setDraft((ids) =>
+                              on ? [...ids, competition.id] : ids.filter((id) => id !== competition.id),
+                            )
+                          }
+                        />
                       </li>
                     ))}
                   </ul>
                 </fieldset>
               );
-            })}
+              })}
+            </div>
           </div>
 
-          {multi && (
-            <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3">
               <p role="status" className="text-small text-fg-secondary">
                 {draft.length ? `${draft.length}개 선택` : "0개 선택 · 최소 1개를 선택하세요"}
               </p>
@@ -155,8 +123,7 @@ export function CompetitionFilter({
                   선택 적용
                 </Button>
               </div>
-            </div>
-          )}
+          </div>
         </div>
       </Dialog>
     </>
@@ -166,27 +133,35 @@ export function CompetitionFilter({
 function DraftOption({
   competition,
   checked,
+  noTeamMatch,
   onToggle,
 }: {
   competition: CompetitionItem;
   checked: boolean;
+  noTeamMatch: boolean;
   onToggle: (checked: boolean) => void;
 }) {
+  const disabled = noTeamMatch && !checked;
   return (
     <label
       className={cx(
-        "flex min-h-11 cursor-pointer items-center gap-3 rounded-control px-2 text-body text-fg",
-        checked ? "bg-selected" : "hover:bg-subtle",
+        "flex min-h-11 items-center gap-3 rounded-control px-2 py-1 text-body",
+        disabled ? "cursor-not-allowed text-fg-muted" : "cursor-pointer text-fg",
+        checked ? "bg-selected" : !disabled && "hover:bg-subtle",
       )}
     >
       <input
         type="checkbox"
         className="size-[18px] accent-action"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onToggle(event.target.checked)}
       />
-      <span className="flex-1">{competitionName(competition)}</span>
-      <NoData competition={competition} />
+      <span className="min-w-0 flex-1">
+        {competitionName(competition)}
+        {noTeamMatch ? <span className="block text-small text-fg-muted">기간 내 팀 경기 없음</span>
+          : <NoData competition={competition} />}
+      </span>
     </label>
   );
 }

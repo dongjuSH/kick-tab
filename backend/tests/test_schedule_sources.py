@@ -149,7 +149,12 @@ def test_news_rejects_unknown_badge(client):
 def test_openapi_exposes_typed_meta():
     schema = json.loads(TestClient(app).get("/openapi.json").text)["components"]["schemas"]
     assert set(schema["ScheduleMeta"]["properties"]) == {"updatedAt", "failedCompetitionIds"}
-    assert set(schema["NewsMeta"]["properties"]) == {"nextCursor", "updatedAt", "stale"}
+    assert set(schema["NewsMeta"]["properties"]) == {
+        "nextCursor", "updatedAt", "stale", "total", "noNew",
+    }
+    assert set(schema["FixtureDateAvailability"]["properties"]) == {
+        "date", "competitionIds", "unknownCompetitionIds",
+    }
 
 
 def _link_transport(head_status, get_status, location=None):

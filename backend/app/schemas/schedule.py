@@ -45,6 +45,23 @@ class FixturesResponse(ApiModel):
     meta: ScheduleMeta
 
 
+class FixtureDateAvailability(ApiModel):
+    date: date
+    competition_ids: list[int]
+    unknown_competition_ids: list[int]
+
+
+class FixtureAvailability(ApiModel):
+    start: date
+    end: date
+    dates: list[FixtureDateAvailability]
+
+
+class FixtureAvailabilityResponse(ApiModel):
+    data: FixtureAvailability
+    meta: dict[str, object] = Field(default_factory=dict)
+
+
 class FavoriteSchedule(ApiModel):
     # Requested teams known to the service, in request order (favourite buttons).
     teams: list[TeamRef]
@@ -59,7 +76,7 @@ class FavoriteScheduleResponse(ApiModel):
 
 class TeamSchedule(ApiModel):
     team: TeamRef
-    # Inclusive KST dates of the view: today .. today+13.
+    # Inclusive KST dates: today-3 .. today+17.
     start: date
     end: date
     matches: list[MatchSummary]
@@ -88,6 +105,8 @@ class NewsItem(ApiModel):
 
 class NewsMeta(ApiModel):
     next_cursor: str | None
+    total: int
+    no_new: bool = False
     # Last successful collection; null when news was never collected.
     updated_at: datetime | None
     # The latest collection failed: older stored articles are shown.

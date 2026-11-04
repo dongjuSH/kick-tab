@@ -160,12 +160,12 @@ def test_fixtures_job_keeps_data_and_marks_failed_competition(session, monkeypat
     assert ctx.api_requests == 14
 
 
-def test_team_schedule_covers_today_to_today_plus_13(session):
+def test_team_schedule_covers_the_same_three_weeks_as_date_view(session):
     from app.services.fixtures import team_schedule, team_schedule_window
 
     now = datetime.now(UTC)
     start, end = team_schedule_window()
-    assert (end - start).days == 13
+    assert (end - start).days == 20
 
     def at(day, hour=12):  # 12:00 UTC = 21:00 KST the same calendar day
         return datetime(day.year, day.month, day.day, hour, tzinfo=UTC)
@@ -173,10 +173,10 @@ def test_team_schedule_covers_today_to_today_plus_13(session):
     upsert_fixtures(
         session,
         [
-            item(21, at(start - timedelta(days=1)), "FT", goals=(1, 0)),  # yesterday: out
-            item(22, at(start), "NS"),  # today: in
-            item(23, at(end), "NS", league=2),  # today+13: in
-            item(24, at(end + timedelta(days=1)), "NS"),  # today+14: out
+            item(21, at(start - timedelta(days=1)), "FT", goals=(1, 0)),
+            item(22, at(start), "NS"),  # today−3: in
+            item(23, at(end), "NS", league=2),  # today+17: in
+            item(24, at(end + timedelta(days=1)), "NS"),
         ],
         now,
     )
@@ -186,3 +186,43 @@ def test_team_schedule_covers_today_to_today_plus_13(session):
     assert team.id == CITY and mine == [22, 23]
     assert all(start <= m.kickoff_date_kst <= end for m in matches)
     assert [m.kickoff_at for m in matches] == sorted(m.kickoff_at for m in matches)
+
+
+def test_availability_keeps_uncovered_dates_separate_from_stored_games(session):
+    from app.services.fixtures import fixture_availability
+
+    now = datetime.now(UTC)
+    day = kst_today() + timedelta(days=20)
+    covered = day + timedelta(days=1)
+    row = session.get(CompetitionSeason, (39, 2026))
+    row.fixtures_window_start = row.fixtures_window_end = covered
+    row.fixtures_synced_at = now
+    row.fixtures_failed_at = None
+    kickoff = datetime(day.year, day.month, day.day, 12, tzinfo=UTC)
+    upsert_fixtures(session, [item(31, kickoff, "NS")], now)
+    session.flush()
+    first, second = fixture_availability(session, day, covered)
+    assert 39 in first[1] and 39 in first[2]  # a stored game cannot prove full coverage
+    assert 39 not in second[1] and 39 not in second[2]  # confirmed empty
+
+
+def test_news_cap_applies_before_badge_filter_and_cursor(session):
+    from app.models.news import NewsArticle
+    from app.services.news import list_news
+
+    now = datetime.now(UTC)
+    session.add_all([
+        NewsArticle(
+            url_hash=f"{i + BASE_ID:064x}", url=f"https://example.com/news/{i}",
+            title=f"News test {i}", source_domain="example.com",
+            published_at=now + timedelta(minutes=i), fetched_at=now,
+            expires_at=now + timedelta(hours=1), badge="EPL" if i < 4 else "UEFA",
+        )
+        for i in range(52)
+    ])
+    session.flush()
+    first, cursor, total = list_news(session, now, badge=None, size=24, cursor=None)
+    second, cursor, second_total = list_news(session, now, badge=None, size=24, cursor=cursor)
+    assert total == second_total == len({a.id for a in first + second}) == 48
+    assert cursor is None
+    assert list_news(session, now, badge="EPL", size=24, cursor=None) == ([], None, 0)

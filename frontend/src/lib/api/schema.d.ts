@@ -97,6 +97,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fixtures/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Fixture Availability */
+        get: operations["read_fixture_availability_api_v1_fixtures_availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fixtures/next": {
         parameters: {
             query?: never;
@@ -126,7 +143,7 @@ export interface paths {
         };
         /**
          * Read Team Schedule
-         * @description Team view of the main schedule: the team's stored matches today .. today+13 KST.
+         * @description Team view: the team's stored matches today-3 .. today+17 KST.
          *     Competition filters are applied on screen; `failedCompetitionIds` tells which
          *     competitions may be incomplete, so "no matches" is never claimed for them.
          */
@@ -411,6 +428,41 @@ export interface components {
              */
             createdAt: string;
         };
+        /** FixtureAvailability */
+        FixtureAvailability: {
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /** Dates */
+            dates: components["schemas"]["FixtureDateAvailability"][];
+        };
+        /** FixtureAvailabilityResponse */
+        FixtureAvailabilityResponse: {
+            data: components["schemas"]["FixtureAvailability"];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        /** FixtureDateAvailability */
+        FixtureDateAvailability: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Competitionids */
+            competitionIds: number[];
+            /** Unknowncompetitionids */
+            unknownCompetitionIds: number[];
+        };
         /** FixturesResponse */
         FixturesResponse: {
             /** Data */
@@ -644,6 +696,13 @@ export interface components {
         NewsMeta: {
             /** Nextcursor */
             nextCursor: string | null;
+            /** Total */
+            total: number;
+            /**
+             * Nonew
+             * @default false
+             */
+            noNew: boolean;
             /** Updatedat */
             updatedAt: string | null;
             /** Stale */
@@ -1103,6 +1162,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FixturesResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_fixture_availability_api_v1_fixtures_availability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixtureAvailabilityResponse"];
                 };
             };
             /** @description Client error */

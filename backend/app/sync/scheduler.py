@@ -1,4 +1,4 @@
-"""In-process APScheduler. Starts only when SCHEDULER_ENABLED=true (one instance only)."""
+"""In-process scheduler: all jobs or a single news-only worker (one instance)."""
 
 import logging
 
@@ -12,10 +12,10 @@ from app.sync.runner import run_job
 logger = logging.getLogger(__name__)
 
 
-def build_scheduler() -> BackgroundScheduler:
+def build_scheduler(*, news_only: bool = False) -> BackgroundScheduler:
     scheduler = BackgroundScheduler(timezone="UTC")
     for spec in JOBS.values():
-        if spec.schedule is None:
+        if spec.schedule is None or (news_only and spec.name != "news"):
             continue
         scheduler.add_job(
             run_job,
@@ -31,9 +31,9 @@ def build_scheduler() -> BackgroundScheduler:
 
 
 def start_scheduler() -> BackgroundScheduler | None:
-    if not settings.scheduler_enabled:
+    if not (settings.scheduler_enabled or settings.news_scheduler_enabled):
         return None
-    scheduler = build_scheduler()
+    scheduler = build_scheduler(news_only=not settings.scheduler_enabled)
     scheduler.start()
     logger.info("Sync scheduler started with %d job(s)", len(scheduler.get_jobs()))
     return scheduler

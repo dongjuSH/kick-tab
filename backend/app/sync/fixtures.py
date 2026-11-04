@@ -1,7 +1,7 @@
 """Schedule and live sync for the current season (guide §6.5, OPS-001·003, LIVE-003·004).
 
-- fixtures (every 30 min): one /fixtures request per available competition for today-1 ..
-  today+15 (KST), 14 requests per run. A failed competition keeps its stored rows and is
+- fixtures (every 30 min): one /fixtures request per available competition for today-3 ..
+  today+17 (KST), 14 requests per run. A failed competition keeps its stored rows and is
   marked failed so the screen can tell "no matches" from "not collected" (CMP-004).
 - fixtures_live (every 60 s, only while a match is live or about to start): one
   /fixtures?live=<our leagues> request, plus /fixtures?ids= for tracked matches missing
@@ -60,7 +60,7 @@ def _available_competitions(session: Session, season: int) -> list[CompetitionSe
 
 @register_job(
     "fixtures",
-    description="Current-season schedule, today-1 .. today+15 KST (1 request per competition)",
+    description="Current-season schedule, today-3 .. today+17 KST (1 request per competition)",
     schedule={"trigger": "interval", "minutes": 30},
 )
 def sync_fixtures(ctx: JobContext) -> None:
@@ -96,6 +96,8 @@ def sync_fixtures(ctx: JobContext) -> None:
             continue
         saved = upsert_fixtures(session, result.response or [], now)
         row.fixtures_synced_at = now
+        row.fixtures_window_start = start
+        row.fixtures_window_end = end
         session.commit()
         logger.info("fixtures %s: %d saved", row.competition_id, saved)
     if failed:

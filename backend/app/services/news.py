@@ -5,12 +5,14 @@ import binascii
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.models.news import NewsArticle
 from app.models.sync_run import SyncRun
 from app.schemas.schedule import NewsItem
+
+NEWS_LIMIT = 48
 
 
 class InvalidCursor(ValueError):
@@ -26,7 +28,10 @@ def decode_cursor(cursor: str) -> tuple[datetime, int]:
     try:
         raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode()
         stamp, article_id = raw.split("|")
-        return datetime.fromisoformat(stamp), int(article_id)
+        published = datetime.fromisoformat(stamp)
+        if published.tzinfo is None:
+            raise ValueError("Missing timezone")
+        return published, int(article_id)
     except (binascii.Error, UnicodeDecodeError, ValueError) as exc:
         raise InvalidCursor(str(type(exc).__name__)) from None
 
@@ -36,33 +41,48 @@ class NewsCollection:
     updated_at: datetime | None
     stale: bool
     empty_store: bool
+    no_new: bool
 
 
 def collection_state(session: Session, now: datetime) -> NewsCollection:
-    last_ok = session.scalar(
-        select(SyncRun.finished_at)
+    last_ok = session.execute(
+        select(SyncRun.started_at, SyncRun.finished_at)
         .where(SyncRun.job == "news", SyncRun.status == "succeeded")
         .order_by(SyncRun.finished_at.desc())
         .limit(1)
-    )
+    ).first()
     last_status = session.scalar(
         select(SyncRun.status)
         .where(SyncRun.job == "news", SyncRun.status.in_(("succeeded", "failed")))
         .order_by(SyncRun.started_at.desc())
         .limit(1)
     )
-    empty = (
-        session.scalar(select(NewsArticle.id).where(NewsArticle.expires_at > now).limit(1)) is None
+    latest = session.scalar(
+        select(func.max(NewsArticle.fetched_at)).where(
+            NewsArticle.expires_at > now, NewsArticle.badge.is_not(None)
+        )
     )
-    return NewsCollection(last_ok, last_status == "failed", empty)
+    return NewsCollection(
+        last_ok.finished_at if last_ok else None,
+        last_status == "failed",
+        latest is None,
+        bool(last_ok and latest and last_status == "succeeded" and latest < last_ok.started_at),
+    )
 
 
 def list_news(
     session: Session, now: datetime, *, badge: str | None, size: int, cursor: str | None
-) -> tuple[list[NewsItem], str | None]:
-    conditions = [NewsArticle.expires_at > now, NewsArticle.badge.is_not(None)]
+) -> tuple[list[NewsItem], str | None, int]:
+    visible = (
+        select(NewsArticle.id)
+        .where(NewsArticle.expires_at > now, NewsArticle.badge.is_not(None))
+        .order_by(NewsArticle.published_at.desc(), NewsArticle.id.desc())
+        .limit(NEWS_LIMIT)
+    )
+    conditions = [NewsArticle.id.in_(visible)]
     if badge:
         conditions.append(NewsArticle.badge == badge)
+    total = session.scalar(select(func.count()).select_from(NewsArticle).where(*conditions)) or 0
     if cursor:
         published_at, article_id = decode_cursor(cursor)
         conditions.append(
@@ -92,4 +112,4 @@ def list_news(
         )
         for a in page
     ]
-    return items, next_cursor
+    return items, next_cursor, total

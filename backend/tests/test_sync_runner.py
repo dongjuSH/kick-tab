@@ -160,7 +160,9 @@ def test_cli_maps_outcome_to_exit_code(monkeypatch, temp_job):
 def test_scheduler_starts_only_when_enabled(monkeypatch, temp_job):
     temp_job("test-scheduled", lambda ctx: None, schedule={"trigger": "interval", "minutes": 30})
     temp_job("test-manual", lambda ctx: None)
-    monkeypatch.setattr(scheduler, "settings", Settings(scheduler_enabled=False))
+    monkeypatch.setattr(
+        scheduler, "settings", Settings(scheduler_enabled=False, news_scheduler_enabled=False)
+    )
     assert scheduler.start_scheduler() is None
 
     built = scheduler.build_scheduler()
@@ -172,3 +174,6 @@ def test_scheduler_starts_only_when_enabled(monkeypatch, temp_job):
     job = built.get_job("test-scheduled")
     assert job.max_instances == 1
     assert job.coalesce is True
+
+    news = scheduler.build_scheduler(news_only=True).get_jobs()
+    assert [(job.id, str(job.trigger)) for job in news] == [("news", "cron[minute='0']")]

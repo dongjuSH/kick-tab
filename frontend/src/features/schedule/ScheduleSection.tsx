@@ -14,13 +14,12 @@ import { isApiError } from "@/lib/api/errors";
 import type { MatchSummary, TeamRef } from "@/lib/api/types";
 import { addDaysIso, formatKstTime, formatShortDate, parseIsoDate } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
-import { DateBar } from "./DateBar";
-import { competitionsQuery, favoriteScheduleQuery, fixturesByDateQuery, teamScheduleQuery } from "./queries";
+import { DateBar, type DateAvailability } from "./DateBar";
+import { competitionsQuery, favoriteScheduleQuery, fixtureAvailabilityQuery, fixturesByDateQuery, teamScheduleQuery } from "./queries";
 import { ScheduleNotice, failedNames } from "./ScheduleNotice";
-import { SCHEDULE_DAYS, useScheduleParams } from "./useScheduleParams";
+import { SCHEDULE_BEFORE, SCHEDULE_DAYS, useScheduleParams } from "./useScheduleParams";
 
-// Figma 225:1216 / 225:1768: five matches first, "경기 더 보기 (5/9)".
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 6;
 const STALE_LIVE_MS = 3 * 60_000;
 
 export function ListSkeleton() {
@@ -56,7 +55,7 @@ function UpdatedAt({ value, checkedAt }: { value: string | null | undefined; che
  * `KickTab/Schedule Explorer` 225:2013 and `Schedule Feedback` 225:2374).
  *
  * - Date view: one KST date of every supported competition, picked on the date bar.
- * - Team view (search pick or favourite button): that team's matches today .. today+13,
+ * - Team view (search pick or favourite button): that team's matches today−3 .. today+17,
  *   grouped by date. The date in the URL is left untouched, so clearing the team returns to
  *   the previous date and date-bar position; the competition condition carries over.
  * Competition filters are applied here to the loaded list, so an empty day, an empty filter
@@ -70,6 +69,7 @@ export function ScheduleSection() {
   const teamMode = params.team !== null;
 
   const competitions = useQuery(competitionsQuery);
+  const availability = useQuery({ ...fixtureAvailabilityQuery(params.today), enabled: !teamMode });
   const byDate = useQuery({ ...fixturesByDateQuery(params.date), enabled: !teamMode && params.dateInRange });
   const byTeam = useQuery({ ...teamScheduleQuery(params.team ?? 0, params.today), enabled: teamMode });
   const favoriteIds = favorites.status === "ready" ? favorites.ids : [];
@@ -87,12 +87,44 @@ export function ScheduleSection() {
   const filtered = all.filter(
     (m) => params.competitions.length === 0 || params.competitions.includes(m.competition.id),
   );
+  const coveredDates = new Map(availability.data?.dates.map((item) => [item.date, item]));
+  const dateState = (date: string, ids: readonly number[]): DateAvailability => {
+    const row = coveredDates.get(date);
+    if (!row || availability.isError) return availability.isPending ? "pending" : "unknown";
+    const any = (values: readonly number[]) => values.some((id) => !ids.length || ids.includes(id));
+    const exists = any(row.competitionIds);
+    return any(row.unknownCompetitionIds) ? (exists ? "partial" : "unknown") : exists ? "ready" : "empty";
+  };
+  const dates = new Map(params.dates.map((date) => [date, dateState(date, params.competitions)]));
+  const selectCompetitions = (ids: number[]) => {
+    const change: { competitions: number[]; date?: string | null } = { competitions: ids };
+    if (!teamMode && dateState(params.date, ids) === "empty") {
+      for (const date of params.dates) {
+        if (date < params.today) continue;
+        const state = dateState(date, ids);
+        if (state === "unknown" || state === "pending") break;
+        if (state === "ready" || state === "partial") {
+          change.date = date === params.today ? null : date;
+          break;
+        }
+      }
+    }
+    params.update(change);
+  };
+  const teamCompetitions = new Set(byTeam.data?.data.matches.map((match) => match.competition.id));
+  const teamUnknown = new Set(byTeam.data?.meta.failedCompetitionIds);
+  const unavailable = teamMode && byTeam.isSuccess
+    ? new Set(competitions.data?.filter((item) => item.currentSeason
+      && !teamCompetitions.has(item.id) && !teamUnknown.has(item.id)).map((item) => item.id))
+    : undefined;
 
   // "경기 더 보기" starts over whenever the list changes or the filters are reset, even when
   // the reset leaves the URL as it was (already today and every competition).
-  const listKey = `${params.team ?? params.date}|${params.competitions.join(",")}|${resetKey}`;
-  const [shown, setShown] = useState({ key: listKey, count: PAGE_SIZE });
-  const visibleCount = shown.key === listKey ? shown.count : PAGE_SIZE;
+  const listKey = `${params.today}|${params.team ?? params.date}|${params.competitions.join(",")}|${resetKey}`;
+  const [shown, setShown] = useState({ key: listKey, all: false });
+  if (shown.key !== listKey) setShown({ key: listKey, all: false });
+  const expanded = shown.key === listKey && shown.all;
+  const visibleCount = expanded ? filtered.length : PAGE_SIZE;
   const visible = filtered.slice(0, visibleCount);
   const failed = failedNames(query.data?.meta.failedCompetitionIds ?? [], competitions.data, params.competitions);
 
@@ -106,21 +138,21 @@ export function ScheduleSection() {
     params.update({ team: team?.id ?? null });
   };
 
-  const rangeStart = byTeam.data?.data.start ?? params.today;
-  const rangeEnd = byTeam.data?.data.end ?? addDaysIso(params.today, SCHEDULE_DAYS - 1);
+  const rangeStart = byTeam.data?.data.start ?? addDaysIso(params.today, -SCHEDULE_BEFORE);
+  const rangeEnd = byTeam.data?.data.end ?? addDaysIso(params.today, SCHEDULE_DAYS - SCHEDULE_BEFORE - 1);
   const retry = (
     <Button variant="ghost" onClick={() => query.refetch()}>
       다시 시도
     </Button>
   );
-  const failedText = `${failed.join("·")} 조회 실패. 확인된 일정은 유지하며, 등록된 경기가 없다고 단정하지 않습니다.`;
+  const failedText = `${failed.join("·")}에 아직 확인되지 않은 일정이 있습니다. 확인된 일정은 그대로 표시합니다.`;
 
   let body: ReactNode;
   if (!teamMode && !params.dateInRange) {
     body = (
       <ScheduleNotice
         title="조회할 수 없는 날짜입니다"
-        description="메인 일정은 오늘부터 2주 동안 제공합니다. 지난 날짜의 결과는 지난 경기에서 확인해 주세요."
+        description="메인 일정은 지난 3일부터 향후 17일까지 제공합니다. 더 이전 결과는 지난 경기에서 확인해 주세요."
       />
     );
   } else if (query.isPending) {
@@ -128,7 +160,7 @@ export function ScheduleSection() {
       <ScheduleNotice
         busy
         title="팀 경기 일정을 불러오고 있습니다"
-        description="선택한 팀·대회와 향후 2주 조회 범위를 유지합니다."
+        description="선택한 팀·대회와 21일 조회 범위를 유지합니다."
       />
     ) : (
       <ListSkeleton />
@@ -152,7 +184,7 @@ export function ScheduleSection() {
   } else if (filtered.length === 0 && teamMode && all.length > 0) {
     body = (
       <ScheduleNotice
-        title="향후 2주간 해당 팀의 선택 대회 일정이 없습니다"
+        title="조회 기간에 해당 팀의 선택 대회 일정이 없습니다"
         description="현재 대회 조건만 해제해 다른 대회 일정도 확인할 수 있습니다."
         action={
           <Button fullWidth onClick={() => params.update({ competitions: [] })}>
@@ -164,7 +196,7 @@ export function ScheduleSection() {
   } else if (filtered.length === 0 && teamMode) {
     body = (
       <ScheduleNotice
-        title="향후 2주간 등록된 경기 일정이 없습니다"
+        title="조회 기간에 등록된 경기 일정이 없습니다"
         description={`${selectedTeam ? teamName(selectedTeam) : "선택한 팀"} · ${monthDay(rangeStart)}–${monthDay(rangeEnd)} · 지원 14개 대회 기준`}
       />
     );
@@ -199,9 +231,9 @@ export function ScheduleSection() {
           />
         )}
         {teamMode ? <ByDate matches={visible} /> : <MatchList matches={visible} />}
-        {filtered.length > visibleCount && (
-          <Button fullWidth onClick={() => setShown({ key: listKey, count: visibleCount + PAGE_SIZE })}>
-            경기 더 보기 ({visibleCount}/{filtered.length})
+        {filtered.length > PAGE_SIZE && (
+          <Button fullWidth aria-expanded={expanded} onClick={() => setShown({ key: listKey, all: !expanded })}>
+            {expanded ? "접기" : `경기 전체 보기 (${PAGE_SIZE}/${filtered.length})`}
           </Button>
         )}
       </div>
@@ -228,10 +260,10 @@ export function ScheduleSection() {
         <div className="flex items-end gap-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="text-subtitle font-bold">
-              {selectedTeam ? `${teamName(selectedTeam)} 경기 일정 · 향후 2주` : "팀 경기 일정 · 향후 2주"}
+              {selectedTeam ? `${teamName(selectedTeam)} 경기 일정 · 21일 모아 보기` : "팀 경기 일정 · 21일 모아 보기"}
             </p>
             <p className="text-small text-fg-secondary">
-              {formatShortDate(rangeStart)}–{formatShortDate(rangeEnd)} · 오늘 포함 14일
+              {formatShortDate(rangeStart)}–{formatShortDate(rangeEnd)} · 지난 3일부터 향후 17일까지
             </p>
           </div>
           {live && <UpdatedAt value={byTeam.data?.meta.updatedAt} checkedAt={byTeam.dataUpdatedAt} />}
@@ -246,6 +278,8 @@ export function ScheduleSection() {
           selected={params.date}
           onSelect={(date) => params.update({ date: date === params.today ? null : date })}
           resetKey={resetKey}
+          availability={dates}
+          visible={!teamMode}
         />
       </div>
 
@@ -254,7 +288,8 @@ export function ScheduleSection() {
           <CompetitionFilter
             competitions={competitions.data}
             selected={params.competitions}
-            onChange={(ids) => params.update({ competitions: ids })}
+            onChange={selectCompetitions}
+            unavailable={unavailable}
           />
         ) : competitions.isError ? (
           <p className="flex items-center gap-2 text-small text-error">
@@ -267,7 +302,9 @@ export function ScheduleSection() {
           <Skeleton className="h-11 w-full" />
         )}
         {/* Remounted by a reset: also clears a typed term that never selected a team. */}
-        <TeamSearch key={resetKey} selected={selectedTeam} onSelect={selectTeam} />
+        <TeamSearch key={resetKey} selected={selectedTeam} onSelect={selectTeam}
+          description="팀을 선택하면 지난 3일부터 향후 17일까지의 경기를 모아봅니다. 대회별로 좁혀볼 수 있습니다."
+        />
         {favoriteTeams.length > 0 && (
           <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="관심 팀 일정">
             <span className="w-[54px] shrink-0 text-small text-fg-muted">관심 팀</span>
@@ -287,11 +324,6 @@ export function ScheduleSection() {
             })}
           </div>
         )}
-        {teamMode && (
-          <Button variant="ghost" fullWidth onClick={() => selectTeam(null)}>
-            팀 검색 해제
-          </Button>
-        )}
       </div>
 
       {!teamMode && (
@@ -303,7 +335,7 @@ export function ScheduleSection() {
 
       <div>{body}</div>
 
-      {!teamMode && <p className="text-small text-fg-muted">지난 날짜의 결과는 지난 경기에서 확인할 수 있습니다.</p>}
+      {!teamMode && <p className="text-small text-fg-muted">지난 날짜의 결과도 같은 경기 상세에서 확인할 수 있습니다.</p>}
     </section>
   );
 }

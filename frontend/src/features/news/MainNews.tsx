@@ -22,6 +22,7 @@ function newsQuery(badge: NewsBadge | null) {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.meta.nextCursor,
     staleTime: 5 * 60_000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -55,9 +56,10 @@ export function MainNews() {
       aria-labelledby="news-title"
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
     >
-      <h2 id="news-title" className="text-subtitle font-bold">
-        주요 뉴스
-      </h2>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        <h2 id="news-title" className="text-subtitle font-bold">주요 뉴스</h2>
+        <p className="text-small text-fg-secondary">매시간 수집 · 전체 최신 최대 48개</p>
+      </div>
       <div className="-mx-1 overflow-x-auto px-1 py-1 [scrollbar-width:none]" role="group" aria-label="뉴스 분류">
         <div className="flex w-max gap-2">
           {[null, ...BADGES].map((value) => (
@@ -80,7 +82,7 @@ export function MainNews() {
         errorTitle="뉴스를 불러오지 못했습니다"
         onRetry={() => news.refetch()}
         emptyTitle={badge ? "선택한 분류의 뉴스가 없습니다" : "관련 한국어 뉴스가 없습니다"}
-        emptyDescription="대회를 확실히 판단할 수 없는 기사는 보여주지 않습니다."
+        emptyDescription={meta?.stale ? "최신 뉴스 수집에 실패했습니다." : "대회를 확실히 판단할 수 없는 기사는 보여주지 않습니다."}
         partialNotice="최신 뉴스를 불러오지 못해 마지막으로 수집한 기사를 보여줍니다."
         loadingFallback={
           <div className="grid gap-4 md:grid-cols-2">
@@ -89,6 +91,11 @@ export function MainNews() {
           </div>
         }
       >
+        {meta?.noNew && !meta.stale && !news.isRefetchError && (
+          <p className="mb-4 rounded-control bg-subtle p-3 text-small text-fg-secondary">
+            새로 수집된 뉴스가 없어 기존 목록을 표시합니다.
+          </p>
+        )}
         <ul className="grid gap-4 md:grid-cols-2">
           {articles.map((article) => (
             <li key={article.id}>
@@ -103,7 +110,7 @@ export function MainNews() {
             disabled={news.isFetchingNextPage}
             onClick={() => news.fetchNextPage()}
           >
-            {news.isFetchingNextPage ? "불러오는 중" : "뉴스 더 보기"}
+            {news.isFetchingNextPage ? "불러오는 중" : `뉴스 더 보기 (${articles.length}/${meta?.total ?? articles.length})`}
           </Button>
         )}
         {news.isFetchNextPageError && (

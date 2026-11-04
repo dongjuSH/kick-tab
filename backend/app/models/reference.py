@@ -78,6 +78,8 @@ class CompetitionSeason(Base):
     teams_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fixtures_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fixtures_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fixtures_window_start: Mapped[date | None] = mapped_column(Date)
+    fixtures_window_end: Mapped[date | None] = mapped_column(Date)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -30,9 +30,11 @@ function teamSearchQuery(q: string) {
 export function TeamSearch({
   selected,
   onSelect,
+  description,
 }: {
   selected: TeamRef | null;
   onSelect: (team: TeamRef | null) => void;
+  description?: string;
 }) {
   const [text, setText] = useState(selected ? teamName(selected) : "");
   const [open, setOpen] = useState(false);
@@ -80,19 +82,25 @@ export function TeamSearch({
 
   return (
     <div ref={boxRef} className="relative">
-      <div className="flex items-center gap-2">
+      {description && <label htmlFor={`${listId}-input`} className="mb-2 block text-body font-bold">팀 일정 검색</label>}
+      {description && <p id={`${listId}-help`} className="mb-3 text-small text-fg-secondary">{description}</p>}
+      <div className="relative flex items-center">
+        <span className="pointer-events-none absolute left-3 text-fg-secondary"><Icon name="search" /></span>
         <label className="flex min-h-11 min-w-0 flex-1 items-center">
-          <span className="sr-only">팀 검색</span>
+          {!description && <span className="sr-only">팀 검색</span>}
           <input
             ref={inputRef}
+            id={`${listId}-input`}
             type="search"
             role="combobox"
             aria-expanded={showList}
             aria-controls={listId}
             aria-autocomplete="list"
+            aria-describedby={description ? `${listId}-help` : undefined}
             aria-activedescendant={showList && results.length ? optionId(active) : undefined}
             autoComplete="off"
-            placeholder="팀 검색 · 맨시티, Man City"
+            placeholder="예: 맨시티, 레알 마드리드, Bayern Munich"
+            maxLength={40}
             value={text}
             onChange={(event) => {
               setText(event.target.value);
@@ -117,10 +125,10 @@ export function TeamSearch({
                 pick(results[active]);
               }
             }}
-            className="h-10 w-full rounded-control border border-line-strong bg-surface px-3 text-body text-fg placeholder:text-fg-muted [&::-webkit-search-cancel-button]:hidden"
+            className="h-11 w-full rounded-control border border-line-strong bg-surface pl-9 pr-11 text-body text-fg placeholder:text-fg-muted [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
-        {text && <IconButton icon="x" label="검색어 지우기" onClick={clear} />}
+        {text && <IconButton className="absolute right-0" icon="x" label="검색어 지우기" onClick={clear} />}
       </div>
 
       {showList && (
