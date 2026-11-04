@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-04 · 01 변경:** `frontend/public/brand/logo-{header,mobile,footer}.svg` 승인 로고, `frontend/src/app/favicon.ico` 승인 파비콘(이전 `icon.svg` 제거), `Logo.tsx` 사용처 연결, `MainNav.tsx` 상태별 글자 위치·밑줄, `Top5Strip.tsx`·`model.ts`·`globals.css` 요약 띠·순환·표기.
+
 > TOP 5는 [2026-11-02 개정 정책](../../docs/TOP5_POLICY_2026-11-01.md)(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.
 
 기준: 2026-11-03 (화, 04 경기 상세·AI 주간 TOP 5 완료 — Codex 교차 검증 통과), 브랜치 `feat/04-match-detail`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
