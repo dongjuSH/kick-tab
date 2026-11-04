@@ -28,12 +28,12 @@
   --kt-status-error: #b91c1c;
   --kt-status-error-bg: #fef2f2;
   /* Logo keycap face / Tab arrow / keycap rim (Figma 46:258, 96:412). */
-  --kt-brand-key: #eff6ff;
+  --kt-brand-key: #f8fafc;
   --kt-brand-arrow: #2563eb;
-  --kt-brand-rim: #cbd5e1;
+  --kt-brand-rim: #e2e8f0;
 
-  /* Sticky header + TOP 5 strip height, used for scroll offsets (Figma 128:4408: 68+1+84+1). */
-  --kt-header-height: 154px;
+  /* Sticky header + compact TOP 5: 69 + 72 on mobile, 85 + 44 on desktop. */
+  --kt-header-height: 141px;
   --kt-gutter: 16px;
 }
 
@@ -45,9 +45,23 @@
 
 @media (min-width: 1024px) {
   :root {
-    /* Figma 128:3700: 84+1+60+1. */
-    --kt-header-height: 146px;
+    --kt-header-height: 129px;
   }
+}
+
+.kt-ticker-copy { display: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .kt-ticker[data-overflow] .kt-ticker-copy { display: inline; }
+  .kt-ticker[data-overflow] .kt-ticker-track {
+    animation: kt-ticker-slide var(--kt-ticker-duration) linear infinite;
+  }
+  .kt-ticker:hover .kt-ticker-track,
+  .kt-ticker-trigger:focus-within .kt-ticker-track { animation-play-state: paused; }
+}
+
+@keyframes kt-ticker-slide {
+  to { transform: translateX(calc(-1 * var(--kt-ticker-distance))); }
 }
 
 @theme inline {

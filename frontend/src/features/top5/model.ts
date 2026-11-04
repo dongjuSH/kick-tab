@@ -1,6 +1,6 @@
-import type { MatchSummary, TopMatchItem, TopMatches } from "@/lib/api/types";
+import type { TopMatchItem, TopMatches } from "@/lib/api/types";
 import { formatKstDateTime, formatKstMonthDayTime, formatPeriod } from "@/lib/format/kst";
-import { isChanged, scoreText, statusWord, teamName } from "@/lib/format/match";
+import { teamName } from "@/lib/format/match";
 
 /**
  * Presentation rules of the AI weekly TOP 5 (docs/TOP5_POLICY 2026-11-02 revision, guide
@@ -62,23 +62,18 @@ export function periodText(data: TopMatches): string {
   return formatPeriod(data.week.start, data.week.end);
 }
 
-export function weekText(data: TopMatches): string {
-  return `${periodText(data)} · KST`;
-}
-
-/** "10/26(월)–11/1(일) · KST · 선정 시각 2026-10-26 00:00 KST" (Figma Metadata). */
 export function metadataText(data: TopMatches): string {
-  const selected = data.selectedAt && `선정 시각 ${formatKstDateTime(data.selectedAt)} KST`;
-  return [weekText(data), selected].filter(Boolean).join(" · ");
+  const selected = data.selectedAt && `선정 시각 ${formatKstDateTime(data.selectedAt)}`;
+  return [periodText(data), selected].filter(Boolean).join(" · ");
 }
 
 /** Kickoff as selected (D-01-10); a later change appears on the change line. */
 export function kickoffText(item: TopMatchItem): string {
-  return `${formatKstMonthDayTime(item.selectedKickoffAt)} KST`;
+  return formatKstMonthDayTime(item.selectedKickoffAt);
 }
 
 /**
- * "변경 일시 11/12(목) 03:00 KST" when the kickoff moved after the selection, "변경 일시 미정"
+ * "변경 일시 11/12(목) 03:00" when the kickoff moved after the selection, "변경 일시 미정"
  * while a postponed match has no new time. A postponed match keeps its id (guide §6.4 PST).
  */
 export function changeText(item: TopMatchItem): string | null {
@@ -86,39 +81,16 @@ export function changeText(item: TopMatchItem): string | null {
   const reason = match.statusReason ? ` · ${match.statusReason}` : "";
   if (match.status === "postponed" && !match.timeConfirmed) return `변경 일시 미정${reason}`;
   if (Date.parse(match.kickoffAt) !== Date.parse(item.selectedKickoffAt)) {
-    const when = match.timeConfirmed ? `${formatKstMonthDayTime(match.kickoffAt)} KST` : "미정";
+    const when = match.timeConfirmed ? formatKstMonthDayTime(match.kickoffAt) : "미정";
     return `변경 일시 ${when}${reason}`;
   }
   return null;
 }
 
-/** Desktop strip: the first two items, or the notice (Figma 159:122·159:305·159:389). */
-export function desktopSummary(data: TopMatches): string {
-  const notice = noticeOf(data);
-  if (notice) return noticeCopy(notice, data).title;
+export function lineupText(data: TopMatches): string {
   return data.items
-    .slice(0, 2)
     .map(({ rank, match }) =>
-      `${rank} ${teamName(match.home)} ${scoreText(match)} ${teamName(match.away)} · ${statusWord(match)}`,
+      `${rank}. ${teamName(match.home)} vs ${teamName(match.away)}`,
     )
-    .join("  |  ");
-}
-
-const STATUS_GROUPS = ["예정", "진행", "종료", "확인 필요"] as const;
-
-function statusGroup(match: MatchSummary): (typeof STATUS_GROUPS)[number] {
-  if (match.status === "scheduled") return "예정";
-  if (match.status === "live") return "진행";
-  if (match.status === "finished") return "종료";
-  return "확인 필요";
-}
-
-/** Mobile strip line after the period (Figma 159:523): "5경기 · 예정·진행·종료". */
-export function mobileListSummary(data: TopMatches): string {
-  const count = `${data.items.length}경기`;
-  const matches = data.items.map((item) => item.match);
-  const changed = [...new Set(matches.filter(isChanged).map(statusWord))];
-  if (changed.length) return `${count} · ${changed.join("·")} 포함`;
-  const groups = new Set(matches.map(statusGroup));
-  return `${count} · ${STATUS_GROUPS.filter((g) => groups.has(g)).join("·")}`;
+    .join(" · ");
 }

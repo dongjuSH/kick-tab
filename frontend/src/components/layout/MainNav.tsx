@@ -30,12 +30,19 @@ function NavList({ pathname }: { pathname: string | null }) {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cx(
-                  "flex w-24 flex-col items-center gap-1.5 text-center text-body",
-                  active ? "font-bold text-action" : "font-medium text-fg-secondary hover:text-fg",
+                  "group flex h-11 w-24 items-center justify-center rounded-control text-body font-medium",
+                  active ? "text-action" : "text-fg-secondary hover:text-fg",
                 )}
               >
-                {item.label}
-                {active && <span aria-hidden className="h-0.5 w-full bg-action" />}
+                <span className="relative">
+                  {item.label}
+                  <span aria-hidden className={cx(
+                    "absolute inset-x-0 -bottom-1.5 h-0.5 origin-center rounded-full",
+                    active
+                      ? "bg-action"
+                      : "scale-x-0 bg-line-strong transition-transform duration-200 ease-out group-hover:scale-x-100 group-focus-visible:scale-x-100 group-focus-visible:bg-action motion-reduce:transition-none",
+                  )} />
+                </span>
               </Link>
             </li>
           );

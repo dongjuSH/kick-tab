@@ -12,13 +12,12 @@ import { cx } from "@/components/ui/cx";
 import { DESKTOP_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { Top5List } from "./Top5List";
 import {
-  desktopSummary,
-  mobileListSummary,
+  isPrevious,
+  lineupText,
   noticeCopy,
   noticeOf,
   periodText,
   titleOf,
-  weekText,
 } from "./model";
 import { currentTopMatchesQuery, isOutdated, topMatchesVersionQuery } from "./queries";
 
@@ -26,6 +25,39 @@ const CLOSE_LABEL = "주목 경기 목록 닫기";
 // Before the first answer the strip names this week's list (the title follows the data).
 const DEFAULT_TITLE = "이번 주 주목 경기 TOP 5";
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const STRIP_LAYOUT = "grid min-h-[72px] w-full grid-cols-[minmax(0,1fr)_44px] grid-rows-[44px_1fr] items-center gap-x-2 rounded-control text-left lg:min-h-11 lg:grid-cols-[auto_minmax(0,1fr)_44px] lg:grid-rows-1 lg:gap-x-4";
+const SUMMARY_POSITION = "col-span-2 row-start-2 min-w-0 self-start pb-2 text-small text-fg-secondary lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:self-center lg:pb-0";
+
+function Lineup({ text }: { text: string }) {
+  const viewport = useRef<HTMLSpanElement>(null);
+  const first = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const box = viewport.current;
+    const item = first.current;
+    if (!box || !item) return;
+    const measure = () => {
+      const width = item.getBoundingClientRect().width;
+      const distance = width + 48;
+      box.style.setProperty("--kt-ticker-distance", `${distance}px`);
+      box.style.setProperty("--kt-ticker-duration", `${distance / 32}s`);
+      box.toggleAttribute("data-overflow", width > box.clientWidth);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    observer.observe(item);
+    measure();
+    return () => observer.disconnect();
+  }, [text]);
+  return (
+    <span ref={viewport} className="kt-ticker block overflow-hidden">
+      <span className="sr-only">{text}</span>
+      <span aria-hidden className="kt-ticker-track flex w-max gap-12 whitespace-nowrap">
+        <span ref={first}>{text}</span>
+        <span className="kt-ticker-copy">{text}</span>
+      </span>
+    </span>
+  );
+}
 
 /** "AI 선정" badge over the title (Figma 159:924 header); read together as the heading. */
 function PanelTitle({ children }: { children: ReactNode }) {
@@ -150,18 +182,10 @@ export function Top5Strip() {
       onSelect={() => setOpen(false)}
     />
   );
-  const summary = (text: (value: NonNullable<typeof data>) => string, skeleton: string) =>
-    data ? (
-      // whitespace-pre keeps the "  |  " gaps of the design between the two matches.
-      <span className="overflow-hidden text-ellipsis whitespace-pre">{text(data)}</span>
-    ) : isPending ? (
-      <Skeleton className={skeleton} />
-    ) : (
-      <span className="truncate text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>
-    );
+  const notice = data && noticeOf(data);
 
   return (
-    <div ref={root} className="border-b border-line bg-action-soft">
+    <div ref={root} className="bg-action-soft">
       <div className="kt-container">
         <button
           ref={toggle}
@@ -174,37 +198,23 @@ export function Top5Strip() {
             if (!open && isStale) void refetch();
             setOpen((value) => !value);
           }}
-          className="flex w-full flex-col gap-1 rounded-control py-2 text-left"
+          className={cx("kt-ticker-trigger", STRIP_LAYOUT)}
         >
-          <span className="flex w-full items-center gap-2">
-            <Badge tone="accent">
-              AI 선정
-            </Badge>
-            <span className="min-w-0 flex-1 text-small leading-[18px] font-bold text-fg lg:w-[310px] lg:flex-none lg:text-body lg:leading-[22px]">
-              {titleText}
-            </span>
-            <span className="hidden w-[180px] shrink-0 text-small text-fg-muted lg:block">
-              {data && weekText(data)}
-            </span>
-            <span className="hidden min-w-0 flex-1 text-small text-fg-secondary lg:flex">
-              {summary(desktopSummary, "h-4 w-64")}
-            </span>
-            <span className="flex size-11 shrink-0 items-center justify-center">
-              <Icon name="chevron-down" className={cx("transition-transform", open && "rotate-180")} />
-            </span>
-            <span className="sr-only">{open ? "목록 접기" : "목록 펼치기"}</span>
+          <span className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-2 text-small lg:flex-nowrap">
+            <span className="shrink-0 font-medium text-action">AI 선정</span>
+            <span className="font-bold lg:hidden">{data && isPrevious(data) ? "지난주 TOP 5" : "이번 주 TOP 5"}</span>
+            <span className="hidden whitespace-nowrap font-bold lg:inline lg:text-body">{titleText}</span>
+            {data && <span className="whitespace-nowrap text-fg-secondary">{periodText(data)}</span>}
           </span>
-          {data && noticeOf(data) ? (
-            // Mobile none/delayed (Figma 159:708·159:795): period, then the notice; wraps.
-            <span className="flex w-full flex-col text-small text-fg-secondary lg:hidden">
-              <span>{weekText(data)}</span>
-              <span>{noticeCopy(noticeOf(data)!, data).short}</span>
-            </span>
-          ) : (
-            <span className="flex w-full text-small text-fg-secondary lg:hidden">
-              {summary((value) => `${periodText(value)} · ${mobileListSummary(value)}`, "h-4 w-56")}
-            </span>
-          )}
+          <span className={SUMMARY_POSITION}>
+            {data ? (notice ? noticeCopy(notice, data).short : <Lineup text={lineupText(data)} />)
+              : isPending ? <Skeleton className="h-4 w-40" />
+              : <span className="text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>}
+          </span>
+          <span className="col-start-2 row-start-1 flex size-11 items-center justify-center lg:col-start-3">
+            <Icon name="chevron-down" className={cx("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+          </span>
+          <span className="sr-only">{open ? "목록 접기" : "목록 펼치기"}</span>
         </button>
       </div>
 
@@ -216,7 +226,7 @@ export function Top5Strip() {
             tabIndex={-1}
             aria-label={CLOSE_LABEL}
             onClick={closePanel}
-            className="fixed inset-x-0 bottom-0 top-(--kt-header-height) z-0 cursor-default bg-fg/12"
+            className="fixed inset-x-0 bottom-0 top-(--kt-header-height) z-0 cursor-pointer bg-fg/12"
           />
           {/* The container's side gutters let clicks through to the dimmed backdrop. */}
           <div className="kt-container pointer-events-none absolute inset-x-0 top-full z-10">
@@ -260,21 +270,12 @@ export function Top5Strip() {
  */
 export function Top5StripFallback() {
   return (
-    <div className="border-b border-line bg-action-soft" aria-busy>
-      <div className="kt-container flex flex-col gap-1 py-2">
-        <span className="flex w-full items-center gap-2">
-          <Badge tone="accent">AI 선정</Badge>
-          <span className="min-w-0 flex-1 text-small leading-[18px] font-bold text-fg lg:w-[310px] lg:flex-none lg:text-body lg:leading-[22px]">
-            {DEFAULT_TITLE}
-          </span>
-          <span className="hidden min-w-0 flex-1 lg:flex">
-            <Skeleton className="h-4 w-64" />
-          </span>
-          <span className="size-11 shrink-0" />
-        </span>
-        <span className="flex w-full lg:hidden">
-          <Skeleton className="h-4 w-56" />
-        </span>
+    <div className="bg-action-soft" aria-busy>
+      <div className="kt-container">
+        <div className={STRIP_LAYOUT}>
+          <span className="text-small font-bold lg:text-body">AI 선정 <span className="lg:hidden">이번 주 TOP 5</span><span className="hidden lg:inline">{DEFAULT_TITLE}</span></span>
+          <span className={SUMMARY_POSITION}><Skeleton className="h-4 w-40" /></span>
+        </div>
       </div>
     </div>
   );
