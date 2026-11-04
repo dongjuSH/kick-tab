@@ -111,7 +111,7 @@ def test_shown_publication(latest, shown):
 def test_prompt_lists_rules_and_candidates_only_as_given():
     prompt = build_prompt([{"fixtureId": 1000, "home": {"name": "맨체스터 시티"}}], 1)
     assert "정확히 1개" in prompt
-    assert "제공되지 않은 사실" in prompt and "실제 인기 수치가 아니다" in prompt
+    assert "제공되지 않은 사실" in prompt and "실제 시청률이나 인기 수치가 아니다" in prompt
     assert '"fixtureId":1000' in prompt
 
 
