@@ -24,6 +24,7 @@ from app.schemas.match import CompetitionRef, TeamRef
 from app.seed.competitions import COMPETITIONS, LEAGUE_IDS
 
 ALIAS_SEED_PATH = Path(__file__).resolve().parents[1] / "seed" / "team_aliases.json"
+UEFA_NAMES_PATH = ALIAS_SEED_PATH.with_name("uefa_team_names.json")
 _IGNORED_CHARS = frozenset(" \t\n.-·'’`_/&()")
 
 
@@ -97,7 +98,23 @@ class AliasSeedResult:
 
 
 def load_alias_seed(path: Path = ALIAS_SEED_PATH) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    seed = json.loads(path.read_text(encoding="utf-8"))
+    if path == ALIAS_SEED_PATH:
+        existing = {entry["id"] for entry in seed["teams"]}
+        for entry in json.loads(UEFA_NAMES_PATH.read_text(encoding="utf-8")):
+            if entry["id"] in existing:
+                continue
+            # Do not turn short names such as Riga, Viking or Bravo into news evidence.
+            # Korean display names and full provider names are still searchable.
+            aliases = entry["aliases"]
+            search_only = [*aliases]
+            if " " not in entry["en"]:
+                search_only.extend([entry["en"], entry["nameKo"]])
+            seed["teams"].append({
+                "id": entry["id"], "nameKo": entry["nameKo"],
+                "ko": aliases, "en": [entry["en"]], "searchOnly": search_only,
+            })
+    return seed
 
 
 def apply_alias_seed(session: Session, seed: dict[str, Any]) -> AliasSeedResult:

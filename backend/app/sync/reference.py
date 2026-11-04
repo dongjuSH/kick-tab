@@ -11,12 +11,12 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.reference import CompetitionSeason, TeamCompetitionSeason
+from app.models.reference import CompetitionSeason, Team, TeamCompetitionSeason
 from app.providers.api_football import (
     ApiFootballBudgetExceeded,
     ApiFootballConfigError,
@@ -34,6 +34,19 @@ from app.services.reference import (
 from app.sync.registry import JobContext, JobPartialFailure, register_job
 
 logger = logging.getLogger(__name__)
+
+
+def _log_missing_uefa_names(session: Session, season: int) -> None:
+    missing = list(session.scalars(
+        select(Team.id).join(TeamCompetitionSeason, TeamCompetitionSeason.team_id == Team.id)
+        .where(
+            TeamCompetitionSeason.season == season,
+            TeamCompetitionSeason.competition_id.in_(UEFA_IDS),
+            Team.name_ko.is_(None),
+        ).distinct().order_by(Team.id)
+    ))
+    if missing:
+        logger.warning("UEFA teams need Korean names (season %d): %s", season, missing)
 
 # Errors after which every further request would fail too.
 FATAL = (ApiFootballStopped, ApiFootballBudgetExceeded, ApiFootballConfigError)
@@ -140,6 +153,7 @@ def sync_reference(ctx: JobContext) -> None:
         session.commit()
 
     result = apply_alias_seed(session, load_alias_seed())
+    _log_missing_uefa_names(session, season)
     session.commit()
     logger.info(
         "aliases: %d teams named, %d aliases, %d seed teams not collected yet",
@@ -154,6 +168,7 @@ def sync_reference(ctx: JobContext) -> None:
 @register_job("team_aliases", description="Reload the team alias seed only (0 requests)")
 def sync_team_aliases(ctx: JobContext) -> None:
     result = apply_alias_seed(ctx.session, load_alias_seed())
+    _log_missing_uefa_names(ctx.session, settings.current_season)
     ctx.session.commit()
     if result.missing_team_ids:
         logger.info("seed teams not collected yet: %s", result.missing_team_ids)

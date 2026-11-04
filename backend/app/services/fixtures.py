@@ -25,10 +25,9 @@ from app.services.reference import (
     upsert_teams,
 )
 
-# Collection window around today (KST): yesterday for late results, then about two weeks
-# (guide §6.5). The schedule screen shows today..today+13.
-WINDOW_BEFORE_DAYS = 1
-WINDOW_AFTER_DAYS = 15
+# Inclusive dates for the main schedule, team view and fixture collector.
+WINDOW_BEFORE_DAYS = 3
+WINDOW_AFTER_DAYS = 17
 # Live sync runs when a match is live, starts within this lead time, or should have started
 # within the lag (kickoff passed but the provider has not switched it to live yet).
 LIVE_LEAD = timedelta(minutes=30)
@@ -219,13 +218,17 @@ class SyncState:
     never_synced: bool
 
 
-def sync_state(session: Session, season: int | None = None) -> SyncState:
+def sync_state(
+    session: Session, season: int | None = None, *, window: tuple[date, date] | None = None
+) -> SyncState:
     season = season or settings.current_season
     rows = session.execute(
         select(
             CompetitionSeason.competition_id,
             CompetitionSeason.fixtures_synced_at,
             CompetitionSeason.fixtures_failed_at,
+            CompetitionSeason.fixtures_window_start,
+            CompetitionSeason.fixtures_window_end,
         ).where(
             CompetitionSeason.season == season,
             CompetitionSeason.availability == "available",
@@ -233,12 +236,13 @@ def sync_state(session: Session, season: int | None = None) -> SyncState:
     ).all()
     failed = [
         cid
-        for cid, ok_at, failed_at in rows
+        for cid, ok_at, failed_at, start, end in rows
         if ok_at is None or (failed_at is not None and failed_at > ok_at)
+        or (window is not None and not (start and end and start <= window[0] <= window[1] <= end))
     ]
     return SyncState(
         failed_competition_ids=sorted(failed),
-        never_synced=not rows or all(ok_at is None for _, ok_at, _ in rows),
+        never_synced=not rows or all(row.fixtures_synced_at is None for row in rows),
     )
 
 
@@ -248,13 +252,55 @@ def fixtures_on(session: Session, day: date) -> tuple[list[MatchSummary], dateti
     return [s for _, s in rows], updated
 
 
-# Team view of the main schedule: today .. today+13 KST (SCHEDULE_UX_POLICY 2026-11-02).
-TEAM_SCHEDULE_DAYS = 14
-
-
 def team_schedule_window(today: date | None = None) -> tuple[date, date]:
-    today = today or kst_today()
-    return today, today + timedelta(days=TEAM_SCHEDULE_DAYS - 1)
+    return collection_window(today)
+
+
+def fixture_availability(
+    session: Session, start: date, end: date
+) -> list[tuple[date, list[int], list[int]]]:
+    """For each date, stored matches and competitions without complete coverage."""
+    sources = session.execute(
+        select(Competition.id, CompetitionSeason)
+        .outerjoin(
+            CompetitionSeason,
+            (CompetitionSeason.competition_id == Competition.id)
+            & (CompetitionSeason.season == settings.current_season),
+        )
+        .where(Competition.active)
+    ).all()
+    observed: dict[date, set[int]] = {}
+    for day, cid in session.execute(
+        select(Fixture.kickoff_date_kst, Fixture.competition_id)
+        .join(Competition, Competition.id == Fixture.competition_id)
+        .where(Competition.active, Fixture.kickoff_date_kst.between(start, end))
+        .distinct()
+    ):
+        observed.setdefault(day, set()).add(cid)
+
+    def covered(source: CompetitionSeason | None, day: date) -> bool:
+        if source is None:
+            return False
+        if source.availability == "no_data":
+            return True  # the provider has no supported season for this competition
+        return bool(
+            source.fixtures_synced_at
+            and (not source.fixtures_failed_at
+                 or source.fixtures_failed_at <= source.fixtures_synced_at)
+            and source.fixtures_window_start
+            and source.fixtures_window_end
+            and source.fixtures_window_start <= day <= source.fixtures_window_end
+        )
+
+    days = (start + timedelta(days=i) for i in range((end - start).days + 1))
+    return [
+        (
+            day,
+            sorted(observed.get(day, ())),
+            sorted(cid for cid, row in sources if not covered(row, day)),
+        )
+        for day in days
+    ]
 
 
 def team_schedule(

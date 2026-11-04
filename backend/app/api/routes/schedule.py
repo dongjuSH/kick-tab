@@ -23,6 +23,9 @@ from app.schemas.schedule import (
     CompetitionsResponse,
     FavoriteSchedule,
     FavoriteScheduleResponse,
+    FixtureAvailability,
+    FixtureAvailabilityResponse,
+    FixtureDateAvailability,
     FixturesResponse,
     NewsBadge,
     NewsLink,
@@ -36,6 +39,7 @@ from app.schemas.schedule import (
 )
 from app.services.fixtures import (
     collection_window,
+    fixture_availability,
     fixtures_on,
     next_for_teams,
     sync_state,
@@ -108,7 +112,7 @@ def read_fixtures(
             f"조회할 수 있는 날짜는 {start.isoformat()}부터 {end.isoformat()}까지입니다.",
             details={"fields": {"date": "조회 가능한 날짜 범위를 벗어났습니다."}},
         )
-    state = sync_state(db)
+    state = sync_state(db, window=(day, day))
     matches, updated_at = fixtures_on(db, day)
     if state.never_synced or (not matches and _all_failed(db, state.failed_competition_ids)):
         raise ApiError(503, "UPSTREAM_UNAVAILABLE", NOT_COLLECTED)
@@ -131,6 +135,19 @@ def _all_failed(db: Session, failed_ids: list[int]) -> bool:
         .limit(1)
     )
     return available is None
+
+
+@router.get("/fixtures/availability")
+def read_fixture_availability(db: Db) -> FixtureAvailabilityResponse:
+    start, end = collection_window()
+    return FixtureAvailabilityResponse(data=FixtureAvailability(
+        start=start,
+        end=end,
+        dates=[
+            FixtureDateAvailability(date=day, competition_ids=ids, unknown_competition_ids=unknown)
+            for day, ids, unknown in fixture_availability(db, start, end)
+        ],
+    ))
 
 
 @router.get("/fixtures/next")
@@ -167,13 +184,13 @@ def read_favorite_schedule(
 def read_team_schedule(
     db: Db, team: Annotated[int, Query(gt=0, description="Team id")]
 ) -> TeamScheduleResponse:
-    """Team view of the main schedule: the team's stored matches today .. today+13 KST.
+    """Team view: the team's stored matches today-3 .. today+17 KST.
     Competition filters are applied on screen; `failedCompetitionIds` tells which
     competitions may be incomplete, so "no matches" is never claimed for them."""
-    state = sync_state(db)
+    start, end = team_schedule_window()
+    state = sync_state(db, window=(start, end))
     if state.never_synced:
         raise ApiError(503, "UPSTREAM_UNAVAILABLE", NOT_COLLECTED)
-    start, end = team_schedule_window()
     found, matches, updated_at = team_schedule(db, team, start, end)
     if found is None:
         raise ApiError(404, "NOT_FOUND", "팀을 찾을 수 없습니다. 팀 검색으로 다시 선택해 주세요.")
@@ -208,7 +225,7 @@ def read_news(
         # Nothing stored and the collection never worked / just failed: not "no news".
         raise ApiError(503, "UPSTREAM_UNAVAILABLE", NEWS_NOT_COLLECTED)
     try:
-        items, next_cursor = list_news(db, now, badge=badge, size=size, cursor=cursor)
+        items, next_cursor, total = list_news(db, now, badge=badge, size=size, cursor=cursor)
     except InvalidCursor:
         raise ApiError(
             422,
@@ -218,7 +235,10 @@ def read_news(
         ) from None
     return NewsResponse(
         data=items,
-        meta=NewsMeta(next_cursor=next_cursor, updated_at=state.updated_at, stale=state.stale),
+        meta=NewsMeta(
+            next_cursor=next_cursor, total=total, updated_at=state.updated_at,
+            stale=state.stale, no_new=state.no_new,
+        ),
     )
 
 

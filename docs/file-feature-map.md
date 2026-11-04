@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-04 · 03 변경:** `migrations/versions/20261104_0009_fixture_coverage.py`·`models/reference.py` 수집 범위 저장, `services/fixtures.py`·`routes/schedule.py` 날짜별 가용성·21일 조회, `seed/uefa_team_names.json`·`services/reference.py` UEFA 한국어 이름·별칭. `services/news.py` 최근 48개·수집 상태, `services/news_classify.py`·`sync/news.py` 주제 판별과 실패 시 목록 유지, `sync/scheduler.py` 뉴스 단독 예약. `DateBar`·`ScheduleSection` 일정 UI, `CompetitionFilter` 대회 체크 초안, `TeamSearch` 통합 X, `MainNews` 갱신·개수 표시. 아래 2026-11-03 기준 표와 충돌하는 부분은 이 변경을 우선한다.
+
 **2026-11-04 · 01 변경:** `frontend/public/brand/logo-{header,mobile,footer}.svg` 승인 로고, `frontend/src/app/favicon.ico` 승인 파비콘(이전 `icon.svg` 제거), `Logo.tsx` 사용처 연결, `MainNav.tsx` 상태별 글자 위치·밑줄, `Top5Strip.tsx`·`model.ts`·`globals.css` 요약 띠·순환·표기.
 
 > TOP 5는 [2026-11-02 개정 정책](../../docs/TOP5_POLICY_2026-11-01.md)(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.

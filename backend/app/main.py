@@ -12,7 +12,7 @@ from app.sync.scheduler import start_scheduler
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    scheduler = start_scheduler()  # None unless SCHEDULER_ENABLED=true
+    scheduler = start_scheduler()
     try:
         yield
     finally:

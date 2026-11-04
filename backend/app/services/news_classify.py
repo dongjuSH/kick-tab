@@ -88,6 +88,25 @@ OTHER_LEAGUE_CONTEXT = (
     r"알나스르|알힐랄|알이티하드|사우디프로리그|j리그|중국슈퍼리그"
 )
 
+_CLAUSE_BOUNDARY = re.compile(r"[,.;!?…]+")
+_BACKGROUND = re.compile(
+    r"출신|시절|과거|전직|옛\s|\b전\s+|몸담았|활약했|회상|비교|지난해|"
+    r"전\s*소속|\bformer\b|\bpreviously\b|\bcompared\b", re.IGNORECASE
+)
+
+
+def subject_text(value: str) -> str:
+    """A historical/comparative clause alone is insufficient evidence for a badge."""
+    return " ".join(
+        clause for clause in _CLAUSE_BOUNDARY.split(plain_text(value))
+        if not _BACKGROUND.search(clause)
+    )
+
+
+def other_league(*texts: str) -> bool:
+    folded, compact = _parts(*texts)
+    return bool(re.search(OTHER_LEAGUE_CONTEXT, folded) or re.search(OTHER_LEAGUE_CONTEXT, compact))
+
 # Women's football is out of scope (P-08): the whole article is dropped before any team is
 # linked, since the aliases name the men's clubs (남녀 대회 혼동 배제).
 WOMEN_MARKERS = (
@@ -210,14 +229,18 @@ def subject_competitions(
     team, or, with no team in the headline, the first team in the description. When the
     text is set in another league (MLS, Saudi…), only a headline team counts.
     """
-    mentioned = _mentioned(*_parts(title, description))
+    original_title, original_description = title, description
+    title, description = subject_text(title), subject_text(description)
+    mentioned = _mentioned(*_parts(title, description)) & _mentioned(
+        *_parts(original_title, original_description)
+    )
     in_title = _mentioned(*_parts(title))
     title_teams = index.teams(title, "")
 
     def played_by(teams: Iterable[int]) -> set[int]:
         return {c for c in mentioned if any(c in participation.get(t, ()) for t in teams)}
 
-    if re.search(OTHER_LEAGUE_CONTEXT, _parts(title, description)[1]):
+    if other_league(original_title, original_description):
         return played_by(title_teams)
     lead = index.lead_team(description)
     subjects = title_teams or ({lead} if lead is not None else set())
@@ -238,7 +261,10 @@ def classify(
     subjects = subject_competitions(title, description, index, participation or {})
     badges = {_BADGE_OF[c] for c in subjects}
     badge = choose_badge(badges)
-    teams = tuple(sorted(index.teams(title, description)))
+    title_teams = index.teams(subject_text(title), "")
+    linked = index.teams(subject_text(title), subject_text(description))
+    # A team named only in the background of an out-of-scope story is not a team news item.
+    teams = tuple(sorted(title_teams if other_league(title, description) else linked))
     if not teams and not any(word in compact for word in FOOTBALL_CONTEXT):
         reason = "no_football_context"
     elif badge is None and len(badges) > 1:

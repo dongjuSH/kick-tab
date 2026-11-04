@@ -1,4 +1,4 @@
-"""News sync (every 30 min): NAVER search per league/UEFA query -> classify -> store.
+"""Hourly news sync: NAVER search per league/UEFA query -> classify -> store.
 
 8 search requests per run (one per query, newest 100 each). Stored: provider title,
 description, original link and publish time only, until NEWS_RETENTION_HOURS after
@@ -8,6 +8,7 @@ title syndicated under another URL) is stored once.
 
 import hashlib
 import logging
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -93,7 +94,7 @@ def _participation(session: Session) -> dict[int, frozenset[int]]:
 @register_job(
     "news",
     description="NAVER news for the five leagues and UEFA (8 search requests)",
-    schedule={"trigger": "interval", "minutes": 30},
+    schedule={"trigger": "cron", "minute": 0},
 )
 def sync_news(ctx: JobContext) -> None:
     session = ctx.session
@@ -102,7 +103,10 @@ def sync_news(ctx: JobContext) -> None:
     index = _alias_index(session)
     participation = _participation(session)
     seen_hashes = set(session.scalars(select(NewsArticle.url_hash)))
-    seen_titles = set(session.scalars(select(NewsArticle.title)))
+    def title_key(title: str) -> str:
+        return " ".join(unicodedata.normalize("NFKC", title).casefold().split())
+
+    seen_titles = {title_key(title) for title in session.scalars(select(NewsArticle.title))}
     failed: list[str] = []
     stats = {"fetched": 0, "stored": 0, "duplicate": 0, "excluded": 0, "old": 0}
 
@@ -132,7 +136,7 @@ def sync_news(ctx: JobContext) -> None:
                     stats["old"] += 1
                     continue
                 digest = url_hash(link)
-                if digest in seen_hashes or title in seen_titles:
+                if digest in seen_hashes or title_key(title) in seen_titles:
                     stats["duplicate"] += 1
                     continue
                 result = classify(item.title, item.description, index, participation)
@@ -163,14 +167,37 @@ def sync_news(ctx: JobContext) -> None:
                         insert(NewsArticleTeam).values(links).on_conflict_do_nothing()
                     )
                 seen_hashes.add(digest)
-                seen_titles.add(title)
+                seen_titles.add(title_key(title))
                 stats["stored"] += 1
-            session.commit()
     finally:
         client.close()
+
+    if failed:
+        session.rollback()
+        raise JobPartialFailure(f"Failed queries: {len(failed)} of {len(QUERIES)}")
+
+    # Apply the tightened classification to already-stored headlines, without invalidating
+    # their stable links or changing the configured metadata retention window.
+    for article in session.scalars(
+        select(NewsArticle).where(NewsArticle.expires_at > now, NewsArticle.fetched_at < now)
+    ):
+        classification = classify(article.title, article.description or "", index, participation)
+        badge = classification.badge if classification.keep else None
+        article.badge = badge
+        current_links = set(session.scalars(
+            select(NewsArticleTeam.team_id).where(NewsArticleTeam.article_id == article.id)
+        ))
+        wanted = set(classification.team_ids) if classification.keep else set()
+        if current_links - wanted:
+            session.execute(delete(NewsArticleTeam).where(
+                NewsArticleTeam.article_id == article.id,
+                NewsArticleTeam.team_id.in_(current_links - wanted),
+            ))
+        if wanted - current_links:
+            session.execute(insert(NewsArticleTeam).values([
+                {"article_id": article.id, "team_id": team_id} for team_id in wanted - current_links
+            ]).on_conflict_do_nothing())
 
     removed = session.execute(delete(NewsArticle).where(NewsArticle.expires_at <= now)).rowcount
     session.commit()
     logger.info("news: %s, expired removed %s", stats, removed)
-    if failed:
-        raise JobPartialFailure(f"Failed queries: {len(failed)} of {len(QUERIES)}")

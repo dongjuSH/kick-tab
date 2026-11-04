@@ -4,8 +4,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useSyncExternalStore } from "react";
 import { addDaysIso, kstTodayIso, parseIsoDate } from "@/lib/format/kst";
 
-/** The date bar covers today .. today+13 (SCH-002·003: about two weeks, 14 dates). */
-export const SCHEDULE_DAYS = 14;
+/** Three calendar weeks in KST, including three past dates. */
+export const SCHEDULE_BEFORE = 3;
+export const SCHEDULE_DAYS = 21;
 
 const DAY_MS = 86_400_000;
 const KST_OFFSET_MS = 9 * 3_600_000; // KST has no daylight saving time
@@ -58,7 +59,7 @@ function ids(value: string | null): number[] {
 
 /**
  * Main schedule filters live in the URL (guide §6.6: back/forward and sharing work):
- * `?date=2026-11-03&competitions=39,2&team=50`. With `team` the view is the team's 14 days;
+ * `?date=2026-11-03&competitions=39,2&team=50`. With `team` the view is the team's 21 days;
  * `date` stays as the date to return to when the team is cleared.
  */
 export function useScheduleParams() {
@@ -67,7 +68,7 @@ export function useScheduleParams() {
   const pathname = usePathname();
 
   const today = useKstToday();
-  const dates = Array.from({ length: SCHEDULE_DAYS }, (_, i) => addDaysIso(today, i));
+  const dates = Array.from({ length: SCHEDULE_DAYS }, (_, i) => addDaysIso(today, i - SCHEDULE_BEFORE));
   const rawDate = params.get("date");
   const date = rawDate && parseIsoDate(rawDate) ? rawDate : today;
   const team = Number(params.get("team"));

@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/client";
 import { queryKeys } from "@/lib/api/query-keys";
-import type { CompetitionItem, FavoriteSchedule, MatchSummary, ScheduleMeta, TeamSchedule } from "@/lib/api/types";
+import type { CompetitionItem, FavoriteSchedule, FixtureAvailability, MatchSummary, ScheduleMeta, TeamSchedule } from "@/lib/api/types";
 
 /**
  * Live refresh (LIVE-004, guide §6.5): the server collects every minute while a match is
@@ -51,6 +51,16 @@ export const competitionsQuery = queryOptions({
   staleTime: 60 * 60_000,
 });
 
+export function fixtureAvailabilityQuery(today: string) {
+  return queryOptions({
+    queryKey: ["fixtures", "availability", today],
+    queryFn: async ({ signal }) =>
+      (await apiFetch<FixtureAvailability>("/fixtures/availability", { signal })).data,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function fixturesByDateQuery(date: string) {
   return queryOptions({
     queryKey: queryKeys.fixtures.byDate(date),
@@ -75,7 +85,7 @@ export function favoriteScheduleQuery(teamIds: readonly number[]) {
 }
 
 /**
- * Team view: the team's stored matches today .. today+13 (schedule UX policy 2026-11-02).
+ * Team view: the team's stored matches from today−3 through today+17.
  * The server picks the window; `today` is in the key only so a new KST day fetches again.
  */
 export function teamScheduleQuery(teamId: number, today: string) {

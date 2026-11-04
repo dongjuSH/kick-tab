@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     # Only one instance may run the in-process scheduler (guide §6.5).
     scheduler_enabled: bool = False
+    # Run only news on an instance that should not start the other collection/AI jobs.
+    news_scheduler_enabled: bool = False
 
     # API-Football protection (Pro plan: 7,500/day, 300/min).
     api_football_base_url: str = "https://v3.football.api-sports.io"
