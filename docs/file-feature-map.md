@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-04 · 04 변경:** `frontend/src/features/match/ReviewGuidance.tsx` 후기 안내 팝오버(PC 호버·클릭, 모바일 탭, 키보드), `ReviewSection.tsx` 제목과 연결, `backend/app/services/top5_selection.py` 국내 시청 관심·대회 단계와 경쟁 맥락을 우선하는 프롬프트 `2026-11-04.1`.
+
 **2026-11-04 · 03 변경:** `migrations/versions/20261104_0009_fixture_coverage.py`·`models/reference.py` 수집 범위 저장, `services/fixtures.py`·`routes/schedule.py` 날짜별 가용성·21일 조회, `seed/uefa_team_names.json`·`services/reference.py` UEFA 한국어 이름·별칭. `services/news.py` 최근 48개·수집 상태, `services/news_classify.py`·`sync/news.py` 주제 판별과 실패 시 목록 유지, `sync/scheduler.py` 뉴스 단독 예약. `DateBar`·`ScheduleSection` 일정 UI, `CompetitionFilter` 대회 체크 초안, `TeamSearch` 통합 X, `MainNews` 갱신·개수 표시. 아래 2026-11-03 기준 표와 충돌하는 부분은 이 변경을 우선한다.
 
 **2026-11-04 · 01 변경:** `frontend/public/brand/logo-{header,mobile,footer}.svg` 승인 로고, `frontend/src/app/favicon.ico` 승인 파비콘(이전 `icon.svg` 제거), `Logo.tsx` 사용처 연결, `MainNav.tsx` 상태별 글자 위치·밑줄, `Top5Strip.tsx`·`model.ts`·`globals.css` 요약 띠·순환·표기.
@@ -61,7 +63,7 @@
 | `migrations/versions/20261103_0008_top5.py` | `top5_weeks`·`top5_attempts`·`top5_publications`·`weekly_top_matches`, RLS | — | 개발 DB 적용 |
 | `app/seed/competitions.py` | 14개 대회 한국어 이름·그룹·정렬, `LEAGUE_IDS`·`UEFA_IDS`, `season_label` | `services/reference.py`, `sync/*` | 완료 |
 | `app/seed/team_aliases.json` | 5대 리그 96팀 한국어 이름·별칭(P-11), `searchOnly`·모호 별칭 묶음 | `apply_alias_seed` | 완료(검수된 별칭 추가 시 갱신) |
-| `app/seed/top5_curation.json` | TOP 5 운영 기준: 더비·라이벌 40쌍(팀 ID 쌍), 팀 관심도 high·medium(보조 지표), 버전 | `services/top5_selection.py` | 완료(사용자 확인 2026-11-03, 바꿀 때 버전 올림) |
+| `app/seed/top5_curation.json` | TOP 5 운영 기준: 더비·라이벌 40쌍(팀 ID 쌍), 팀 관심도 high·medium(시청 관심 추정 지표), 버전 | `services/top5_selection.py` | 완료(사용자 확인 2026-11-03, 바꿀 때 버전 올림) |
 
 ### API
 
@@ -74,7 +76,7 @@
 | `app/api/routes/feedback.py` | `POST /api/v1/feedback`: 요청 제한(라우트 클래스, 확정값), 허니팟 거부, 중복 409, 저장 후 디스코드 알림 예약 | `services/feedback.py`, `notifications/discord.py` | 완료 |
 | `app/api/routes/top_matches.py` | `GET /api/v1/top-matches/current`(공개 결과·`meta.updatedAt`), `/version`(열린 화면 교체 감지) | `services/top_matches.py` | 완료 |
 | `app/api/routes/matches.py` | `GET /fixtures/{id}`(경기 정보·영역 표시 여부), `/detail`(4개 블록, 요청 시 보충), `/head-to-head`(예정·연기만), `/reviews?sort=`(정상 종료만) | `services/match_detail.py`·`head_to_head.py`·`reviews.py` | 완료(04) |
-| `app/api/routes/schedule.py` | `GET /competitions`, `/fixtures?date=`, `/fixtures/next?teams=`(양의 정수 1~5개), `/fixtures/team?team=`(오늘~+13일), `/teams/search?q=`, `/news`, `/news/{id}/link`(요청 제한). 미수집 503·일부 실패 `failedCompetitionIds` | `services/fixtures.py`·`news.py`·`news_link.py`·`team_search.py` | 완료 |
+| `app/api/routes/schedule.py` | `GET /competitions`, `/fixtures?date=`, `/fixtures/next?teams=`(양의 정수 1~5개), `/fixtures/team?team=`(오늘−3~+17일), `/teams/search?q=`, `/news`, `/news/{id}/link`(요청 제한). 미수집 503·일부 실패 `failedCompetitionIds` | `services/fixtures.py`·`news.py`·`news_link.py`·`team_search.py` | 완료 |
 
 ### 스키마·서비스·연동
 
@@ -94,7 +96,7 @@
 | `app/services/reviews.py` | `list_reviews(sort)`(인기순·최신순·반응 수·평균), `reviews_available`(정상 종료만) | `routes/matches.py` | 완료(04, 02가 작성·반응·닉네임) |
 | `app/services/match_status.py` | `map_status()`: 제공사 상태 → scheduled·live·finished·postponed·cancelled·abandoned·unknown, 종료 유형, 시각 확정 여부 | `services/fixtures.py` | 완료 |
 | `app/services/reference.py` | `normalize_name`, 대회·팀·참가 upsert, `apply_alias_seed`, `team_detail_lookup`(팀 상세 허용 집합), `team_ref`·`competition_ref`·`crest` | 전 03 서비스 | 완료 |
-| `app/services/fixtures.py` | `upsert_fixtures`, `live_targets`·`needs_live_sync`, `to_summary`(예정·연기·취소 스코어 null), `sync_state`(실패 대회), `fixtures_on`, `team_schedule`·`team_schedule_window`(14일), `next_for_teams`, 04: `summaries_by_ids`(TOP 5 항목) | 라우트·수집 | 완료 |
+| `app/services/fixtures.py` | `upsert_fixtures`, `live_targets`·`needs_live_sync`, `to_summary`(예정·연기·취소 스코어 null), `sync_state`(실패 대회), `fixtures_on`, `team_schedule`·`team_schedule_window`(21일), `next_for_teams`, 04: `summaries_by_ids`(TOP 5 항목) | 라우트·수집 | 완료 |
 | `app/services/team_search.py` | `search_teams()`: 별칭·이름 검색, 여러 팀 후보, 최대 10개(현재 시즌) | `routes/schedule.py` | 완료(05가 시즌 범위 추가) |
 | `app/services/news_classify.py` | 규칙 기반 분류(P-08): `AliasIndex`, `subject_competitions`(주제 기준), `classify`(다른 종목·여자 축구·근거 없음 제외), `plain_text` | `sync/news.py` | 완료 |
 | `app/services/news.py` | 커서 페이지 분할 `list_news`, `collection_state`(최근 수집 실패·오래됨) | `routes/schedule.py` | 완료(08이 팀 조건 추가) |
@@ -111,10 +113,10 @@
 | `app/sync/registry.py` | `@register_job`(03: `precheck` — False면 호출·기록 없이 건너뜀), `JobSpec`, `JobContext`(세션·파라미터·`api_football()` 요청 수 집계), `JobPartialFailure`(일부 단위 실패) | 작업 모듈, `runner.py` | 완료 |
 | `app/sync/runner.py` | `run_job`: 사전 확인 → advisory lock → `sync_runs` 기록 → 작업 실행 → 상태 저장(일부 실패 요약 포함) | `registry.py`, `db/session.py` | 완료 |
 | `app/sync/reference.py` | `reference`(매일 04:00, `/leagues` 14회 + `/teams` 8회, 별칭 시드 적용), `team_aliases`(0회) | `services/reference.py` | 완료 |
-| `app/sync/fixtures.py` | `fixtures`(30분, 대회별 오늘−1~+15일 14회, 실패 대회는 기존 행 유지), `fixtures_live`(1분, 진행·임박 경기 없으면 건너뜀, 04: 응답 이벤트·상세 블록 저장), `fixture_details`(04, 5분, 최근 종료 경기 최종 기록 20개당 1회) | `services/fixtures.py`·`match_detail.py` | 완료 |
+| `app/sync/fixtures.py` | `fixtures`(30분, 대회별 오늘−3~+17일 14회, 실패 대회는 기존 행 유지), `fixtures_live`(1분, 진행·임박 경기 없으면 건너뜀, 04: 응답 이벤트·상세 블록 저장), `fixture_details`(04, 5분, 최근 종료 경기 최종 기록 20개당 1회) | `services/fixtures.py`·`match_detail.py` | 완료 |
 | `app/sync/top5.py` | `top5_weekly`(월 00:00 KST)·`top5_retry`(월 00:05 KST, 첫 시도 실패·미실행 시)·`top5`(관리 명령 수동 복구)·`top5_reconcile`(60초, 중단 시도 상태 정리만) | `services/top5_selection.py` | 완료(04) |
-| `app/sync/news.py` | `news`(30분, 네이버 8개 검색어), `normalize_url`·`url_hash`(중복 제거), 72시간 보관 | `services/news_classify.py`, `providers/naver_news.py` | 완료 |
-| `app/sync/scheduler.py` | `SCHEDULER_ENABLED`일 때만 APScheduler 시작, 중복·누락 실행 방지 | `main.py` | 완료 |
+| `app/sync/news.py` | `news`(매시 정각, 네이버 8개 검색어), `normalize_url`·`url_hash`(중복 제거), 72시간 보관 | `services/news_classify.py`, `providers/naver_news.py` | 완료 |
+| `app/sync/scheduler.py` | `SCHEDULER_ENABLED`(전체) 또는 `NEWS_SCHEDULER_ENABLED`(뉴스만)일 때 APScheduler 시작, 중복·누락 실행 방지 | `main.py` | 완료 |
 | `app/sync/__main__.py` | CLI `python -m app.sync <job> [key=value] / --list` | `runner.py` | 완료 |
 | `app/sync/jobs.py` | 작업 모듈 import 지점(`fixtures`·`news`·`reference`, 04: `top5`) | `__main__.py`, `scheduler.py` | 완료(기능 채팅이 모듈 추가) |
 
@@ -133,7 +135,7 @@
 | `tests/test_db.py` | 접속 주소·TLS, 모델 구조, `KICKTAB_DB_TESTS=1`일 때 개발 DB 제약·중복·RLS·동시 제출 잠금 확인(롤백) |
 | `tests/test_schedule_rules.py` | 상태 변환 표, 스코어 null 규칙, 이름 정규화, 뉴스 분류(주제·제외·여자 축구·Liga F 오탐), URL 중복 제거, 커서 |
 | `tests/test_schedule_sources.py` | 네이버 클라이언트(모의 전송·중단 조건·키 없음), 사전 확인 건너뜀, 원문 확인(리다이렉트·내부 주소 거부), 일정·뉴스 API 입력 검증(날짜·팀 ID·분류 422), OpenAPI 메타 타입 |
-| `tests/test_schedule_db.py` | `KICKTAB_DB_TESTS=1`일 때 KST 날짜·상태·연기, 관심 팀 일정(진행 우선·맞대결 1회), 별칭 검색, 실패 대회 기존 행 유지, 팀 14일 범위(롤백) |
+| `tests/test_schedule_db.py` | `KICKTAB_DB_TESTS=1`일 때 KST 날짜·상태·연기, 관심 팀 일정(진행 우선·맞대결 1회), 별칭 검색, 실패 대회 기존 행 유지, 팀 21일 범위·날짜 가용성·뉴스 48개 제한(롤백) |
 | `tests/test_match_detail.py` | 이벤트 중복 제거, 통계 순서·누락값, 라인업·평점(미출전·'0' 자리값 제외), 보충 조회 시점, 친선 제외·범위 확대·결과 판정 |
 | `tests/test_top5.py` | KST 주 경계·00:05 슬롯, 선정 검증(개수·중복·후보·순위·이유·주간), 공개 결과 선택 규칙, 프롬프트, 시드, Gemini 래퍼(모의), 지연 알림 |
 | `tests/test_review_regressions.py` | Codex 교차 검증 회귀: 이번 주 공개본 우선, 게시 직전 시각 재확인, 중단 복구·재시도 슬롯, 근거 작업자 종료, 잠금 안 쿨다운, 조회 실패 블록 상태(지금 조회하는 경우만 unavailable) |
@@ -210,13 +212,14 @@
 | `match/StatusNotice.tsx` | 연기·취소·경기 중단·행정 종료·확인 필요 안내(제공 사유만) | `MatchDetail` | 완료(04) |
 | `match/MatchRecords.tsx` | 기록 4탭(타임라인·팀 통계·라인업·선수 평점), 중단 경기 타임라인만, 경기 전 라인업/발표 전, 블록별 미제공·조회 실패·재조회 실패 안내, 상태 전환 시 재조회 | `queries.ts`, `Tabs` | 완료(04) |
 | `match/HeadToHeadSection.tsx` | 상대 전적(최근 공식 5경기·승무패 요약)·양 팀 최근 5경기 흐름, 영역별 재시도 | `queries.ts` | 완료(04) |
-| `match/ReviewSection.tsx` | 회원 평점·후기 공개 조회(평균·건수, 인기순·최신순, 반응 수), `ReviewGuidelines`(작성 주의사항 상시 표시) | `queries.ts` | 완료(04, 02가 작성·반응 버튼) |
+| `match/ReviewSection.tsx` | 회원 평점·후기 공개 조회(평균·건수, 인기순·최신순, 반응 수), `ReviewGuidance` 연결 | `queries.ts` | 완료(04, 02가 작성·반응 버튼) |
+| `match/ReviewGuidance.tsx` | 후기 제목 옆 안내 팝오버와 기존 운영 문구, 포커스 복귀와 뷰포트 내 배치 | `ReviewSection.tsx` | 완료(04) |
 | `match/model.ts` | 이벤트·통계 한국어 표기, 통계 막대 비율, 포지션, 승무패 뱃지, 상태별 영역 `areasOf` | 위 컴포넌트 | 완료(04) |
 | `match/queries.ts` | `matchInfoQuery`(진행 중 60초), `matchRecordsQuery`(진행 중 60초·킥오프 60분 전부터 라인업 10분 확인), `headToHeadQuery`, `reviewsQuery` | `apiFetch` | 완료(04) |
-| `schedule/ScheduleSection.tsx` | 메인 일정: 날짜 보기(5개씩 더 보기)·팀 14일 날짜별 보기, 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 | 아래 파일, `MatchCard` | 완료 |
+| `schedule/ScheduleSection.tsx` | 메인 일정: 날짜 보기와 팀 21일 날짜별 보기(기본 6개·한 번에 전체 보기), 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 | 아래 파일, `MatchCard` | 완료 |
 | `schedule/useScheduleParams.ts` | URL 조건(`date`·`competitions`·`team`), push/replace 규칙, `useKstToday()`(KST 자정 전환) | `ScheduleSection` | 완료 |
 | `schedule/queries.ts` | `competitionsQuery`, `fixturesByDateQuery`, `favoriteScheduleQuery`, `teamScheduleQuery`, `liveRefetchInterval`(진행 60초·임박 진입 시 시작·숨김 탭 정지, 04 경기 상세도 사용) | `apiFetch` | 완료 |
-| `schedule/DateBar.tsx` | 14일 날짜 막대(데스크톱 화살표·모바일 터치 스크롤) | `ScheduleSection` | 완료 |
+| `schedule/DateBar.tsx` | 21일 날짜 막대(어제·오늘부터 시작)(데스크톱 화살표·모바일 터치 스크롤) | `ScheduleSection` | 완료 |
 | `schedule/ScheduleNotice.tsx` | 일정 안내 상자(neutral·warning·error, Figma 225:2374), `failedNames()` | 일정·관심 팀 | 완료 |
 | `favorites/store.ts`·`useFavorites.ts` | 비회원 관심 팀 localStorage(`kt-fav-guest`, 최대 5개, 저장 불가 처리, 다른 탭 반영) | 관심 팀 UI | 완료(02가 회원 DB 동기화) |
 | `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시) | 07·08이 사용 | 완료(사전 제작) |

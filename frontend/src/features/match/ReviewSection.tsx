@@ -9,31 +9,12 @@ import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
 import type { ReviewItem, ReviewSort } from "@/lib/api/types";
 import { MISSING } from "@/lib/format/kst";
 import { reviewsQuery } from "./queries";
+import { ReviewGuidance } from "./ReviewGuidance";
 
 const SORTS = [
   { value: "popular", label: "인기순" },
   { value: "latest", label: "최신순" },
 ] as const satisfies readonly { value: ReviewSort; label: string }[];
-
-/** Always visible review rules (REV-004, Figma 100:2619; user decision 2026-11-01: no tooltip). */
-export function ReviewGuidelines() {
-  return (
-    <section
-      aria-label="후기 작성 주의사항"
-      className="flex flex-col gap-2.5 rounded-control border border-l-3 border-warning bg-warning-bg p-4 text-warning"
-    >
-      <ul className="text-body">
-        <li>• 이용자를 겨냥한 시비·반복 도발·싸움 유도·집단 괴롭힘은 제한합니다.</li>
-        <li>• 도 넘은 인신공격·가족 비난·혐오·성희롱·협박·폭력 조장은 금지합니다.</li>
-        <li>• 개인정보 노출, 확인되지 않은 범죄·사생활 의혹의 단정은 제한합니다.</li>
-        <li>• 광고·도배·불법 베팅 홍보 등 경기와 무관한 내용은 제한합니다.</li>
-      </ul>
-      <p className="text-label font-bold">
-        농담이어도 대상과 맥락·수위·반복성을 함께 판단하며, 기준을 넘은 후기는 삭제될 수 있습니다.
-      </p>
-    </section>
-  );
-}
 
 function Reactions({ review }: { review: ReviewItem }) {
   // Counts only: reacting is a member action added by chat 02 (REV-004 rule 4).
@@ -74,7 +55,10 @@ export function ReviewSection({
       aria-labelledby={`${idBase}-title`}
       className="flex flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
     >
-      <h2 id={`${idBase}-title`} className="text-subtitle font-bold">회원 평점·후기</h2>
+      <div className="flex items-center gap-1">
+        <h2 id={`${idBase}-title`} className="text-subtitle font-bold">회원 평점·후기</h2>
+        <ReviewGuidance />
+      </div>
       {summary ? (
         <p className="flex items-center gap-4">
           <span className="text-[32px] leading-[43px] font-bold text-fg">
@@ -86,7 +70,6 @@ export function ReviewSection({
         query.isPending && <Skeleton className="h-11 w-48" />
       )}
       <p className="bg-subtle p-4 text-body font-medium text-fg">평점과 후기는 누구나 볼 수 있어요.</p>
-      <ReviewGuidelines />
       <div>
         <Tabs items={SORTS} value={sort} onChange={onSort} label="후기 정렬" idBase={idBase} />
         <div role="tabpanel" id={tabPanelId(idBase, sort)} aria-labelledby={tabId(idBase, sort)} className="pt-4">
