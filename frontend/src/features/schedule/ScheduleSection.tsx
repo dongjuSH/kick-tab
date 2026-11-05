@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
 import { useFavorites } from "@/features/favorites/useFavorites";
 import { isApiError } from "@/lib/api/errors";
+import { useHydrated } from "@/lib/hooks/useHydrated";
 import type { MatchSummary, TeamRef } from "@/lib/api/types";
 import { addDaysIso, formatKstTime, formatShortDate, parseIsoDate } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
@@ -29,6 +30,15 @@ export function ListSkeleton() {
       <Skeleton className="h-5 w-4/5" />
       <Skeleton className="h-5 w-11/12" />
       <p className="text-label text-fg-secondary">정보를 불러오고 있습니다.</p>
+    </div>
+  );
+}
+
+/** The section's frame with a list placeholder: Suspense fallback and pre-hydration render. */
+export function SectionSkeleton() {
+  return (
+    <div className="rounded-card border border-line bg-surface p-4 lg:p-6">
+      <ListSkeleton />
     </div>
   );
 }
@@ -62,6 +72,7 @@ function UpdatedAt({ value, checkedAt }: { value: string | null | undefined; che
  * result, a failed lookup and an incomplete (partly failed) lookup each read differently.
  */
 export function ScheduleSection() {
+  const hydrated = useHydrated();
   const params = useScheduleParams();
   const favorites = useFavorites();
   const [resetKey, setResetKey] = useState(0);
@@ -241,6 +252,10 @@ export function ScheduleSection() {
   }
 
   const live = visible.some((m) => m.status === "live");
+
+  // Competitions and favourite teams are shared caches (FavoriteSchedule may fetch them
+  // before this boundary hydrates): keep the server's placeholder until hydration ends.
+  if (!hydrated) return <SectionSkeleton />;
 
   return (
     <section

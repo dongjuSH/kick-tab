@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { FavoriteSchedule } from "@/features/favorites/FavoriteSchedule";
 import { MainNews } from "@/features/news/MainNews";
-import { ListSkeleton, ScheduleSection } from "@/features/schedule/ScheduleSection";
+import { ScheduleSection, SectionSkeleton } from "@/features/schedule/ScheduleSection";
 
 /**
  * Main page (SCH-001, Figma 49:57 / 49:570). Desktop: schedule then news on the left,
@@ -18,13 +18,7 @@ export default function Home() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="min-w-0 lg:col-start-1 lg:row-start-1">
           {/* The schedule reads its filters from the URL, so it renders per request. */}
-          <Suspense
-            fallback={
-              <div className="rounded-card border border-line bg-surface p-4 lg:p-6">
-                <ListSkeleton />
-              </div>
-            }
-          >
+          <Suspense fallback={<SectionSkeleton />}>
             <ScheduleSection />
           </Suspense>
         </div>

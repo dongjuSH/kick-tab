@@ -1,5 +1,6 @@
 """Fixture storage and read model (SCH-002, LIVE-001~004, FAV-004)."""
 
+import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -24,6 +25,8 @@ from app.services.reference import (
     team_ref,
     upsert_teams,
 )
+
+logger = logging.getLogger(__name__)
 
 # Inclusive dates for the main schedule, team view and fixture collector.
 WINDOW_BEFORE_DAYS = 3
@@ -50,7 +53,8 @@ def _parse_kickoff(item: dict[str, Any]) -> datetime | None:
 
 
 def upsert_fixtures(session: Session, items: Iterable[dict[str, Any]], now: datetime) -> int:
-    """Save provider fixtures of supported competitions. Returns the number saved.
+    """Save provider fixtures of supported competitions. Returns the number saved; callers
+    compare it with the items they passed to notice a partly stored answer.
 
     Only rows the provider returned are touched; a missing fixture is never deleted or
     marked finished (LIVE-003). A postponed match keeps its id and moves to the new date.
@@ -103,6 +107,25 @@ def upsert_fixtures(session: Session, items: Iterable[dict[str, Any]], now: date
         teams += [home, away]
         season = league.get("season") or settings.current_season
         participation += [(home["id"], league["id"], season), (away["id"], league["id"], season)]
+
+    # A team new to the DB can be stored only with the provider's name: a fixture naming such
+    # a team without one is left out (names are never invented) instead of failing the batch.
+    named = {t["id"] for t in teams if t.get("id") and t.get("name")}
+    unnamed = {tid for r in rows.values() for tid in (r["home_team_id"], r["away_team_id"])}
+    unnamed -= named
+    if unnamed:
+        unknown = unnamed - set(session.scalars(select(Team.id).where(Team.id.in_(unnamed))))
+        if unknown:
+            dropped = sorted(
+                fid for fid, r in rows.items()
+                if r["home_team_id"] in unknown or r["away_team_id"] in unknown
+            )
+            for fid in dropped:
+                del rows[fid]
+            participation = [p for p in participation if p[0] not in unknown]
+            logger.warning(
+                "fixtures skipped, new teams without a name %s: %s", sorted(unknown), dropped
+            )
 
     if not rows:
         return 0

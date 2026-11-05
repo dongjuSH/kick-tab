@@ -33,11 +33,14 @@ export function CompetitionFilter({
   selected,
   onChange,
   unavailable,
+  season,
 }: {
   competitions: readonly CompetitionItem[];
   selected: readonly number[];
   onChange: (ids: number[]) => void;
   unavailable?: ReadonlySet<number>;
+  /** Season whose provider data is described (past results, chat 05); default current. */
+  season?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<number[]>([]);
@@ -93,6 +96,7 @@ export function CompetitionFilter({
                           competition={competition}
                           checked={draft.includes(competition.id)}
                           noTeamMatch={unavailable?.has(competition.id) ?? false}
+                          season={season}
                           onToggle={(on) =>
                             setDraft((ids) =>
                               on ? [...ids, competition.id] : ids.filter((id) => id !== competition.id),
@@ -134,11 +138,13 @@ function DraftOption({
   competition,
   checked,
   noTeamMatch,
+  season,
   onToggle,
 }: {
   competition: CompetitionItem;
   checked: boolean;
   noTeamMatch: boolean;
+  season?: number;
   onToggle: (checked: boolean) => void;
 }) {
   const disabled = noTeamMatch && !checked;
@@ -160,14 +166,20 @@ function DraftOption({
       <span className="min-w-0 flex-1">
         {competitionName(competition)}
         {noTeamMatch ? <span className="block text-small text-fg-muted">기간 내 팀 경기 없음</span>
-          : <NoData competition={competition} />}
+          : <NoData competition={competition} season={season} />}
       </span>
     </label>
   );
 }
 
-function NoData({ competition }: { competition: CompetitionItem }) {
-  return competition.currentSeason?.availability === "no_data" ? (
-    <span className="text-small text-fg-muted">이번 시즌 데이터 없음</span>
-  ) : null;
+/** The provider has no data for the season (CMP-004, V-16): "no data", never "no matches". */
+function NoData({ competition, season }: { competition: CompetitionItem; season?: number }) {
+  const info =
+    season === undefined ? competition.currentSeason : competition.seasons.find((s) => s.season === season);
+  if (!info || info.availability !== "no_data") return null;
+  return (
+    <span className="text-small text-fg-muted">
+      {season === undefined ? "이번 시즌 데이터 없음" : "선택한 시즌 데이터 없음"}
+    </span>
+  );
 }

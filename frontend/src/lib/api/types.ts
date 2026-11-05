@@ -37,6 +37,9 @@ export type ReviewSort = NonNullable<
 
 export type CompetitionItem = Schemas["CompetitionItem"];
 export type CompetitionGroup = CompetitionItem["group"];
+export type SeasonItem = Schemas["SeasonItem"];
+export type ResultsPage = Schemas["ResultsPage"];
+export type ResultsMeta = Schemas["ResultsMeta"];
 export type ScheduleMeta = Schemas["ScheduleMeta"];
 export type FixtureAvailability = Schemas["FixtureAvailability"];
 export type FavoriteSchedule = Schemas["FavoriteSchedule"];

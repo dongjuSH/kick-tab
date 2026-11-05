@@ -1,5 +1,22 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-05 (목) — 05 지난 경기
+
+브랜치 `feat/05-results`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 통과(1차 지적 4건·2차 표시 문제 1건 보완). 사용자 지시로 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 시즌·적재 상태 | `config.py`(`first_season`), `services/reference.py`(`managed_seasons`), `sync/reference.py`(`_save_season` — 한 번의 `/leagues` 응답으로 관리 시즌 모두 저장, 적재한 시즌은 `no_data`로 바꾸지 않음), `models/reference.py`·마이그레이션 `0010_season_fixtures`(`season_fixtures_synced_at`·`season_fixtures_failed_at`), `models/fixture.py`(인덱스 `ix_fixtures_season_status_kickoff`) | 2025·2026 시즌 관리(CMP-003·004), 21일 작업과 분리된 시즌 전체 적재 상태 |
+| 시즌 전체 적재 | `sync/fixtures.py`(`fixtures_season` — 대회·시즌당 1회, 현재 시즌 매일 13:00 KST, 과거 시즌 수동, 요청 실패·저장 오류(대회 단위 롤백)·일부 저장 모두 실패로 기록), `services/fixtures.py`(`upsert_fixtures` — 이름 없는 신규 팀 경기는 저장하지 않음), `sync/fixtures.py`(`fixtures` — 일부만 저장되면 실패 기록) | HIST-001·003, 재실행 중복 없음, 실패로 기존 데이터를 덮지 않음, 이름·값을 만들지 않음 |
+| 지난 경기 API | `services/results.py`(`supported_seasons`·`season_coverage`·`finished_results`), `api/routes/results.py`(`GET /results`), `api/routes/schedule.py`(`GET /seasons`, `/competitions`의 `seasons`, `/teams/search?season=`, `require_supported_season`), `services/team_search.py`(시즌 범위), `schemas/schedule.py` | 시즌 전체 종료 경기(일반·행정 종료 구분)·대회 다중·팀·10개 단위, 미지원 시즌 404, 최초 미적재 503과 갱신 실패 구분 |
+| 별칭 시드 | `seed/team_aliases.json`(2025-26 5대 리그 강등 15팀 한국어 이름·별칭, 모두 `searchOnly`) | 과거 팀 한국어 검색, 뉴스 분류 불변 |
+| 화면 | `app/results/page.tsx`, `features/results/`(`ResultsSection`·`useResultsParams`·`queries`), `components/common/SeasonSelect.tsx`, `components/ui/Pagination.tsx`, `lib/hooks/useHydrated.ts`, `CompetitionFilter`(`season`), `TeamSearch`(`season`·`placeholder`), `ScheduleSection`·`app/page.tsx`(하이드레이션 대기) | `/results` 필터·URL·뒤로 가기, 후보 없음·결과 없음·조회 실패·미수집·미지원 시즌·잘못된 URL 조건·페이지 초과 구분, 상세 미제공 팀 표시, 04 하이드레이션 경합 정리 |
+| 테스트 | `tests/test_results_db.py`(13개), `tests/test_schedule_sources.py`(OpenAPI), `frontend/tests/results.test.mjs`(6개) | 시즌·필터·행정 종료·페이지·과거 팀 검색·상태 코드·적재 실패·이름 없는 팀·URL 조건 |
+
+데이터: 2025 시즌 14개 대회 4,128경기(API 검증 문서·원본 14개 파일과 ID·상태·스코어·팀·킥오프 차이 0), 2026 시즌 3,290경기, 재실행 후 중복 0. 실제 API-Football 호출 79회(reference 22, fixtures_season 14×3, fixtures 14, 경기 상세 보충 1). Codex 보완 단계 호출 0회, DB 검증은 롤백.
+
+검수: 백엔드 ruff·pytest 224(DB 포함 262)·alembic check, 프런트 tsc·lint·테스트 12개·빌드, `git diff --check`. 브라우저 1280·375·320에서 시즌 전환·대회 적용/취소·팀 검색(한국어·영문·모호·강등 팀)·팀 해제·초기화·URL 복원·뒤로/앞으로·마지막 페이지·행정 종료·승부차기·'—'·상세 이동과 복귀·상태 구분·하이드레이션 오류 없음 확인.
+
 ## 2026-11-04 (수) — 00 TOP 5 하위 모델 대체·정책 파일 삭제 반영
 
 담당: 00 전체 조율 채팅(사용자 지시). 사용자가 Codex가 만든 md 파일(`../docs/TOP5_POLICY_2026-11-01.md`·`SCHEDULE_UX_POLICY_2026-11-02.md`·`README.md`·`handoff/`, `../wireframe/`의 검수 md, `apps/docs/design-assets/`·`design-handoff-2026-11-03.md`)을 삭제했다. 정책 기준은 기획 문서(PRD·기능 명세서·유저 플로우)와 Figma다.

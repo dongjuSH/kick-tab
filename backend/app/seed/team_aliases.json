@@ -1,5 +1,5 @@
 {
-  "_comment": "P-11 team alias seed (2026-27 five-league teams). nameKo = Korean display name. ko/en = search and news aliases. searchOnly = aliases used for search but never as news evidence. ambiguous = expressions shared by several teams: search shows candidates, news ignores them. Apply with: uv run python -m app.sync team_aliases",
+  "_comment": "P-11 team alias seed (2026-27 five-league teams, then 2025-26 five-league teams outside the current leagues: past-results search only, every alias in searchOnly so news classification is unchanged). nameKo = Korean display name. ko/en = search and news aliases. searchOnly = aliases used for search but never as news evidence. ambiguous = expressions shared by several teams: search shows candidates, news ignores them. Apply with: uv run python -m app.sync team_aliases",
   "teams": [
     {"id": 42, "nameKo": "아스널", "ko": ["아스날"], "en": ["Arsenal"]},
     {"id": 66, "nameKo": "애스턴 빌라", "ko": ["아스톤 빌라", "빌라"], "en": ["Aston Villa", "Villa"], "searchOnly": ["빌라", "Villa"]},
@@ -100,7 +100,22 @@
     {"id": 548, "nameKo": "레알 소시에다드", "ko": ["소시에다드"], "en": ["Real Sociedad"]},
     {"id": 536, "nameKo": "세비야", "ko": [], "en": ["Sevilla"]},
     {"id": 532, "nameKo": "발렌시아", "ko": ["발렌시아 CF"], "en": ["Valencia", "Valencia CF"], "searchOnly": ["발렌시아", "Valencia"]},
-    {"id": 533, "nameKo": "비야레알", "ko": [], "en": ["Villarreal"]}
+    {"id": 533, "nameKo": "비야레알", "ko": [], "en": ["Villarreal"]},
+    {"id": 39, "nameKo": "울버햄튼", "ko": ["울버햄프턴", "울브스", "울버햄튼 원더러스"], "en": ["Wolves", "Wolverhampton", "Wolverhampton Wanderers"], "searchOnly": ["울버햄튼", "울버햄프턴", "울브스", "울버햄튼 원더러스", "Wolves", "Wolverhampton", "Wolverhampton Wanderers"]},
+    {"id": 44, "nameKo": "번리", "ko": [], "en": ["Burnley"], "searchOnly": ["번리", "Burnley"]},
+    {"id": 48, "nameKo": "웨스트햄", "ko": ["웨스트햄 유나이티드"], "en": ["West Ham", "West Ham United"], "searchOnly": ["웨스트햄", "웨스트햄 유나이티드", "West Ham", "West Ham United"]},
+    {"id": 547, "nameKo": "지로나", "ko": [], "en": ["Girona"], "searchOnly": ["지로나", "Girona"]},
+    {"id": 798, "nameKo": "마요르카", "ko": ["RCD 마요르카"], "en": ["Mallorca", "RCD Mallorca"], "searchOnly": ["마요르카", "RCD 마요르카", "Mallorca", "RCD Mallorca"]},
+    {"id": 718, "nameKo": "레알 오비에도", "ko": ["오비에도"], "en": ["Oviedo", "Real Oviedo"], "searchOnly": ["레알 오비에도", "오비에도", "Oviedo", "Real Oviedo"]},
+    {"id": 504, "nameKo": "엘라스 베로나", "ko": ["베로나"], "en": ["Hellas Verona", "Verona"], "searchOnly": ["엘라스 베로나", "베로나", "Hellas Verona", "Verona"]},
+    {"id": 520, "nameKo": "크레모네세", "ko": [], "en": ["Cremonese"], "searchOnly": ["크레모네세", "Cremonese"]},
+    {"id": 801, "nameKo": "피사", "ko": [], "en": ["Pisa"], "searchOnly": ["피사", "Pisa"]},
+    {"id": 161, "nameKo": "볼프스부르크", "ko": ["VfL 볼프스부르크"], "en": ["Wolfsburg", "VfL Wolfsburg"], "searchOnly": ["볼프스부르크", "VfL 볼프스부르크", "Wolfsburg", "VfL Wolfsburg"]},
+    {"id": 180, "nameKo": "하이덴하임", "ko": [], "en": ["Heidenheim", "1. FC Heidenheim"], "searchOnly": ["하이덴하임", "Heidenheim", "1. FC Heidenheim"]},
+    {"id": 186, "nameKo": "장크트 파울리", "ko": ["상파울리", "St. 파울리"], "en": ["St. Pauli", "FC St. Pauli"], "searchOnly": ["장크트 파울리", "상파울리", "St. 파울리", "St. Pauli", "FC St. Pauli"]},
+    {"id": 83, "nameKo": "낭트", "ko": [], "en": ["Nantes", "FC Nantes"], "searchOnly": ["낭트", "Nantes", "FC Nantes"]},
+    {"id": 112, "nameKo": "메스", "ko": [], "en": ["Metz", "FC Metz"], "searchOnly": ["메스", "Metz", "FC Metz"]},
+    {"id": 1063, "nameKo": "생테티엔", "ko": ["생테티엔느"], "en": ["Saint Etienne", "Saint-Étienne", "AS Saint-Étienne"], "searchOnly": ["생테티엔", "생테티엔느", "Saint Etienne", "Saint-Étienne", "AS Saint-Étienne"]}
   ],
   "ambiguous": {
     "레알": [541, 548, 543],

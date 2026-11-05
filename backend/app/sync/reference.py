@@ -11,7 +11,7 @@ import logging
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -28,6 +28,7 @@ from app.services.reference import (
     add_participation,
     apply_alias_seed,
     load_alias_seed,
+    managed_seasons,
     upsert_competitions,
     upsert_teams,
 )
@@ -77,17 +78,27 @@ def _save_season(
         "updated_at": now,
     }
     stmt = insert(CompetitionSeason).values(values)
+    update = {k: v for k, v in values.items() if k not in ("competition_id", "season")}
+    # A season whose whole list was already loaded never turns into "no data" because one
+    # /leagues answer left it out (CMP-004): its stored results stay offered.
+    keep = CompetitionSeason.season_fixtures_synced_at.is_not(None) & (
+        stmt.excluded.availability == "no_data"
+    )
+    for column in ("availability", "start_date", "end_date"):
+        update[column] = case(
+            (keep, getattr(CompetitionSeason, column)), else_=getattr(stmt.excluded, column)
+        )
     session.execute(
         stmt.on_conflict_do_update(
             index_elements=[CompetitionSeason.competition_id, CompetitionSeason.season],
-            set_={k: v for k, v in values.items() if k not in ("competition_id", "season")},
+            set_=update,
         )
     )
 
 
 @register_job(
     "reference",
-    description="Competitions, seasons, league/UEFA team lists and team aliases (22 requests)",
+    description="Competitions, managed seasons, league/UEFA team lists and aliases (22 requests)",
     # 04:00 KST daily, before the morning schedule refresh.
     schedule={"trigger": "cron", "hour": 19, "minute": 0},
 )
@@ -113,7 +124,9 @@ def sync_reference(ctx: JobContext) -> None:
             # An empty answer for a supported league id is not proof of "no season".
             failed.append(f"leagues:{seed.id}:empty")
             continue
-        _save_season(session, seed.id, season, league)
+        # One /leagues answer lists every season: past seasons are kept current too (CMP-003).
+        for managed in managed_seasons():
+            _save_season(session, seed.id, managed, league)
         session.commit()
 
     now = datetime.now(UTC)

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     # Current season as the API season value (2026 = 2026-27, CMP-003). Main schedule,
     # team search and the team-detail allow set use it.
     current_season: int = 2026
+    # First season kept for past results and standings (2025 = 2025-26, HIST-003). Every
+    # season from here to current_season is managed; a new season adds a row, never removes.
+    first_season: int = 2025
     # true: crest/logo URLs are sent only for rights-cleared assets (V-10). None is cleared
     # yet, so every image falls back to the placeholder. false (local default): API URLs.
     image_rights_enforced: bool = False

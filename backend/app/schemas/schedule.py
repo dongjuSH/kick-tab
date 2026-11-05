@@ -26,6 +26,22 @@ class CompetitionItem(ApiModel):
     short_name: str
     group: CompetitionGroup
     current_season: CompetitionSeasonInfo | None
+    # Every managed season (2025 .. current) known for this competition, newest first.
+    # Past results and standings offer a competition only where it is `available`.
+    seasons: list[CompetitionSeasonInfo]
+
+
+class SeasonItem(ApiModel):
+    """A season the service offers (season dropdown, HIST-002 / LEAG)."""
+
+    season: int
+    label: str
+    current: bool
+
+
+class SeasonsResponse(ApiModel):
+    data: list[SeasonItem]
+    meta: dict[str, object] = Field(default_factory=dict)
 
 
 class CompetitionsResponse(ApiModel):
@@ -127,3 +143,27 @@ class NewsLink(ApiModel):
 class NewsLinkResponse(ApiModel):
     data: NewsLink
     meta: dict[str, object] = Field(default_factory=dict)
+
+
+class ResultsPage(ApiModel):
+    """Past results of one season (chat 05): the resolved season, the selected team (null
+    without a team filter) and one page of finished matches, newest first."""
+
+    season: SeasonItem
+    team: TeamRef | None
+    matches: list[MatchSummary]
+
+
+class ResultsMeta(ApiModel):
+    page: int
+    size: int
+    total: int
+    updated_at: datetime | None
+    # Available competitions whose whole-season list was never loaded or last failed: their
+    # results may be missing, so "no results" is never claimed for them.
+    failed_competition_ids: list[int]
+
+
+class ResultsResponse(ApiModel):
+    data: ResultsPage
+    meta: ResultsMeta

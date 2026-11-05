@@ -11,6 +11,8 @@
 - fixture_details (every 5 min, only when needed): `/fixtures?ids=` for recently finished
   matches whose final record is still missing (20 ids per request) - the "once at the
   finish" collection of match records (guide §6.5).
+- fixtures_season (chat 05, daily for the current season, manual for past ones): the whole
+  season list, one /fixtures?league=&season= request per available competition (14).
 """
 
 import logging
@@ -19,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -36,6 +39,7 @@ from app.services.match_detail import (
     needs_final_records,
     save_provider_items,
 )
+from app.services.reference import managed_seasons
 from app.sync.reference import FATAL
 from app.sync.registry import JobContext, JobPartialFailure, register_job
 
@@ -94,12 +98,89 @@ def sync_fixtures(ctx: JobContext) -> None:
             if isinstance(exc, FATAL):
                 break
             continue
-        saved = upsert_fixtures(session, result.response or [], now)
-        row.fixtures_synced_at = now
-        row.fixtures_window_start = start
-        row.fixtures_window_end = end
+        items = result.response or []
+        saved = upsert_fixtures(session, items, now)
+        if saved < len(items):
+            # Some fixtures could not be stored (chat 05): a failed run for this competition.
+            # The saved rows stay; the last success and its window are left as they were.
+            row.fixtures_failed_at = now
+            failed.append(row.competition_id)
+        else:
+            row.fixtures_synced_at = now
+            row.fixtures_window_start = start
+            row.fixtures_window_end = end
         session.commit()
-        logger.info("fixtures %s: %d saved", row.competition_id, saved)
+        logger.info("fixtures %s: %d of %d saved", row.competition_id, saved, len(items))
+    if failed:
+        raise JobPartialFailure(f"Failed competitions: {', '.join(map(str, failed))}")
+
+
+@register_job(
+    "fixtures_season",
+    description="Whole-season fixture list of one season (1 request per competition)",
+    # 13:00 KST daily for the current season: no European match is live then, and finished
+    # matches missed while the 21-day sync was down are filled in. Past seasons: manual
+    # (`python -m app.sync fixtures_season season=2025`).
+    schedule={"trigger": "cron", "hour": 4, "minute": 0},
+)
+def sync_season_fixtures(ctx: JobContext) -> None:
+    """HIST-001·003: every fixture of each available competition in one season.
+
+    Rows are upserted by fixture id, so a re-run never duplicates and a new season never
+    removes an older one. A failed competition keeps its stored rows and records
+    `season_fixtures_failed_at` (CMP-004). Match records are not bulk-loaded: the detail
+    page fetches them once when first opened (chat 04)."""
+    session = ctx.session
+    season = int(ctx.params.get("season", settings.current_season))
+    if season not in managed_seasons():
+        raise JobPartialFailure(f"Season {season} is not managed")
+    competitions = _available_competitions(session, season)
+    if not competitions:
+        raise JobPartialFailure(f"No available competitions in {season}: run reference first")
+
+    client = ctx.api_football()
+    failed: list[int] = []
+    for index, row in enumerate(competitions):
+        now = datetime.now(UTC)
+        try:
+            result = client.get(
+                "/fixtures",
+                {"league": row.competition_id, "season": season, "timezone": "UTC"},
+            )
+        except ApiFootballError as exc:
+            logger.warning("season fixtures %s failed: %s", row.competition_id, type(exc).__name__)
+            pending = competitions[index:] if isinstance(exc, FATAL) else [row]
+            for item in pending:
+                item.season_fixtures_failed_at = now
+                failed.append(item.competition_id)
+            session.commit()
+            if isinstance(exc, FATAL):
+                break
+            continue
+        items = result.response or []
+        try:
+            saved = upsert_fixtures(session, items, now)
+        except SQLAlchemyError as exc:
+            # This competition's batch is undone; stored rows stay and the next one goes on.
+            session.rollback()
+            logger.warning(
+                "season fixtures %s not saved: %s", row.competition_id, type(exc).__name__
+            )
+            row.season_fixtures_failed_at = now
+            failed.append(row.competition_id)
+            session.commit()
+            continue
+        if saved < len(items):
+            # Part of the answer could not be stored: keep what was saved, but this run is a
+            # failure - the last complete load (if any) keeps its time.
+            row.season_fixtures_failed_at = now
+            failed.append(row.competition_id)
+        else:
+            row.season_fixtures_synced_at = now
+        session.commit()
+        logger.info(
+            "season fixtures %s/%s: %d of %d saved", row.competition_id, season, saved, len(items)
+        )
     if failed:
         raise JobPartialFailure(f"Failed competitions: {', '.join(map(str, failed))}")
 

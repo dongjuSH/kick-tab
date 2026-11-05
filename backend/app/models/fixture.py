@@ -42,6 +42,8 @@ class Fixture(Base):
         Index("ix_fixtures_home_team_kickoff", "home_team_id", "kickoff_at"),
         Index("ix_fixtures_away_team_kickoff", "away_team_id", "kickoff_at"),
         Index("ix_fixtures_status_kickoff", "status", "kickoff_at"),
+        # Past results: finished matches of one season, newest first (chat 05).
+        Index("ix_fixtures_season_status_kickoff", "season", "status", "kickoff_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
