@@ -1,4 +1,4 @@
-"""AI weekly TOP 5 jobs (chat 04, docs/TOP5_POLICY 2026-11-02 revision).
+"""AI weekly TOP 5 jobs (chat 04, TOP 5 policy 2026-11-02 in the planning docs).
 
 - top5_weekly: Monday 00:00 KST, first automatic attempt (skipped if the week has started).
 - top5_retry:  Monday 00:05 KST, fixed retry slot; runs only after a failed (or missed)

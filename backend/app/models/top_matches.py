@@ -1,4 +1,4 @@
-"""AI weekly TOP 5 (TOP-001~003, docs/TOP5_POLICY 2026-11-02 revision).
+"""AI weekly TOP 5 (TOP-001~003, TOP 5 policy 2026-11-02 in the planning docs).
 
 The internal job state of a target week (`top5_weeks`, `top5_attempts`) is kept apart from
 what users see (`top5_publications` + `weekly_top_matches`). A publication row is the

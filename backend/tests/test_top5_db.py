@@ -26,7 +26,7 @@ from app.providers.api_football import ApiFootballClient, DailyBudget, MinuteRat
 from app.providers.gemini import LlmError
 from app.services import top5_selection
 from app.services.reviews import list_reviews
-from app.services.top5_selection import LlmPick, LlmSelection, run_attempt
+from app.services.top5_selection import AllModelsFailed, LlmPick, LlmSelection, run_attempt
 from app.services.top_matches import get_current_top_matches
 
 pytestmark = pytest.mark.skipif(
@@ -100,6 +100,15 @@ def good_model(prompt: str, timeout: float):
 
 def failing_model(prompt: str, timeout: float):
     raise LlmError("Gemini API error 503 UNAVAILABLE")
+
+
+def both_models_failing(prompt: str, timeout: float):
+    raise AllModelsFailed("gemini-3.8-flash: 503; gemini-3.5-flash-lite: 503")
+
+
+def fallback_answer(prompt: str, timeout: float):
+    answer, raw = good_model(prompt, timeout)
+    return answer, {"model": "gemini-3.5-flash-lite", **raw}
 
 
 def run(trigger, factory, model, alerts=None, **kwargs):
@@ -354,3 +363,27 @@ def test_reviews_popular_and_latest_order_with_average(connection):
                                                  ratio_tie_more_likes]
         assert popular.summary.count == 4 and popular.summary.average == 3.5
         assert list_reviews(session, BASE_ID + 51, "popular").summary.average is None
+
+
+def test_both_models_failing_alerts_each_attempt_and_delay_once(factory):
+    alerts = []
+    first = run("scheduled", factory, both_models_failing, alerts)
+    assert first.status == "failed" and first.alert_sent is True
+    assert [a.kind for a in alerts] == ["models_failed"]
+    assert alerts[0].next_retry_at == datetime(2027, 6, 6, 15, 5, tzinfo=UTC)  # 00:05 KST
+    state = week(factory)
+    assert state.status == "retry_scheduled" and state.alert_sent_at is None
+    second = run("retry", factory, both_models_failing, alerts)
+    assert second.status == "failed"
+    # The second failure sends the existing delay alert (once), not a second model alert.
+    assert [a.kind for a in alerts] == ["models_failed", "delay"]
+    assert run("manual", factory, both_models_failing, alerts).status == "failed"
+    assert [a.kind for a in alerts][-1] == "models_failed" and alerts[-1].next_retry_at is None
+
+
+def test_fallback_answer_is_published_and_recorded(factory):
+    outcome = run("scheduled", factory, fallback_answer)
+    assert outcome.status == "published"
+    with factory() as session:
+        attempt = session.get(Top5Attempt, outcome.attempt_id)
+        assert attempt.model == "gemini-3.5-flash-lite"

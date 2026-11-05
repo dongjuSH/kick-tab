@@ -46,10 +46,13 @@ class Settings(BaseSettings):
     # Empty = notifications off (feedback is still stored).
     feedback_discord_webhook_url: SecretStr = SecretStr("")
 
-    # AI weekly TOP 5 (chat 04, docs/TOP5_POLICY). The key goes straight to the SDK client;
-    # GOOGLE_API_KEY is never read. Free tier: only public match data is sent.
+    # AI weekly TOP 5 (chat 04, TOP 5 policy in the planning docs). The key goes straight
+    # to the SDK client; GOOGLE_API_KEY is never read. Free tier: public match data only.
     gemini_api_key: SecretStr = SecretStr("")
     top5_llm_model: str = "gemini-3.8-flash"
+    # Lower free-tier model called once when the main model's request fails within the same
+    # attempt (503, 429, timeout, empty or malformed answer). Empty = no fallback.
+    top5_llm_fallback_model: str = "gemini-3.5-flash-lite"
     # Each automatic attempt must end (success, failure or timeout) before the next fixed
     # slot: 00:00 -> 00:05 KST leaves 5 minutes, so the default stops at 4.
     top5_attempt_timeout_seconds: int = 240

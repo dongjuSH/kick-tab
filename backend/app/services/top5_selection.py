@@ -1,4 +1,4 @@
-"""AI weekly TOP 5 selection (TOP-001·002, docs/TOP5_POLICY 2026-11-02 revision).
+"""AI weekly TOP 5 selection (TOP-001·002, TOP 5 policy 2026-11-02 in the planning docs).
 
 One attempt = candidates -> evidence -> one Gemini request -> server validation -> one
 atomic publication. Week rules (stored in `top5_weeks`):
@@ -26,6 +26,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
 from pathlib import Path
 from queue import Empty, Queue
+from time import monotonic
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -467,6 +468,7 @@ def select_week(
     except LlmError as exc:
         error = SelectionError(f"LLM failed: {exc}")
         error.evidence = evidence  # type: ignore[attr-defined]
+        error.all_models_failed = isinstance(exc, AllModelsFailed)  # type: ignore[attr-defined]
         raise error from None
     try:
         items = validate_picks(answer.picks, kickoffs, week_start)
@@ -477,14 +479,53 @@ def select_week(
     return Selection(items, kickoffs, len(candidates), evidence, raw, curation.version)
 
 
-def gemini_generate(prompt: str, timeout_seconds: float) -> tuple[LlmSelection, dict[str, Any]]:
-    return generate_structured(
-        prompt,
-        LlmSelection,
-        model=settings.top5_llm_model,
-        api_key=settings.gemini_api_key,
-        timeout_seconds=timeout_seconds,
-    )
+class AllModelsFailed(LlmError):
+    """Both the main and the fallback model failed in one attempt (operator alert)."""
+
+
+PRIMARY_TIME_SHARE = 0.6  # of the attempt's model budget; the rest is left for the fallback
+FALLBACK_MIN_SECONDS = 10.0
+
+
+def gemini_generate(
+    prompt: str,
+    timeout_seconds: float,
+    *,
+    call: Callable[..., tuple[LlmSelection, dict[str, Any]]] = generate_structured,
+    clock: Callable[[], float] = monotonic,
+) -> tuple[LlmSelection, dict[str, Any]]:
+    """Main model first; on a request error, the lower fallback model once.
+
+    The answer's raw JSON carries `model` (the model that answered) for the attempt record.
+    """
+    primary = settings.top5_llm_model
+    fallback = settings.top5_llm_fallback_model.strip()
+    if fallback == primary:
+        fallback = ""
+    started = clock()
+
+    def ask(model: str, budget: float) -> tuple[LlmSelection, dict[str, Any]]:
+        answer, raw = call(
+            prompt, LlmSelection, model=model, api_key=settings.gemini_api_key,
+            timeout_seconds=budget,
+        )
+        return answer, {"model": model, **raw}
+
+    if not fallback:
+        return ask(primary, timeout_seconds)
+    try:
+        return ask(primary, timeout_seconds * PRIMARY_TIME_SHARE)
+    except LlmError as first:
+        remaining = timeout_seconds - (clock() - started) - 2
+        if remaining < FALLBACK_MIN_SECONDS:
+            raise AllModelsFailed(
+                f"{primary}: {first}; {fallback}: not tried (no time left)"
+            ) from None
+        logger.warning("TOP 5 main model %s failed (%s); trying %s", primary, first, fallback)
+        try:
+            return ask(fallback, remaining)
+        except LlmError as second:
+            raise AllModelsFailed(f"{primary}: {first}; {fallback}: {second}") from None
 
 
 # ---- week state, publication ----------------------------------------------------------------
@@ -783,6 +824,8 @@ def run_attempt(
                 row.curation_version = selection.curation_version
                 row.evidence = selection.evidence
                 row.llm_output = selection.llm_output
+                if isinstance(selection.llm_output, dict) and selection.llm_output.get("model"):
+                    row.model = selection.llm_output["model"]  # the fallback may have answered
             elif failure is not None:
                 row.evidence = getattr(failure, "evidence", None)
                 row.llm_output = getattr(failure, "llm_output", None)
@@ -808,13 +851,24 @@ def run_attempt(
             needs_alert = _fail(
                 session, week, row, previous, error, clock(), timed_out=not finished
             )
+            attempts, next_retry = week.auto_attempts, week.next_retry_at
             session.commit()
         logger.warning("TOP 5 %s attempt %s failed: %s", week_start, attempt_id, error)
-        sent = (
-            _send_alert(session_factory, week_start, error, finished_at, alert)
-            if needs_alert
-            else None
-        )
+        if needs_alert:
+            sent = _send_alert(session_factory, week_start, error, finished_at, alert)
+        elif getattr(failure, "all_models_failed", False):
+            # Main and fallback model both failed: tell the operator now, even when an
+            # automatic retry remains. Not counted as the once-per-week delay alert.
+            sent = alert(
+                Top5DelayNotice(
+                    week_start, attempts, error, finished_at,
+                    kind="models_failed", next_retry_at=next_retry,
+                )
+            )
+            if not sent:
+                logger.warning("TOP 5 model failure alert for %s was not delivered", week_start)
+        else:
+            sent = None
         return AttemptOutcome(
             "failed", week_start, attempt_id, message=error, api_requests=requests, alert_sent=sent
         )

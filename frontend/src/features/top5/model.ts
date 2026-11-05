@@ -3,7 +3,7 @@ import { formatKstDateTime, formatKstMonthDayTime, formatPeriod } from "@/lib/fo
 import { teamName } from "@/lib/format/match";
 
 /**
- * Presentation rules of the AI weekly TOP 5 (docs/TOP5_POLICY 2026-11-02 revision, guide
+ * Presentation rules of the AI weekly TOP 5 (TOP 5 policy 2026-11-02 in the planning docs, guide
  * §6.4, Figma 159:923 strip / 159:924 panel). Three public UIs: the list, "no supported
  * matches" and the delay notice. Last week's result, fewer than five matches and changed
  * matches are data of the same list, never separate screens.

@@ -13,6 +13,7 @@ from pydantic import SecretStr
 from app.notifications.discord import Top5DelayNotice, build_top5_payload, notify_top5_delay
 from app.providers import gemini
 from app.providers.gemini import LlmError, generate_structured
+from app.services import top5_selection as top5
 from app.services.top5_selection import (
     LlmPick,
     LlmSelection,
@@ -216,3 +217,74 @@ def test_failed_delay_alert_is_reported_not_retried():
     )
     assert len(sent) == 1
     assert not notify_top5_delay(NOTICE, webhook_url=SecretStr(""))
+
+
+def fake_call(results):
+    """generate_structured stand-in: pops one result (an answer or an exception) per call."""
+    calls = []
+
+    def call(prompt, schema, *, model, api_key, timeout_seconds):
+        calls.append((model, timeout_seconds))
+        result = results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return LlmSelection(picks=[]), result
+
+    return call, calls
+
+
+def models(monkeypatch, primary="gemini-3.8-flash", fallback="gemini-3.5-flash-lite"):
+    monkeypatch.setattr(top5.settings, "top5_llm_model", primary)
+    monkeypatch.setattr(top5.settings, "top5_llm_fallback_model", fallback)
+
+
+def test_main_model_answer_skips_fallback(monkeypatch):
+    models(monkeypatch)
+    call, calls = fake_call([{"picks": []}])
+    _, raw = top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
+    assert calls == [("gemini-3.8-flash", 60.0)]  # main model gets its share of the budget
+    assert raw["model"] == "gemini-3.8-flash"
+
+
+def test_request_error_falls_back_to_lower_model(monkeypatch):
+    models(monkeypatch)
+    call, calls = fake_call([LlmError("Gemini API error 503 UNAVAILABLE"), {"picks": []}])
+    _, raw = top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
+    assert [m for m, _ in calls] == ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
+    assert calls[1][1] == 98.0  # the rest of the budget
+    assert raw["model"] == "gemini-3.5-flash-lite"
+
+
+def test_both_models_failing_is_reported_as_all_failed(monkeypatch):
+    models(monkeypatch)
+    call, _ = fake_call([LlmError("Gemini API error 503"), LlmError("Gemini API error 429")])
+    with pytest.raises(top5.AllModelsFailed) as info:
+        top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
+    assert "gemini-3.8-flash: Gemini API error 503" in str(info.value)
+    assert "gemini-3.5-flash-lite: Gemini API error 429" in str(info.value)
+
+
+def test_no_fallback_without_time_or_when_disabled(monkeypatch):
+    models(monkeypatch)
+    ticks = iter([0.0, 95.0])
+    call, calls = fake_call([LlmError("timeout")])
+    with pytest.raises(top5.AllModelsFailed, match="not tried"):
+        top5.gemini_generate("p", 100, call=call, clock=lambda: next(ticks))
+    assert len(calls) == 1
+    models(monkeypatch, fallback="")
+    call, calls = fake_call([LlmError("Gemini API error 503")])
+    with pytest.raises(LlmError) as info:
+        top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
+    assert not isinstance(info.value, top5.AllModelsFailed) and calls == [("gemini-3.8-flash", 100)]
+
+
+def test_models_failed_alert_payload_names_next_step():
+    retry_at = datetime(2026, 11, 1, 15, 5, tzinfo=UTC)  # 11/02 00:05 KST
+    notice = Top5DelayNotice(WEEK, 1, "LLM failed: a; b", IN_WEEK, "models_failed", retry_at)
+    embed = build_top5_payload(notice)["embeds"][0]
+    fields = {f["name"]: f["value"] for f in embed["fields"]}
+    assert "모두 실패" in embed["title"]
+    assert fields["다음 단계"] == "11/02 00:05 KST 자동 재시도 예정"
+    manual = Top5DelayNotice(WEEK, 2, "x", IN_WEEK, "models_failed", None)
+    fields = {f["name"]: f["value"] for f in build_top5_payload(manual)["embeds"][0]["fields"]}
+    assert "app.sync top5" in fields["다음 단계"]

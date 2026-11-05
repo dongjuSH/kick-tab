@@ -6,9 +6,9 @@ from pydantic import Field
 from app.schemas.common import ApiModel
 from app.schemas.match import MatchSummary
 
-# Public TOP 5 UI (docs/TOP5_POLICY 2026-11-02): the selected list, "no supported matches"
-# or the delay notice. Job states (selecting, first failure, retry) are never sent: during
-# them the previous week's public result is served as it was.
+# Public TOP 5 UI (TOP 5 policy 2026-11-02 in the planning docs): the selected list,
+# "no supported matches" or the delay notice. Job states (selecting, first failure,
+# retry) are never sent: during them the previous week's public result is served as it was.
 TopMatchesView = Literal["list", "none", "delayed"]
 
 

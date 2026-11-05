@@ -6,7 +6,7 @@
 
 **2026-11-04 · 01 변경:** `frontend/public/brand/logo-{header,mobile,footer}.svg` 승인 로고, `frontend/src/app/favicon.ico` 승인 파비콘(이전 `icon.svg` 제거), `Logo.tsx` 사용처 연결, `MainNav.tsx` 상태별 글자 위치·밑줄, `Top5Strip.tsx`·`model.ts`·`globals.css` 요약 띠·순환·표기.
 
-> TOP 5는 [2026-11-02 개정 정책](../../docs/TOP5_POLICY_2026-11-01.md)(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.
+> TOP 5는 기획 문서의 2026-11-02 개정 정책(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.
 
 기준: 2026-11-03 (화, 04 경기 상세·AI 주간 TOP 5 완료 — Codex 교차 검증 통과), 브랜치 `feat/04-match-detail`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
@@ -28,7 +28,7 @@
 | `pyproject.toml` | 의존성(FastAPI, SQLAlchemy 2.1.6, Alembic 1.20.1, APScheduler 3.11.3, 04: google-genai 2.34.0 등)과 ruff·pytest 설정 | `uv.lock` | 완료 |
 | `.python-version`, `.gitignore` | Python 3.12 지정, 백엔드 전용 제외 목록 | — | 완료 |
 | `certs/supabase-ca.crt` | Supabase TLS(`verify-full`) CA 인증서 | `app/database.py`, `app/db/session.py` | 완료 |
-| `app/config.py` | `Settings`: `.env` 로딩, CORS·신뢰 프록시·스케줄러·API-Football 한도·비밀 값(`SecretStr`)·디스코드 웹후크, 03: `current_season`(2026)·네이버 키/주소·`news_retention_hours`(72)·`image_rights_enforced`, 04: `gemini_api_key`·`top5_alert_discord_webhook_url`(SecretStr)·`top5_llm_model`(gemini-3.8-flash)·`top5_attempt_timeout_seconds`(240) | 전 모듈 | 완료 |
+| `app/config.py` | `Settings`: `.env` 로딩, CORS·신뢰 프록시·스케줄러·API-Football 한도·비밀 값(`SecretStr`)·디스코드 웹후크, 03: `current_season`(2026)·네이버 키/주소·`news_retention_hours`(72)·`image_rights_enforced`, 04: `gemini_api_key`·`top5_alert_discord_webhook_url`(SecretStr)·`top5_llm_model`(gemini-3.8-flash)·`top5_attempt_timeout_seconds`(240), 00(2026-11-04): `top5_llm_fallback_model`(하위 모델) | 전 모듈 | 완료 |
 | `app/core/kst.py` | `kst_today()`·`kst_date()`(KST 고정 오프셋) | 일정·뉴스·TOP 5 | 완료 |
 | `app/core/locks.py` | `single_flight()`(스레드 잠금 + 트랜잭션 advisory lock으로 같은 키의 보충 조회를 1회로 합침), `advisory_key()` | 경기 상세·상대 전적·팀 흐름 보충 | 완료(04) |
 | `app/main.py` | FastAPI 앱, 예외 처리(먼저)·CORS·`/api/v1` 라우터 등록, `/health`, 스케줄러 수명 주기 | `app/api/*`, `app/sync/scheduler.py` | 완료 |
@@ -90,7 +90,7 @@
 | `app/schemas/feedback.py` | `FeedbackCreate`(본문·유형 필수, 페이지 경로, 허니팟 `website`), `FeedbackReceipt` | `routes/feedback.py` | 완료 |
 | `app/services/feedback.py` | `create_feedback`, `normalize_body`·`body_hash`, `lock_body_hash`(본문 해시별 트랜잭션 잠금), `is_duplicate`(24시간), `DuplicateFeedbackError` | `routes/feedback.py` | 완료 |
 | `app/services/top_matches.py` | `shown_publication()`(이번 주 공개본 → 바로 지난주 list·none → 지연 안내), `current_version()`, `get_current_top_matches()`, `current_kst_week()`·`week_of()` | `routes/top_matches.py`, 선정 | 완료(04) |
-| `app/services/top5_selection.py` | `run_attempt(trigger)`(주 잠금·시간 제한·데몬 스레드·게시 가드), `select_week`(일정 신선도·후보·순위표·근거 수집·프롬프트·Gemini·검증), `validate_picks`, `_publish`·`_fail`·`_start`, `reconcile_attempts`(중단 시도 정리), `retry_due`·`first_attempt_due`·`recovery_due`, `load_curation` | `sync/top5.py` | 완료(04) |
+| `app/services/top5_selection.py` | `run_attempt(trigger)`(주 잠금·시간 제한·데몬 스레드·게시 가드), `select_week`(일정 신선도·후보·순위표·근거 수집·프롬프트·Gemini·검증), `validate_picks`, `_publish`·`_fail`·`_start`, `reconcile_attempts`(중단 시도 정리), `retry_due`·`first_attempt_due`·`recovery_due`, `load_curation`, 00(2026-11-04): `gemini_generate()` 주 모델 오류 시 하위 모델 1회 대체·`AllModelsFailed`, 두 모델 실패 시 운영 알림, 응답 모델 기록 | `sync/top5.py` | 완료(04) |
 | `app/services/match_detail.py` | `save_provider_items`(경기 응답의 이벤트·상세 블록 저장), `detail_fetch_due`·`ensure_records`(요청 시 1회 보충), `final_record_targets`(종료 전환 대상), `read_records`(블록 상태 판정·통계·라인업·평점 해석) | 라우트·`sync/fixtures.py` | 완료(04) |
 | `app/services/head_to_head.py` | `fetch_meetings`·`fetch_form`(친선·미종료 제외, 범위 확대 1회), `ensure_meetings`·`ensure_form`(갱신 조건·쿨다운, `strict`는 TOP 5), `recent_form`·`result_for`, `read_head_to_head` | 라우트·TOP 5 | 완료(04, 08 재사용 가능) |
 | `app/services/reviews.py` | `list_reviews(sort)`(인기순·최신순·반응 수·평균), `reviews_available`(정상 종료만) | `routes/matches.py` | 완료(04, 02가 작성·반응·닉네임) |
@@ -102,7 +102,7 @@
 | `app/services/news.py` | 커서 페이지 분할 `list_news`, `collection_state`(최근 수집 실패·오래됨) | `routes/schedule.py` | 완료(08이 팀 조건 추가) |
 | `app/services/news_link.py` | `check_link()`: 원문 HEAD→GET 헤더 1회, 404·410만 gone, 공개 주소만 | `routes/schedule.py` | 완료 |
 | `app/providers/naver_news.py` | `NaverNewsClient.search()`(키 없으면 요청 없음, 인증·한도 오류 시 중단, 요청 수 집계) | `sync/news.py` | 완료 |
-| `app/notifications/discord.py` | 공통 전송 `_post`(재시도 없음), `notify_feedback`·`build_payload`·`FeedbackNotice`, 04: `notify_top5_delay`·`build_top5_payload`·`Top5DelayNotice`(별도 채널, 복구 명령 안내), httpx 로그의 웹후크 주소 가림 | 의견 라우트, TOP 5 선정 | 완료 |
+| `app/notifications/discord.py` | 공통 전송 `_post`(재시도 없음), `notify_feedback`·`build_payload`·`FeedbackNotice`, 04: `notify_top5_delay`·`build_top5_payload`·`Top5DelayNotice`(별도 채널, 복구 명령 안내), httpx 로그의 웹후크 주소 가림, 00(2026-11-04): `Top5DelayNotice.kind`(`delay`·`models_failed`)·`next_retry_at`, 두 모델 실패 알림 | 의견 라우트, TOP 5 선정 | 완료 |
 | `app/providers/gemini.py` | `generate_structured()`: 키 직접 전달, 구조화 출력(`response_json_schema`), SDK 재시도 끔·밀리초 시간 제한, 오류를 안전한 `LlmError`로 | `services/top5_selection.py` | 완료(04) |
 | `app/providers/api_football.py` | `ApiFootballClient.get`(401·403·429는 본문 형식과 무관하게 이후 호출 중단), `MinuteRateLimiter`, `DailyBudget`, 공용 보호 장치, 오류 클래스 | `sync/registry.py` | 완료(03 수집 작업이 `get()`으로 사용) |
 
@@ -137,9 +137,9 @@
 | `tests/test_schedule_sources.py` | 네이버 클라이언트(모의 전송·중단 조건·키 없음), 사전 확인 건너뜀, 원문 확인(리다이렉트·내부 주소 거부), 일정·뉴스 API 입력 검증(날짜·팀 ID·분류 422), OpenAPI 메타 타입 |
 | `tests/test_schedule_db.py` | `KICKTAB_DB_TESTS=1`일 때 KST 날짜·상태·연기, 관심 팀 일정(진행 우선·맞대결 1회), 별칭 검색, 실패 대회 기존 행 유지, 팀 21일 범위·날짜 가용성·뉴스 48개 제한(롤백) |
 | `tests/test_match_detail.py` | 이벤트 중복 제거, 통계 순서·누락값, 라인업·평점(미출전·'0' 자리값 제외), 보충 조회 시점, 친선 제외·범위 확대·결과 판정 |
-| `tests/test_top5.py` | KST 주 경계·00:05 슬롯, 선정 검증(개수·중복·후보·순위·이유·주간), 공개 결과 선택 규칙, 프롬프트, 시드, Gemini 래퍼(모의), 지연 알림 |
+| `tests/test_top5.py` | KST 주 경계·00:05 슬롯, 선정 검증(개수·중복·후보·순위·이유·주간), 공개 결과 선택 규칙, 프롬프트, 시드, Gemini 래퍼(모의), 지연 알림 |, 하위 모델 대체·두 모델 실패·시간 부족·대체 끔·두 모델 실패 알림 내용(2026-11-04)
 | `tests/test_review_regressions.py` | Codex 교차 검증 회귀: 이번 주 공개본 우선, 게시 직전 시각 재확인, 중단 복구·재시도 슬롯, 근거 작업자 종료, 잠금 안 쿨다운, 조회 실패 블록 상태(지금 조회하는 경우만 unavailable) |
-| `tests/test_top5_db.py` | `KICKTAB_DB_TESTS=1`일 때 첫 실패→재시도 공개, 두 번 실패→지연·알림 1회→수동 복구, 경기 없음, 오래된 일정 실패, 시간 초과 게시 차단, 후기 정렬·평균(롤백) |
+| `tests/test_top5_db.py` | `KICKTAB_DB_TESTS=1`일 때 첫 실패→재시도 공개, 두 번 실패→지연·알림 1회→수동 복구, 경기 없음, 오래된 일정 실패, 시간 초과 게시 차단, 후기 정렬·평균(롤백) |, 두 모델 실패 시 시도별 알림과 지연 알림 1회·대체 모델 응답 게시·기록(2026-11-04)
 
 ## 프런트엔드 (`frontend/`)
 
