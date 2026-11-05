@@ -33,6 +33,7 @@ from app.schemas.schedule import (
     NewsMeta,
     NewsResponse,
     ScheduleMeta,
+    SeasonsResponse,
     TeamSchedule,
     TeamScheduleResponse,
     TeamSearchResponse,
@@ -48,10 +49,12 @@ from app.services.fixtures import (
 )
 from app.services.news import InvalidCursor, collection_state, list_news
 from app.services.news_link import check_link
-from app.services.reference import team_detail_lookup, team_ref
+from app.services.reference import managed_seasons, team_detail_lookup, team_ref
+from app.services.results import supported_seasons
 from app.services.team_search import search_teams
 
 router = APIRouter(tags=["schedule"])
+UNSUPPORTED_SEASON = "지원하지 않는 시즌입니다. 시즌 목록에서 다시 선택해 주세요."
 Db = Annotated[Session, Depends(get_db)]
 MAX_FAVORITES = 5
 
@@ -65,17 +68,19 @@ NEWS_NOT_COLLECTED = "뉴스를 불러오지 못했습니다. 잠시 후 다시 
 
 @router.get("/competitions")
 def read_competitions(db: Db) -> CompetitionsResponse:
-    season = settings.current_season
-    rows = db.execute(
-        select(Competition, CompetitionSeason)
-        .outerjoin(
-            CompetitionSeason,
-            (CompetitionSeason.competition_id == Competition.id)
-            & (CompetitionSeason.season == season),
-        )
-        .where(Competition.active)
-        .order_by(Competition.sort_order)
+    competitions = db.scalars(
+        select(Competition).where(Competition.active).order_by(Competition.sort_order)
     ).all()
+    seasons: dict[int, list[CompetitionSeasonInfo]] = {}
+    for row in db.scalars(
+        select(CompetitionSeason)
+        .where(CompetitionSeason.season.in_(managed_seasons()))
+        .order_by(CompetitionSeason.season.desc())
+    ):
+        seasons.setdefault(row.competition_id, []).append(
+            CompetitionSeasonInfo(season=row.season, label=row.label, availability=row.availability)
+        )
+    current = settings.current_season
     return CompetitionsResponse(
         data=[
             CompetitionItem(
@@ -83,15 +88,26 @@ def read_competitions(db: Db) -> CompetitionsResponse:
                 name_ko=c.name_ko,
                 short_name=c.short_name,
                 group=c.group_key,
-                current_season=CompetitionSeasonInfo(
-                    season=s.season, label=s.label, availability=s.availability
-                )
-                if s
-                else None,
+                current_season=next(
+                    (s for s in seasons.get(c.id, []) if s.season == current), None
+                ),
+                seasons=seasons.get(c.id, []),
             )
-            for c, s in rows
+            for c in competitions
         ]
     )
+
+
+@router.get("/seasons")
+def read_seasons(db: Db) -> SeasonsResponse:
+    """Season dropdown (HIST-002, CMP-003): newest first, `current` marks the default."""
+    return SeasonsResponse(data=supported_seasons(db))
+
+
+def require_supported_season(db: Session, season: int) -> None:
+    """An unsupported season is refused, never swapped for another one (HIST-002)."""
+    if season not in {item.season for item in supported_seasons(db)}:
+        raise ApiError(404, "NOT_FOUND", UNSUPPORTED_SEASON)
 
 
 @router.get("/fixtures")
@@ -206,9 +222,16 @@ def read_team_schedule(
 
 @router.get("/teams/search")
 def read_team_search(
-    db: Db, q: Annotated[str, Query(min_length=1, max_length=40)]
+    db: Db,
+    q: Annotated[str, Query(min_length=1, max_length=40)],
+    season: Annotated[
+        int | None,
+        Query(ge=1, description="Search that season's teams (past results); default current"),
+    ] = None,
 ) -> TeamSearchResponse:
-    return TeamSearchResponse(data=search_teams(db, q))
+    if season is not None:
+        require_supported_season(db, season)
+    return TeamSearchResponse(data=search_teams(db, q, season=season))
 
 
 @router.get("/news")

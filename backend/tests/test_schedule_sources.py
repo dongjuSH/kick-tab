@@ -155,6 +155,12 @@ def test_openapi_exposes_typed_meta():
     assert set(schema["FixtureDateAvailability"]["properties"]) == {
         "date", "competitionIds", "unknownCompetitionIds",
     }
+    # Chat 05: past results page meta and the season dropdown.
+    assert set(schema["ResultsMeta"]["properties"]) == {
+        "page", "size", "total", "updatedAt", "failedCompetitionIds",
+    }
+    assert set(schema["SeasonItem"]["properties"]) == {"season", "label", "current"}
+    assert "seasons" in schema["CompetitionItem"]["properties"]
 
 
 def _link_transport(head_status, get_status, location=None):

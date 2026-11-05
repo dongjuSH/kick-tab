@@ -21,13 +21,21 @@ export const queryKeys = {
   competitions: {
     all: ["competitions"] as const,
   },
+  seasons: {
+    all: ["seasons"] as const,
+  },
+  results: {
+    list: (params: { season: number | null; competitions: readonly number[]; team: number | null; page: number }) =>
+      ["results", "list", { ...params, competitions: params.competitions.join(",") }] as const,
+  },
   fixtures: {
     byDate: (date: string) => ["fixtures", "date", { date }] as const,
     team: (teamId: number, today: string) => ["fixtures", "team", { teamId, today }] as const,
     next: (teamIds: readonly number[]) => ["fixtures", "next", { teams: teamIds.join(",") }] as const,
   },
   teams: {
-    search: (q: string) => ["teams", "search", { q }] as const,
+    /** season null = the current season (main schedule). */
+    search: (q: string, season: number | null = null) => ["teams", "search", { q, season }] as const,
   },
   news: {
     list: (badge: string | null) => ["news", "list", { badge }] as const,

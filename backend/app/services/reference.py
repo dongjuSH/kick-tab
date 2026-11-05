@@ -37,6 +37,11 @@ def normalize_name(text: str) -> str:
     return "".join(ch for ch in composed if ch not in _IGNORED_CHARS)
 
 
+def managed_seasons() -> list[int]:
+    """Seasons kept for every competition, oldest first (2025 .. current, CMP-003)."""
+    return list(range(settings.first_season, settings.current_season + 1))
+
+
 def upsert_competitions(session: Session) -> None:
     """Seeded rows; name_en and logo come from the provider later and are kept."""
     for order, seed in enumerate(COMPETITIONS):

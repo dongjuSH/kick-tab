@@ -13,10 +13,12 @@ import type { TeamRef } from "@/lib/api/types";
 import { teamName } from "@/lib/format/match";
 import { TeamCrest } from "./TeamCrest";
 
-function teamSearchQuery(q: string) {
+function teamSearchQuery(q: string, season: number | null) {
   return queryOptions({
-    queryKey: queryKeys.teams.search(q),
-    queryFn: async ({ signal }) => (await apiFetch<TeamRef[]>("/teams/search", { query: { q }, signal })).data,
+    queryKey: queryKeys.teams.search(q, season),
+    queryFn: async ({ signal }) =>
+      (await apiFetch<TeamRef[]>("/teams/search", { query: season === null ? { q } : { q, season }, signal }))
+        .data,
     staleTime: 10 * 60_000,
   });
 }
@@ -26,15 +28,21 @@ function teamSearchQuery(q: string) {
  * no match). Korean/English aliases resolve on the server; an alias naming several teams
  * lists them all ("후보 중 원하는 팀을 선택하세요"). Nothing is ever replaced by another team.
  * Clearing the text (× beside the field) clears the selection.
+ * `season` (past results, chat 05) searches that season's teams, including teams without a
+ * current team detail; without it the current season is searched.
  */
 export function TeamSearch({
   selected,
   onSelect,
   description,
+  season = null,
+  placeholder = "예: 맨시티, 레알 마드리드, Bayern Munich",
 }: {
   selected: TeamRef | null;
   onSelect: (team: TeamRef | null) => void;
   description?: string;
+  season?: number | null;
+  placeholder?: string;
 }) {
   const [text, setText] = useState(selected ? teamName(selected) : "");
   const [open, setOpen] = useState(false);
@@ -43,7 +51,7 @@ export function TeamSearch({
   const inputRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const query = useDeferredValue(text.trim());
-  const search = useQuery({ ...teamSearchQuery(query), enabled: open && query.length > 0 });
+  const search = useQuery({ ...teamSearchQuery(query, season), enabled: open && query.length > 0 });
   const results = search.data ?? [];
 
   // Follow outside changes (reset, favourite button, URL) without fighting the user's typing.
@@ -99,7 +107,7 @@ export function TeamSearch({
             aria-describedby={description ? `${listId}-help` : undefined}
             aria-activedescendant={showList && results.length ? optionId(active) : undefined}
             autoComplete="off"
-            placeholder="예: 맨시티, 레알 마드리드, Bayern Munich"
+            placeholder={placeholder}
             maxLength={40}
             value={text}
             onChange={(event) => {

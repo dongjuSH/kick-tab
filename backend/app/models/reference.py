@@ -80,6 +80,10 @@ class CompetitionSeason(Base):
     fixtures_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     fixtures_window_start: Mapped[date | None] = mapped_column(Date)
     fixtures_window_end: Mapped[date | None] = mapped_column(Date)
+    # Whole-season list (past results, chat 05): last success / failure of
+    # /fixtures?league=&season=. The 21-day sync above never touches these.
+    season_fixtures_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    season_fixtures_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

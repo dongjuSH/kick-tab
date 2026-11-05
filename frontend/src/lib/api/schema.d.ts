@@ -74,6 +74,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/seasons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Seasons
+         * @description Season dropdown (HIST-002, CMP-003): newest first, `current` marks the default.
+         */
+        get: operations["read_seasons_api_v1_seasons_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fixtures": {
         parameters: {
             query?: never;
@@ -213,6 +233,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Results
+         * @description HIST-001·002: every finished match of the season (normal results and rulings),
+         *     newest first, combined with competition and team conditions, 10 per page.
+         *
+         *     An unsupported season is 404 (never replaced); a season whose whole-season lists were
+         *     never loaded is 503, so "not collected" is not shown as "no results".
+         */
+        get: operations["read_results_api_v1_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fixtures/{fixture_id}": {
         parameters: {
             query?: never;
@@ -325,6 +369,8 @@ export interface components {
              */
             group: "EPL" | "LaLiga" | "SerieA" | "Bundesliga" | "Ligue1" | "UEFA";
             currentSeason: components["schemas"]["CompetitionSeasonInfo"] | null;
+            /** Seasons */
+            seasons: components["schemas"]["CompetitionSeasonInfo"][];
         };
         /** CompetitionRef */
         CompetitionRef: {
@@ -764,6 +810,35 @@ export interface components {
             /** Data */
             data: components["schemas"]["PlayerRating"][] | null;
         };
+        /** ResultsMeta */
+        ResultsMeta: {
+            /** Page */
+            page: number;
+            /** Size */
+            size: number;
+            /** Total */
+            total: number;
+            /** Updatedat */
+            updatedAt: string | null;
+            /** Failedcompetitionids */
+            failedCompetitionIds: number[];
+        };
+        /**
+         * ResultsPage
+         * @description Past results of one season (chat 05): the resolved season, the selected team (null
+         *     without a team filter) and one page of finished matches, newest first.
+         */
+        ResultsPage: {
+            season: components["schemas"]["SeasonItem"];
+            team: components["schemas"]["TeamRef"] | null;
+            /** Matches */
+            matches: components["schemas"]["MatchSummary"][];
+        };
+        /** ResultsResponse */
+        ResultsResponse: {
+            data: components["schemas"]["ResultsPage"];
+            meta: components["schemas"]["ResultsMeta"];
+        };
         /** ReviewItem */
         ReviewItem: {
             /** Id */
@@ -816,6 +891,27 @@ export interface components {
             updatedAt: string | null;
             /** Failedcompetitionids */
             failedCompetitionIds: number[];
+        };
+        /**
+         * SeasonItem
+         * @description A season the service offers (season dropdown, HIST-002 / LEAG).
+         */
+        SeasonItem: {
+            /** Season */
+            season: number;
+            /** Label */
+            label: string;
+            /** Current */
+            current: boolean;
+        };
+        /** SeasonsResponse */
+        SeasonsResponse: {
+            /** Data */
+            data: components["schemas"]["SeasonItem"][];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
         };
         /** StatRow */
         StatRow: {
@@ -1143,6 +1239,44 @@ export interface operations {
             };
         };
     };
+    read_seasons_api_v1_seasons_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeasonsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     read_fixtures_api_v1_fixtures_get: {
         parameters: {
             query?: {
@@ -1308,6 +1442,8 @@ export interface operations {
         parameters: {
             query: {
                 q: string;
+                /** @description Search that season's teams (past results); default current */
+                season?: number | null;
             };
             header?: never;
             path?: never;
@@ -1404,6 +1540,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NewsLinkResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_results_api_v1_results_get: {
+        parameters: {
+            query?: {
+                /** @description API season; default current */
+                season?: number | null;
+                /** @description Comma-separated competition ids */
+                competitions?: string | null;
+                /** @description Team id */
+                team?: number | null;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResultsResponse"];
                 };
             };
             /** @description Client error */

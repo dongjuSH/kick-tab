@@ -1,7 +1,9 @@
-"""Team search for the main schedule (SCH-006, D-16): Korean/English aliases.
+"""Team search (SCH-006, HIST-002, D-16): Korean/English aliases.
 
-Candidates are the current-season teams of the supported competitions (five-league lists
-plus teams seen in collected fixtures). No result is ever replaced by another team; an
+Candidates are one season's teams of the supported competitions (five-league lists plus
+teams seen in collected fixtures): the current season on the main schedule, the selected
+season on past results - including teams without a current team detail (chat 05).
+No result is ever replaced by another team; an
 ambiguous alias returns every team it names so the user picks one.
 """
 
@@ -26,11 +28,13 @@ def _rank(query: str, name: str) -> int | None:
     return None
 
 
-def search_teams(session: Session, raw_query: str) -> list[TeamRef]:
+def search_teams(
+    session: Session, raw_query: str, *, season: int | None = None
+) -> list[TeamRef]:
     query = normalize_name(raw_query)
     if not query:
         return []
-    season = settings.current_season
+    season = season or settings.current_season
     candidate_ids = select(TeamCompetitionSeason.team_id).where(
         TeamCompetitionSeason.season == season
     )
@@ -58,7 +62,8 @@ def search_teams(session: Session, raw_query: str) -> list[TeamRef]:
         team = teams[team_id]
         display = team.name_ko or team.name_en
         # Best match first, then names that start with the query ("레알" -> 레알 마드리드
-        # before 비야레알), then Korean-named (five-league) teams.
+        # before 비야레알), then Korean-named (five-league) teams. Detail availability
+        # always follows the current season's allow set (past teams: false).
         return (
             best[team_id],
             not normalize_name(display).startswith(query),
