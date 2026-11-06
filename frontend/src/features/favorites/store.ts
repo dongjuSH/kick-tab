@@ -77,8 +77,20 @@ function write(ids: number[]): boolean {
   }
 }
 
-export function addFavorite(teamId: number): FavoriteChange {
+/**
+ * The stored list right before a change. When it differs from what the screens last read
+ * (another tab saved first and its storage event has not arrived), every subscriber is told,
+ * so a refusal is shown next to the list it was refused for (07: 5 / 5 notice).
+ */
+function latest(): FavoritesSnapshot {
+  const shown = cache?.snapshot;
   const current = readFavorites();
+  if (shown && current !== shown) notify();
+  return current;
+}
+
+export function addFavorite(teamId: number): FavoriteChange {
+  const current = latest();
   if (current.status !== "ready") return "unavailable";
   if (current.ids.includes(teamId)) return "exists";
   if (current.ids.length >= FAVORITES_MAX) return "limit";
@@ -86,7 +98,7 @@ export function addFavorite(teamId: number): FavoriteChange {
 }
 
 export function removeFavorite(teamId: number): FavoriteChange {
-  const current = readFavorites();
+  const current = latest();
   if (current.status !== "ready") return "unavailable";
   if (!current.ids.includes(teamId)) return "removed"; // nothing to change (FAV-003)
   return write(current.ids.filter((id) => id !== teamId)) ? "removed" : "failed";

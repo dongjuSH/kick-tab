@@ -30,12 +30,23 @@ export function FavoriteToggle({
   className?: string;
 }) {
   const favorites = useFavorites();
-  const [message, setMessage] = useState<string | null>(null);
+  // A refusal belongs to the list it was given for: once the list changes it is dropped, so
+  // it never returns when the same list comes back (Codex 1차 지적 2). The list is taken on the
+  // render after the press, since the press itself may reveal a newer list (another tab
+  // already saved five teams).
+  const listKey = `${favorites.status}:${favorites.ids.join(",")}`;
+  const [refusal, setRefusal] = useState<{ text: string; listKey: string | null } | null>(null);
+  if (refusal && refusal.listKey === null) setRefusal({ text: refusal.text, listKey });
+  else if (refusal && refusal.listKey !== listKey) setRefusal(null);
+  const message = refusal && (refusal.listKey ?? listKey) === listKey ? refusal.text : null;
   const active = favorites.has(teamId);
+  // Figma 57:766 fav-full: with five teams the others cannot be added (FAV-002 6th refused).
+  const full = !active && favorites.status === "ready" && favorites.ids.length >= favorites.max;
 
   const toggle = () => {
     const result = active ? favorites.remove(teamId) : favorites.add(teamId);
-    setMessage(MESSAGES[result] ?? null);
+    const text = MESSAGES[result];
+    setRefusal(text ? { text, listKey: null } : null);
   };
 
   return (
@@ -44,11 +55,15 @@ export function FavoriteToggle({
         variant={active ? "primary" : "secondary"}
         fullWidth={fullWidth}
         aria-pressed={active}
-        aria-label={`${teamName} 관심 팀 ${active ? "해제" : "등록"}`}
-        disabled={favorites.status === "loading"}
+        aria-label={
+          full
+            ? `${teamName} 관심 팀 등록 불가, 최대 ${favorites.max}개까지 등록할 수 있어요`
+            : `${teamName} 관심 팀 ${active ? "해제" : "등록"}`
+        }
+        disabled={favorites.status === "loading" || full}
         onClick={toggle}
       >
-        {active ? "★ 관심 팀 등록됨" : "☆ 관심 팀 등록"}
+        {active ? "★ 관심 팀 등록됨" : full ? `최대 ${favorites.max}개까지 등록할 수 있어요` : "☆ 관심 팀 등록"}
       </Button>
       {message && (
         <p role="status" className="text-small text-warning">
