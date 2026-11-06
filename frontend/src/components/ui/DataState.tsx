@@ -18,6 +18,8 @@ interface DataStateProps {
   loadingFallback?: ReactNode;
   emptyTitle?: ReactNode;
   emptyDescription?: ReactNode;
+  /** Optional control under the empty message (07: '검색어 지우기'). */
+  emptyAction?: ReactNode;
   /** Error from the query; ApiError messages are shown as-is. */
   error?: unknown;
   errorTitle?: ReactNode;
@@ -68,6 +70,7 @@ export function DataState({
   loadingFallback,
   emptyTitle = "표시할 정보가 없습니다",
   emptyDescription,
+  emptyAction,
   error,
   errorTitle = "정보를 불러오지 못했습니다",
   onRetry,
@@ -114,7 +117,9 @@ export function DataState({
     );
   }
   if (status === "empty") {
-    return <StateMessage className={className} title={emptyTitle} description={emptyDescription} />;
+    return (
+      <StateMessage className={className} title={emptyTitle} description={emptyDescription} action={emptyAction} />
+    );
   }
   return (
     <div className={className}>

@@ -1,5 +1,25 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-06 (금) — 07 팀 탐색
+
+브랜치 `feat/07-team-browse`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 3차 통과(1차 중요 1·경미 4, 2차 중요 1·경미 1 보완). 05·06과 같이 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다. 외부 API 호출 0회(저장 데이터만), 마이그레이션 없음.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 팀 목록 API | `services/team_browse.py`(`browse_teams`·`MembershipUnknown`·`PAGE_SIZE` 12), `api/routes/teams.py`(`GET /teams?league=&q=&page=`), `schemas/teams.py`(`BrowseTeam`·`TeamsMeta`), `api/router.py` | LEAG-003: 현재 시즌 5대 리그 소속(`team_competition_seasons`)만, 리그 필터·별칭 검색·페이지. 기존 `/teams/search`는 10개 상한·컵/UEFA 팀 포함·리그 정보 없음이라 목록에 쓸 수 없어 새 API. 팀 목록 미수집이면 빈 목록 대신 503 `MEMBERSHIP_UNKNOWN`, 정수이면서 5대 리그가 아니면 404·정수가 아니면 422 |
+| 검색 공유 | `services/team_search.py`(`match_teams()` 분리) | 메인 검색과 팀 탐색이 같은 별칭 매칭·정렬을 쓰도록(모호한 별칭은 후보 팀 모두), 기존 `/teams/search` 동작 유지 |
+| 화면 | `app/teams/page.tsx`, `features/teams/`(`TeamsSection`·`useTeamsParams`·`queries`), `lib/api`(타입·쿼리 키 `teams.list`·`MEMBERSHIP_UNKNOWN`·생성 타입) | Figma 52:624/52:949·57:766: 리그 칩, 이름 검색, 관심 팀 안내, 카드(엠블럼·이름·영문명 · 리그, 팀 상세 링크), 12개씩 페이지, URL 상태·복원, 잘못된 URL·페이지 초과 안내, 로딩·검색 결과 없음·조회 실패·재조회 실패 시 확인된 목록 유지 |
+| 관심 팀 공통 | `favorites/FavoriteToggle.tsx`(5개 꽉 참 비활성, 거부 문구를 누른 직후 목록에 묶고 목록이 바뀌면 지움), `favorites/store.ts`(`latest()`) | FAV-002 6번째 거부(Figma fav-full), 다른 탭이 먼저 5개를 저장한 경우에도 안내 상자·버튼이 같은 목록을 보이도록 |
+| 공통 UI | `components/ui/DataState.tsx`(`emptyAction`) | 검색 결과 없음의 '검색어 지우기'(Figma 57:766) |
+| Codex 1차 보완 | `TeamsSection`(검색창 밖 URL 변경 시 연속 입력 종료·보낸 검색 순서 기억, 페이지 초과도 재조회 실패 안내 안에서), `FavoriteToggle`(같은 목록으로 돌아와도 거부 문구 재등장 없음), `routes/teams.py`(league 0·음수 404), 가이드 테스트 수 | 2페이지 → 검색 → 뒤로 → 새 검색이 2페이지 기록을 덮어씀(중요) 외 경미 4건 |
+| Codex 2차 보완 | `TeamsSection`의 `SearchField`(검색창 밖 URL 변경이면 검색어가 같아도 입력값을 URL로 맞추고 보내지 않은 글자 버림, Tab·Enter는 마지막 글자를 같은 기록 단계에 반영 후 종료) | 반영 전 검색어가 뒤로 가기 후 다시 적용됨(중요), Tab·Enter로 끝낸 검색이 기록 두 단계로 나뉨(경미) |
+| 테스트 | `tests/test_teams_db.py`(DB 실연동 5개), `tests/test_teams_rules.py`(요청 규칙 10건), `frontend/tests/teams.test.mjs`(6개) | 소속 96팀·리그 순서·페이지·리그별 소속·별칭·과거 시즌/UEFA 제외·소속 미확인 503, 상태 코드, URL 상태·꽉 참 마크업·다른 탭 선저장 알림·`emptyAction` |
+| 문서 | `docs/guide.md`(07 상태·§2·§6.4·§3.1 08 인수인계·§10.3 D-07·로컬 서버 확인 방법), `docs/file-feature-map.md`, 이 문서 | 사용자 요청으로 세 문서 최신화 |
+
+데이터: 현재 시즌 5대 리그 소속 96팀(EPL·라리가·세리에 A 20, 분데스리가·리그1 18), 12개씩 8페이지. 검수 중 소속 미확인·재조회 실패 확인을 위해 개발 DB의 리그1·EPL `teams_synced_at`을 잠시 비웠다가 원래 값으로 복구했다.
+
+검수: 백엔드 ruff·pytest 260(DB 실연동 포함 314)·alembic check, 프런트 lint·tsc·테스트 26개·Turbopack 빌드, `git diff --check`. 브라우저 1280·375·320에서 첫 진입 96팀·마지막 페이지, 리그 필터 전환·해제, 한국어·영문·모호한 별칭·리그 결합·결과 없음, 관심 팀 등록 → 메인 관심 팀 일정·버튼 반영 → 해제, 6번째 거부·다른 탭 선저장, 새로고침 유지, 저장소 차단(스크립트 모의), 팀 클릭 `/teams/[id]` 404 안내, 메인 '관리'·'팀 탐색에서 등록', URL 공유·새로고침·뒤로/앞으로, 잘못된 리그·페이지 URL, 서버 중단·소속 미확인 조회 실패와 '다시 확인', 키보드 이동·포커스, 콘솔 오류 0 확인. 미실행: 실제 브라우저 설정의 저장소 차단, 실기기 터치·스크린리더(전체 검수 단계).
+
 ## 2026-11-06 (금) — 06 리그 순위
 
 브랜치 `feat/06-standings`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 3차 통과(1차 지적 5건 — 차단 1·결함 1·개선 3, 2차 차단 1건 보완). 05와 같이 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다.

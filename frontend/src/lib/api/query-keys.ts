@@ -44,6 +44,8 @@ export const queryKeys = {
   teams: {
     /** season null = the current season (main schedule). */
     search: (q: string, season: number | null = null) => ["teams", "search", { q, season }] as const,
+    /** Team browse (chat 07): league null = all five leagues, q null = no search. */
+    list: (params: { league: number | null; q: string | null; page: number }) => ["teams", "list", params] as const,
   },
   news: {
     list: (badge: string | null) => ["news", "list", { badge }] as const,
