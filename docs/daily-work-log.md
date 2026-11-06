@@ -1,5 +1,23 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-06 (금) — 06 리그 순위
+
+브랜치 `feat/06-standings`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 3차 통과(1차 지적 5건 — 차단 1·결함 1·개선 3, 2차 차단 1건 보완). 05와 같이 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 순위·선수 데이터 | `models/standings.py`(`Standing`·`PlayerRanking`·`Player`·`PlayerSeasonStat`·`LeagueSync`), 마이그레이션 `0011_standings`(5개 테이블·CHECK·인덱스·RLS) | LEAG-001·002·004: 리그·시즌별 팀 순위(그룹 포함, 제공값·description 그대로), 선수 순위 4종(제공 순서, red만·yellowred 별도), 08이 재사용할 리그 전체 선수 시즌 기록, 리그·시즌·종류별 수집 상태 |
+| 수집·저장 | `services/standings.py`(`parse_standings`·`parse_top_list`·`parse_player_pages`, `check_standings`·`save_standings`·`save_ranking`·`save_player_stats`, `due_leagues`·`is_matchday`), `sync/standings.py`(`standings`·`player_rankings`·`player_stats`), `sync/jobs.py` | 경기일 1시간·그 외 하루 1회·이전 시즌 보관, 응답이 완전할 때만 한 트랜잭션 교체(재실행 중복 없음), 실패·잘린 응답은 기존 행·성공 시각 유지 후 실패 기록(CMP-004) |
+| 완전성 검증(Codex 보완) | 같은 파일: 팀 순위 순위 1..n·행 수 감소 금지·참가 팀 안·그 시즌 3경기 이상 팀 포함, 선수 순위 목록 축소 금지, 선수 페이지 마지막 외 20명·같은 선수 반복 거부·10% 초과 감소 금지 | 1차 차단(10/20팀·10/20명·빈 2페이지가 성공으로 덮어씀), 2차 차단(페이지 번호·크기는 정상이고 내용이 반복·밀린 응답). 2025 분데스리가·리그1 참가 팀 19(승강 PO 상대 포함)라 수 일치 대신 3경기 기준 |
+| 선방 집계 | `aggregate_saves`·`read_saves` | 골키퍼 기록을 팀별 합산, null이 하나라도 있으면 제외하고 인원 안내, 공동 순위(1·1·3) |
+| 순위 API | `api/routes/standings.py`(`GET /standings`·`/standings/summary`·`/player-rankings`), `schemas/standings.py`, `api/router.py` | 컵·UEFA·미지원 시즌 404, 미수집 503, 잘못된 유형 422, `refreshFailed`·`excluded`·`tied`, 현재 허용 집합 `TeamRef`(소속 미확인은 강등으로 단정하지 않음) |
+| 화면 | `app/standings/page.tsx`, `features/standings/`(`StandingsSection`·`StandingsTable`·`PlayerRankings`·`MainStandings`·`useStandingsParams`·`queries`·`model`), `app/page.tsx`(메인 오른쪽 열), `components/ui/Tabs.tsx`(선택 없음·스크롤 막대 숨김), `components/ui/DataState.tsx`(`partialAction`), `lib/api`(타입 별칭·쿼리 키·생성 타입) | 시즌 드롭다운·리그 탭·팀 표·선수 순위, 시즌 전환 시 유형 유지·더 보기 초기화, URL 복원·뒤로 가기, 지난 시즌 '당시 강등/승강 PO'와 '팀 상세 미제공' 구분, 메인 간소 순위(EPL·LaLiga·Serie A·BUN·Ligue 1), 로딩·빈 결과·일부 미제공(0건 뒤 갱신 실패 포함)·조회 실패 구분, 소속 확인 실패 '다시 확인'(Figma 57:599) |
+| 테스트 | `tests/test_standings.py`(17개, 매개변수 포함 26건), `tests/test_standings_db.py`(11개), `frontend/tests/standings.test.mjs`(8개) | 파싱·완전성·축소·페이지 반복·선방·수집 주기·잘못된 파라미터, 실제 DB 저장 경로(1·2차 재현 사례 포함), URL 상태·표기·상태 판정·칩·`DataState` |
+
+데이터: 팀 순위 192행(시즌마다 EPL·라리가·세리에 A 20, 분데스리가·리그1 18 — 리그1 2025-26 33경기 팀 그대로), 선수 순위 40목록 × 20명, 선수 시즌 기록 6,603줄(2025 693·793·876·680·798, 2026 537·608·651·478·489), 선수 4,284명. 선방 2025는 API 검증 문서와 5개 리그 순위 인원·제외 인원(34·51·67·42·46)·순서가 모두 일치. 2025는 원본 파일 대신 API로 받았고(운영과 같은 경로) 원본과 팀 순위·선수 순위 4종·선방 집계 모두 일치. 재실행 후 중복 0. 실제 API-Football 호출 누적 436회(팀 순위 13·선수 순위 48·선수 페이지 375 — 갱신 실패 검수의 접속 불가 주소 요청 제외). Codex 검증 단계 호출 0회, DB 검증은 롤백·원복.
+
+검수: 백엔드 ruff·pytest 250(DB 실연동 38 별도)·alembic 왕복·check, 프런트 lint·tsc·테스트 20개·Turbopack 빌드, `git diff --check`. 브라우저 1280·375·320에서 5대 리그 × 2시즌 표, 시즌 전환·유형 유지·더 보기 초기화, 4종 목록 제공 순서·red만, 선방 제외 인원·공동 순위, 강등·승강 PO·상세 미제공·링크, 메인 칩 전환·'전체 순위 보기', URL 복원·뒤로 가기·미지원 리그/시즌/유형, 갱신 실패 유지·조회 실패·소속 미확인 '다시 확인'·0건 뒤 갱신 실패, 콘솔 오류 0 확인.
+
 ## 2026-11-05 (목) — 05 지난 경기
 
 브랜치 `feat/05-results`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 통과(1차 지적 4건·2차 표시 문제 1건 보완). 사용자 지시로 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다.
