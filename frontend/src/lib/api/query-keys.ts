@@ -28,6 +28,14 @@ export const queryKeys = {
     list: (params: { season: number | null; competitions: readonly number[]; team: number | null; page: number }) =>
       ["results", "list", { ...params, competitions: params.competitions.join(",") }] as const,
   },
+  standings: {
+    table: (league: number, season: number | null) => ["standings", "table", { league, season }] as const,
+    summary: () => ["standings", "summary"] as const,
+  },
+  playerRankings: {
+    list: (league: number, season: number | null, type: string) =>
+      ["player-rankings", "list", { league, season, type }] as const,
+  },
   fixtures: {
     byDate: (date: string) => ["fixtures", "date", { date }] as const,
     team: (teamId: number, today: string) => ["fixtures", "team", { teamId, today }] as const,

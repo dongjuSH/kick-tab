@@ -23,13 +23,16 @@ export function Tabs<T extends string>({
   className,
 }: {
   items: readonly TabItem<T>[];
-  value: T;
+  /** null = nothing selected (e.g. an unsupported value in the URL). */
+  value: T | null;
   onChange: (value: T) => void;
   label: string;
   idBase: string;
   className?: string;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  // No tab selected (e.g. the URL named an unsupported league): keep the first one reachable.
+  const focusIndex = Math.max(0, items.findIndex((item) => item.value === value));
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const last = items.length - 1;
@@ -47,7 +50,7 @@ export function Tabs<T extends string>({
 
   return (
     <div className={cx("border-b border-line", className)}>
-      <div role="tablist" aria-label={label} className="-mb-px flex gap-2 overflow-x-auto">
+      <div role="tablist" aria-label={label} className="-mb-px flex gap-2 overflow-x-auto [scrollbar-width:none]">
         {items.map((item, index) => {
           const selected = item.value === value;
           return (
@@ -61,7 +64,7 @@ export function Tabs<T extends string>({
               id={tabId(idBase, item.value)}
               aria-selected={selected}
               aria-controls={tabPanelId(idBase, item.value)}
-              tabIndex={selected ? 0 : -1}
+              tabIndex={index === focusIndex ? 0 : -1}
               onClick={() => onChange(item.value)}
               onKeyDown={(event) => onKeyDown(event, index)}
               className={cx(
