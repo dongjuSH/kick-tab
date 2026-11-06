@@ -12,6 +12,13 @@ from app.models.reference import (
     TeamCompetitionSeason,
 )
 from app.models.review import Review, ReviewReaction
+from app.models.standings import (
+    LeagueSync,
+    Player,
+    PlayerRanking,
+    PlayerSeasonStat,
+    Standing,
+)
 from app.models.sync_run import SyncRun
 from app.models.top_matches import Top5Attempt, Top5Publication, Top5Week, WeeklyTopMatch
 
@@ -23,10 +30,15 @@ __all__ = [
     "FixtureDetail",
     "FixtureEvent",
     "HeadToHead",
+    "LeagueSync",
     "NewsArticle",
     "NewsArticleTeam",
+    "Player",
+    "PlayerRanking",
+    "PlayerSeasonStat",
     "Review",
     "ReviewReaction",
+    "Standing",
     "SyncRun",
     "Team",
     "TeamAlias",

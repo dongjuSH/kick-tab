@@ -24,6 +24,8 @@ interface DataStateProps {
   onRetry?: () => void;
   /** Shown above the data when some fields/blocks were not provided. */
   partialNotice?: ReactNode;
+  /** Optional control next to the partial notice (e.g. '다시 확인' for an unconfirmed part). */
+  partialAction?: ReactNode;
   deniedTitle?: ReactNode;
   deniedDescription?: ReactNode;
   deniedAction?: ReactNode;
@@ -70,6 +72,7 @@ export function DataState({
   errorTitle = "정보를 불러오지 못했습니다",
   onRetry,
   partialNotice = "일부 정보는 제공되지 않습니다.",
+  partialAction,
   deniedTitle = "로그인이 필요합니다",
   deniedDescription,
   deniedAction,
@@ -115,9 +118,15 @@ export function DataState({
   }
   return (
     <div className={className}>
-      {status === "partial" && (
-        <p className="mb-3 rounded-control bg-subtle px-3 py-2 text-small text-fg-secondary">{partialNotice}</p>
-      )}
+      {status === "partial" &&
+        (partialAction ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-control bg-subtle px-3 py-2">
+            <p className="min-w-0 flex-1 text-small text-fg-secondary">{partialNotice}</p>
+            {partialAction}
+          </div>
+        ) : (
+          <p className="mb-3 rounded-control bg-subtle px-3 py-2 text-small text-fg-secondary">{partialNotice}</p>
+        ))}
       {children}
     </div>
   );

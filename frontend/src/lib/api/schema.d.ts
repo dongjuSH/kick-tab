@@ -245,10 +245,79 @@ export interface paths {
          * @description HIST-001·002: every finished match of the season (normal results and rulings),
          *     newest first, combined with competition and team conditions, 10 per page.
          *
-         *     An unsupported season is 404 (never replaced); a season whose whole-season lists were
-         *     never loaded is 503, so "not collected" is not shown as "no results".
+         *     An unsupported season is 404 (never replaced). When no competition in scope was ever
+         *     loaded the answer is 503, so "not collected" is not shown as "no results"; a failed
+         *     refresh of a loaded competition keeps its stored results and lists it in
+         *     `failedCompetitionIds` (CMP-004).
          */
         get: operations["read_results_api_v1_results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read League Standings
+         * @description LEAG-002: the whole table of one league season as the provider gave it (groups kept).
+         *
+         *     Never collected → 503 (not shown as "no table"); a later failed refresh keeps the stored
+         *     table with `refreshFailed`. Team links follow the current-season allow set.
+         */
+        get: operations["read_league_standings_api_v1_standings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/standings/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Standings Summary
+         * @description LEAG-001: the top rows of each five-league table, current season. One league that was
+         *     never collected does not hide the others.
+         */
+        get: operations["read_standings_summary_api_v1_standings_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/player-rankings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Player Rankings
+         * @description LEAG-004: goals / assists / yellow / red are the provider's top lists in its order (not
+         *     a full ranking); red counts direct red cards only. Saves are aggregated from every
+         *     player line: goalkeepers with a missing value are excluded (`excluded`), ties share a
+         *     rank.
+         */
+        get: operations["read_player_rankings_api_v1_player_rankings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -562,6 +631,13 @@ export interface components {
             data: components["schemas"]["HeadToHead"];
             meta: components["schemas"]["UpdatedMeta"];
         };
+        /** LeagueStandings */
+        LeagueStandings: {
+            league: components["schemas"]["CompetitionRef"];
+            season: components["schemas"]["SeasonItem"];
+            /** Groups */
+            groups: components["schemas"]["StandingGroup"][];
+        };
         /** LineupPlayer */
         LineupPlayer: {
             /** Number */
@@ -784,6 +860,38 @@ export interface components {
             /** Penaltyaway */
             penaltyAway: number | null;
         };
+        /** PlayerRankItem */
+        PlayerRankItem: {
+            /** Rank */
+            rank: number;
+            /** Tied */
+            tied: boolean;
+            player: components["schemas"]["PlayerRef"];
+            team: components["schemas"]["TeamRef"] | null;
+            /** Value */
+            value: number | null;
+            /** Yellowred */
+            yellowRed: number | null;
+        };
+        /** PlayerRankings */
+        PlayerRankings: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "goals" | "assists" | "yellow" | "red" | "saves";
+            league: components["schemas"]["CompetitionRef"];
+            season: components["schemas"]["SeasonItem"];
+            /** Items */
+            items: components["schemas"]["PlayerRankItem"][];
+            /** Excluded */
+            excluded: number | null;
+        };
+        /** PlayerRankingsResponse */
+        PlayerRankingsResponse: {
+            data: components["schemas"]["PlayerRankings"];
+            meta: components["schemas"]["StandingsMeta"];
+        };
         /** PlayerRating */
         PlayerRating: {
             /** Playerid */
@@ -799,6 +907,15 @@ export interface components {
             side: "home" | "away";
             /** Rating */
             rating: number | null;
+        };
+        /** PlayerRef */
+        PlayerRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Photourl */
+            photoUrl: string | null;
         };
         /** PlayersBlock */
         PlayersBlock: {
@@ -908,6 +1025,82 @@ export interface components {
         SeasonsResponse: {
             /** Data */
             data: components["schemas"]["SeasonItem"][];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        /** StandingGroup */
+        StandingGroup: {
+            /** Name */
+            name: string;
+            /** Rows */
+            rows: components["schemas"]["StandingRow"][];
+        };
+        /** StandingRow */
+        StandingRow: {
+            /** Rank */
+            rank: number;
+            team: components["schemas"]["TeamRef"];
+            /** Played */
+            played: number | null;
+            /** Win */
+            win: number | null;
+            /** Draw */
+            draw: number | null;
+            /** Lose */
+            lose: number | null;
+            /** Goalsfor */
+            goalsFor: number | null;
+            /** Goalsagainst */
+            goalsAgainst: number | null;
+            /** Goalsdiff */
+            goalsDiff: number | null;
+            /** Points */
+            points: number | null;
+            /** Form */
+            form: string | null;
+            /** Description */
+            description: string | null;
+            /** Zone */
+            zone: ("relegation" | "relegation_playoff") | null;
+        };
+        /** StandingsMeta */
+        StandingsMeta: {
+            /** Updatedat */
+            updatedAt: string | null;
+            /** Refreshfailed */
+            refreshFailed: boolean;
+        };
+        /** StandingsResponse */
+        StandingsResponse: {
+            data: components["schemas"]["LeagueStandings"];
+            meta: components["schemas"]["StandingsMeta"];
+        };
+        /** StandingsSummary */
+        StandingsSummary: {
+            season: components["schemas"]["SeasonItem"];
+            /** Leagues */
+            leagues: components["schemas"]["StandingsSummaryLeague"][];
+        };
+        /** StandingsSummaryLeague */
+        StandingsSummaryLeague: {
+            league: components["schemas"]["CompetitionRef"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_collected";
+            /** Refreshfailed */
+            refreshFailed: boolean;
+            /** Updatedat */
+            updatedAt: string | null;
+            /** Rows */
+            rows: components["schemas"]["StandingRow"][];
+        };
+        /** StandingsSummaryResponse */
+        StandingsSummaryResponse: {
+            data: components["schemas"]["StandingsSummary"];
             /** Meta */
             meta?: {
                 [key: string]: unknown;
@@ -1586,6 +1779,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResultsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_league_standings_api_v1_standings_get: {
+        parameters: {
+            query: {
+                /** @description League id (five leagues only) */
+                league: number;
+                /** @description API season; default current */
+                season?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_standings_summary_api_v1_standings_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StandingsSummaryResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_player_rankings_api_v1_player_rankings_get: {
+        parameters: {
+            query: {
+                /** @description League id (five leagues only) */
+                league: number;
+                /** @description Ranking type */
+                type: "goals" | "assists" | "yellow" | "red" | "saves";
+                /** @description API season; default current */
+                season?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayerRankingsResponse"];
                 };
             };
             /** @description Client error */
