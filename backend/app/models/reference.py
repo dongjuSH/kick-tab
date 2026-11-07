@@ -98,6 +98,10 @@ class Team(Base):
     name_ko: Mapped[str | None] = mapped_column(Text)
     logo_url: Mapped[str | None] = mapped_column(Text)
     country: Mapped[str | None] = mapped_column(Text)
+    # Home ground from the league team lists (/teams?league=&season=, chat 08 TEAM-001).
+    # Kept when a later answer (e.g. a fixture) carries no venue.
+    venue_name: Mapped[str | None] = mapped_column(Text)
+    venue_capacity: Mapped[int | None] = mapped_column(Integer)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

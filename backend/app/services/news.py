@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session
 
-from app.models.news import NewsArticle
+from app.models.news import NewsArticle, NewsArticleTeam
 from app.models.sync_run import SyncRun
 from app.schemas.schedule import NewsItem
 
@@ -71,13 +71,29 @@ def collection_state(session: Session, now: datetime) -> NewsCollection:
 
 
 def list_news(
-    session: Session, now: datetime, *, badge: str | None, size: int, cursor: str | None
+    session: Session,
+    now: datetime,
+    *,
+    badge: str | None,
+    size: int,
+    cursor: str | None,
+    team: int | None = None,
 ) -> tuple[list[NewsItem], str | None, int]:
+    """Main news: the newest 48 articles with a competition badge. Team news (chat 08,
+    TEAM-004·NEWS-003): the newest 48 articles linked to the team by an unambiguous alias,
+    with or without a badge (a team-only article has no badge and is not on the main page)."""
+    if team is None:
+        scope = select(NewsArticle.id).where(
+            NewsArticle.expires_at > now, NewsArticle.badge.is_not(None)
+        )
+    else:
+        scope = (
+            select(NewsArticle.id)
+            .join(NewsArticleTeam, NewsArticleTeam.article_id == NewsArticle.id)
+            .where(NewsArticle.expires_at > now, NewsArticleTeam.team_id == team)
+        )
     visible = (
-        select(NewsArticle.id)
-        .where(NewsArticle.expires_at > now, NewsArticle.badge.is_not(None))
-        .order_by(NewsArticle.published_at.desc(), NewsArticle.id.desc())
-        .limit(NEWS_LIMIT)
+        scope.order_by(NewsArticle.published_at.desc(), NewsArticle.id.desc()).limit(NEWS_LIMIT)
     )
     conditions = [NewsArticle.id.in_(visible)]
     if badge:

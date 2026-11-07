@@ -10,10 +10,11 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 from pydantic import SecretStr
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.kst import kst_today
+from app.models.fixture import Fixture
 from app.models.reference import CompetitionSeason
 from app.providers.api_football import ApiFootballClient, DailyBudget, MinuteRateLimiter
 from app.services.fixtures import fixtures_on, next_for_teams, upsert_fixtures
@@ -192,7 +193,10 @@ def test_availability_keeps_uncovered_dates_separate_from_stored_games(session):
     from app.services.fixtures import fixture_availability
 
     now = datetime.now(UTC)
-    day = kst_today() + timedelta(days=20)
+    # A month after every stored match (any competition, any season): no real game is on
+    # these days, whatever the collected schedule holds (the whole season is stored since 05).
+    last = session.scalar(select(func.max(Fixture.kickoff_date_kst))) or kst_today()
+    day = max(last, kst_today()) + timedelta(days=30)
     covered = day + timedelta(days=1)
     row = session.get(CompetitionSeason, (39, 2026))
     row.fixtures_window_start = row.fixtures_window_end = covered

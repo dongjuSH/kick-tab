@@ -102,6 +102,9 @@ class Player(Base):
     nationality: Mapped[str | None] = mapped_column(Text)
     birth_date: Mapped[date | None] = mapped_column(Date)
     photo_url: Mapped[str | None] = mapped_column(Text)
+    # Chat 08 (TEAM-002): a missing nationality is looked up once in /players/profiles; set
+    # after that lookup answered, whatever it held, so it is never asked again.
+    profile_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
