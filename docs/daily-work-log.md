@@ -1,5 +1,24 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-07 (토) — 08 팀 상세
+
+브랜치 `feat/08-team-detail`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 통과(1차 차단 1·중요 3·경미 5, 2차 중요 2·경미 1, 3차 중요 1·경미 2, 4차 후속 N7·N8 보완). 05~07과 같이 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다. 이로써 비회원 기준 서비스 전체(메인·경기 상세·지난 경기·리그 순위·팀 탐색·팀 상세)가 이어진다(로그인·회원가입만 02 전까지 404). 마이그레이션 `0012_team_detail`·`0013_transfer_counterpart_key`·`0014_transfer_identity_indexes`.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 시작 전 처리 | `tests/test_schedule_db.py`(`test_availability_keeps_uncovered_dates_separate_from_stored_games`) | 05가 시즌 전체를 적재해 '오늘+21일에 경기 없음' 가정이 깨짐 → 저장된 마지막 경기 날짜+30일을 써서 실제 데이터·날짜와 무관하게(제품 코드 변경 없음) |
+| 수집 | `sync/team_detail.py`(`team_details` 매일 15:00 KST — 감독·선수단·이번 시즌 팀 기록, 지난 시즌 기록 1회, 국적 1회 보완 / `transfers` 매일 00:00 KST), `services/team_detail.py`(파싱 `pick_coach`·`parse_squad`·`parse_statistics`·`parse_transfers`·`parse_profile_nationality`, 완전성 `check_squad`·`check_statistics`·`check_transfers`, 저장 `save_*`, 일정 `is_due`(KST 하루 1회)·`transfer_seasons`·`last_refresh_day`·`final_refresh_done`), `models/team_detail.py`, `sync/jobs.py` | TEAM-001·002·005·006: 이적은 날짜로 시즌·반기 분류, 미래 날짜 제외, 7/1 00:00 갱신까지 받은 뒤 고정(실패 시 성공할 때까지 재시도), 하루 차이 반복은 상대 팀 ID가 같고 반대 방향 이동이 없을 때만 1건. 잘린 응답은 저장값을 지우지 않고 실패 기록 |
+| 공통 변경 | `services/reference.py`(`upsert_teams` 경기장 저장 — 응답에 있는 필드만, `team_detail_lookup` 팀 목록이 수집된 리그 소속만 `true`), `sync/reference.py`(venue 전달), `models/reference.py`(`teams.venue_*`), `models/standings.py`(`players.profile_checked_at`) | 경기장은 추가 호출 없이 03 `reference` 응답에서. 링크와 팀 상세 직접 URL 판정 일치(Codex 1차 지적 2) |
+| API | `api/routes/teams.py`(`GET /teams/{id}`·`/fixtures`·`/squad`·`/season-stats`·`/transfers`), `schemas/team_detail.py`, `api/routes/schedule.py`·`services/news.py`(`GET /news?team=`) | 영역별 조회, 없는 팀 404·허용 밖 404 `TEAM_DETAIL_UNAVAILABLE`·소속 미확인 503 `MEMBERSHIP_UNKNOWN`, 최근 흐름은 04 `ensure_form` 요청 시 보충, 팀 뉴스는 연결 기사 최신 48개 |
+| 화면 | `app/teams/[id]/page.tsx`, `features/team-detail/`(`TeamDetail`·`TeamMatches`·`SquadTable`·`SeasonRecords`·`TeamNews`·`model.ts`·`queries.ts`), `lib/api`(타입·쿼리 키·생성 타입) | Figma 52:1254/52:1866·58:356·58:738·58:924·57:836: 기본 정보·관심 팀, 경기(예정 3·최근 5·'경기 전체 보기' → `/results?team=`), 선수 표(정렬·10명 후 더 보기·'—'), 시즌 기록·이적(이번/지난 시즌), 팀 뉴스, 모바일 4탭, 영역별 `DataState` |
+| 마이그레이션 | `0012_team_detail`(테이블 5개·RLS·컬럼 추가), `0013_transfer_counterpart_key`, `0014_transfer_identity_indexes`(상대 팀 ID 유무별 이적 고유 인덱스) | Codex 3차 N4·4차 N7: 파서와 DB의 이적 식별 기준 통일 |
+| 테스트 | `tests/test_team_detail.py`(규칙 단위), `tests/test_team_detail_db.py`(DB 실연동·롤백), `frontend/tests/team-detail.test.mjs` | 감독 선택·반기 분류·완전성·중복 규칙·KST 하루 1회·7/1 경계, 접근 판정·링크 일치·잘린 응답·실패 기록·경기장·팀 뉴스, 정렬·누락 표시·문구 |
+| 문서 | `docs/guide.md`(08 상태·§2·§6.3~§6.5·§3.1 02/09 인수인계·00 확인 요청·§10.3 D-08), `docs/file-feature-map.md`, 이 문서 | 사용자 요청으로 세 문서 최신화. 기획 문서 3종(기능 명세서 v1.7·PRD v1.7·유저 플로우 v1.6)은 사용자 결정 D-08-9(A)에 따라 Codex가 갱신 |
+
+데이터(96팀): 경기장 96, 현직 감독 95(1팀 미제공), 선수단 2,946명(등번호 누락 0.6%·국적 누락 10.1%·이번 시즌 리그 기록 없음 12.3%), 팀 시즌 기록 이번 96·지난 83(승격 13팀 제외), 이적 2025-26 7,159·2026-27 4,446건(중복 0). 실제 API-Football 호출: 수집 실행 기록 1,382회(`reference` 22·`team_details` 783·`transfers` 577 — 규칙 보완에 따른 이적 재적재 포함) + 팀 최근 흐름 요청 시 보충 4회. 검수 중 소속 미확인·뉴스 갱신 실패 재현을 위해 EPL `teams_synced_at`·`news` 실패 기록을 잠시 바꿨다가 복구했다.
+
+검수: 백엔드 ruff·pytest 285(DB 실연동 포함 353)·alembic upgrade·downgrade·check(공유 개발 DB `0014` head), 프런트 lint·tsc·테스트 33개·Turbopack 빌드. 브라우저 1280·375·320에서 5대 리그 각 1팀+승격 팀 6개 영역, 선수 표 정렬·더 보기·이적 선수 줄 분리, 시즌 기록·이적 전환·승격 팀 빈 상태·후반기 시작 전 안내, 경기 상세·지난 경기 이동, 팀 뉴스 원문·뉴스 없음·갱신 실패, 관심 팀 등록 → 메인 반영 → 해제·6번째 비활성·저장소 차단(스크립트 모의), 직접 URL 404·503, 04~07 진입 링크, 모바일 4탭, 비회원 전체 흐름 링크(404는 `/login`·`/signup`뿐), 콘솔 오류 0 확인. 미실행: 실제 00:00·15:00 정시 실행과 7/1 고정 시점 경과(시계 대신 테스트로 확인), 실기기 터치·스크린리더(전체 검수 단계).
+
 ## 2026-11-06 (금) — 07 팀 탐색
 
 브랜치 `feat/07-team-browse`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 3차 통과(1차 중요 1·경미 4, 2차 중요 1·경미 1 보완). 05·06과 같이 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다. 외부 API 호출 0회(저장 데이터만), 마이그레이션 없음.

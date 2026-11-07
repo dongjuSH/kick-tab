@@ -203,6 +203,7 @@ export interface paths {
         /**
          * Read News
          * @description NEWS-001·002: classified Korean articles, newest first; `nextCursor` loads more.
+         *     With `team` (TEAM-004, NEWS-003): the team's linked articles; `badge` still narrows.
          */
         get: operations["read_news_api_v1_news_get"];
         put?: never;
@@ -349,6 +350,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/teams/{team_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team
+         * @description TEAM-001: identity, league standing, coach, venue and the last five official results.
+         *     A missing part is marked on its own and never hides the rest of the page.
+         */
+        get: operations["read_team_api_v1_teams__team_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/fixtures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team Fixtures
+         * @description TEAM-003: up to three upcoming (live first) and the last five results of the current
+         *     season, from the stored season schedule of every supported competition.
+         */
+        get: operations["read_team_fixtures_api_v1_teams__team_id__fixtures_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/squad": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team Squad
+         * @description TEAM-002: the current squad with this team's league line of the current season, one
+         *     row per player. Missing values are null (shown as '—'), never 0.
+         */
+        get: operations["read_team_squad_api_v1_teams__team_id__squad_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/season-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team Season Stats
+         * @description TEAM-005: the team's league record of one season. A season the team did not play in
+         *     this league (promoted team) is `not_provided`, never filled from another season.
+         */
+        get: operations["read_team_season_stats_api_v1_teams__team_id__season_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/teams/{team_id}/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team Transfers
+         * @description TEAM-006: arrivals and departures of one season in its two halves (by transfer date).
+         *     A half that has not begun says so; a begun half without moves is an empty list.
+         */
+        get: operations["read_team_transfers_api_v1_teams__team_id__transfers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fixtures/{fixture_id}": {
         parameters: {
             query?: never;
@@ -451,6 +557,22 @@ export interface components {
         BrowseTeam: {
             team: components["schemas"]["TeamRef"];
             league: components["schemas"]["CompetitionRef"];
+        };
+        /** CoachBlock */
+        CoachBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "unavailable";
+            data: components["schemas"]["CoachInfo"] | null;
+        };
+        /** CoachInfo */
+        CoachInfo: {
+            /** Name */
+            name: string;
+            /** Photourl */
+            photoUrl: string | null;
         };
         /** CompetitionItem */
         CompetitionItem: {
@@ -658,6 +780,15 @@ export interface components {
         HeadToHeadResponse: {
             data: components["schemas"]["HeadToHead"];
             meta: components["schemas"]["UpdatedMeta"];
+        };
+        /** HomeAway */
+        HomeAway: {
+            /** Home */
+            home: number | null;
+            /** Away */
+            away: number | null;
+            /** Total */
+            total: number | null;
         };
         /** LeagueStandings */
         LeagueStandings: {
@@ -1058,6 +1189,51 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SquadPlayer */
+        SquadPlayer: {
+            player: components["schemas"]["SquadPlayerRef"];
+            /** Number */
+            number: number | null;
+            /** Position */
+            position: string | null;
+            /** Nationality */
+            nationality: string | null;
+            stats: components["schemas"]["SquadSeasonStats"] | null;
+        };
+        /** SquadPlayerRef */
+        SquadPlayerRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Photourl */
+            photoUrl: string | null;
+        };
+        /**
+         * SquadSeasonStats
+         * @description This team's league line of the current season (another club's line is never added).
+         */
+        SquadSeasonStats: {
+            /** Appearances */
+            appearances: number | null;
+            /** Minutes */
+            minutes: number | null;
+            /** Goals */
+            goals: number | null;
+            /** Assists */
+            assists: number | null;
+            /** Rating */
+            rating: string | null;
+        };
+        /** StandingBlock */
+        StandingBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "unavailable";
+            data: components["schemas"]["TeamStanding"] | null;
+        };
         /** StandingGroup */
         StandingGroup: {
             /** Name */
@@ -1155,6 +1331,25 @@ export interface components {
             /** Data */
             data: components["schemas"]["StatRow"][] | null;
         };
+        /** TeamFixtures */
+        TeamFixtures: {
+            /** Upcoming */
+            upcoming: components["schemas"]["MatchSummary"][];
+            /** Recent */
+            recent: components["schemas"]["MatchSummary"][];
+        };
+        /** TeamFixturesMeta */
+        TeamFixturesMeta: {
+            /** Updatedat */
+            updatedAt: string | null;
+            /** Failedcompetitionids */
+            failedCompetitionIds: number[];
+        };
+        /** TeamFixturesResponse */
+        TeamFixturesResponse: {
+            data: components["schemas"]["TeamFixtures"];
+            meta: components["schemas"]["TeamFixturesMeta"];
+        };
         /** TeamLineup */
         TeamLineup: {
             /**
@@ -1170,6 +1365,24 @@ export interface components {
             startXi: components["schemas"]["LineupPlayer"][];
             /** Substitutes */
             substitutes: components["schemas"]["LineupPlayer"][];
+        };
+        /** TeamOverview */
+        TeamOverview: {
+            team: components["schemas"]["TeamRef"];
+            league: components["schemas"]["CompetitionRef"];
+            season: components["schemas"]["SeasonItem"];
+            standing: components["schemas"]["StandingBlock"];
+            coach: components["schemas"]["CoachBlock"];
+            venue: components["schemas"]["VenueBlock"];
+            form: components["schemas"]["FormBlock"];
+        };
+        /** TeamOverviewResponse */
+        TeamOverviewResponse: {
+            data: components["schemas"]["TeamOverview"];
+            /** Meta */
+            meta?: {
+                [key: string]: unknown;
+            };
         };
         /** TeamRef */
         TeamRef: {
@@ -1213,6 +1426,71 @@ export interface components {
             meta?: {
                 [key: string]: unknown;
             };
+        };
+        /** TeamSeasonRecord */
+        TeamSeasonRecord: {
+            wins: components["schemas"]["HomeAway"];
+            draws: components["schemas"]["HomeAway"];
+            loses: components["schemas"]["HomeAway"];
+            goalsFor: components["schemas"]["HomeAway"];
+            goalsAgainst: components["schemas"]["HomeAway"];
+            cleanSheets: components["schemas"]["HomeAway"];
+            /** Formation */
+            formation: string | null;
+        };
+        /** TeamSeasonStats */
+        TeamSeasonStats: {
+            season: components["schemas"]["SeasonItem"];
+            league: components["schemas"]["CompetitionRef"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided";
+            record: components["schemas"]["TeamSeasonRecord"] | null;
+            standing: components["schemas"]["TeamStanding"] | null;
+        };
+        /** TeamSeasonStatsResponse */
+        TeamSeasonStatsResponse: {
+            data: components["schemas"]["TeamSeasonStats"];
+            meta: components["schemas"]["TeamSyncMeta"];
+        };
+        /** TeamSquad */
+        TeamSquad: {
+            league: components["schemas"]["CompetitionRef"];
+            season: components["schemas"]["SeasonItem"];
+            /** Players */
+            players: components["schemas"]["SquadPlayer"][];
+        };
+        /** TeamSquadResponse */
+        TeamSquadResponse: {
+            data: components["schemas"]["TeamSquad"];
+            meta: components["schemas"]["TeamSyncMeta"];
+        };
+        /** TeamStanding */
+        TeamStanding: {
+            /** Rank */
+            rank: number;
+            /** Points */
+            points: number | null;
+        };
+        /** TeamSyncMeta */
+        TeamSyncMeta: {
+            /** Updatedat */
+            updatedAt: string | null;
+            /** Refreshfailed */
+            refreshFailed: boolean;
+        };
+        /** TeamTransfers */
+        TeamTransfers: {
+            season: components["schemas"]["SeasonItem"];
+            /** Halves */
+            halves: components["schemas"]["TransferHalf"][];
+        };
+        /** TeamTransfersResponse */
+        TeamTransfersResponse: {
+            data: components["schemas"]["TeamTransfers"];
+            meta: components["schemas"]["TeamSyncMeta"];
         };
         /** TeamsMeta */
         TeamsMeta: {
@@ -1307,10 +1585,81 @@ export interface components {
              */
             end: string;
         };
+        /** TransferCounterpart */
+        TransferCounterpart: {
+            /** Id */
+            id: number | null;
+            /** Name */
+            name: string | null;
+            /** Cresturl */
+            crestUrl: string | null;
+        };
+        /** TransferHalf */
+        TransferHalf: {
+            /**
+             * Half
+             * @enum {string}
+             */
+            half: "first" | "second";
+            /** Label */
+            label: string;
+            /** Period */
+            period: string;
+            /**
+             * Start
+             * Format: date
+             */
+            start: string;
+            /**
+             * End
+             * Format: date
+             */
+            end: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "open" | "not_started";
+            /** Arrivals */
+            arrivals: components["schemas"]["TransferItem"][];
+            /** Departures */
+            departures: components["schemas"]["TransferItem"][];
+        };
+        /** TransferItem */
+        TransferItem: {
+            /**
+             * Transferdate
+             * Format: date
+             */
+            transferDate: string;
+            /** Playerid */
+            playerId: number;
+            /** Playername */
+            playerName: string;
+            counterpart: components["schemas"]["TransferCounterpart"];
+            /** Type */
+            type: string | null;
+        };
         /** UpdatedMeta */
         UpdatedMeta: {
             /** Updatedat */
             updatedAt: string | null;
+        };
+        /** VenueBlock */
+        VenueBlock: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "not_provided" | "unavailable";
+            data: components["schemas"]["VenueInfo"] | null;
+        };
+        /** VenueInfo */
+        VenueInfo: {
+            /** Name */
+            name: string | null;
+            /** Capacity */
+            capacity: number | null;
         };
     };
     responses: never;
@@ -1724,6 +2073,8 @@ export interface operations {
                 badge?: ("EPL" | "LaLiga" | "SerieA" | "Bundesliga" | "Ligue1" | "UEFA") | null;
                 cursor?: string | null;
                 size?: number;
+                /** @description Team news (chat 08): linked articles */
+                team?: number | null;
             };
             header?: never;
             path?: never;
@@ -1994,6 +2345,217 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TeamsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team_api_v1_teams__team_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team id */
+                team_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOverviewResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team_fixtures_api_v1_teams__team_id__fixtures_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team id */
+                team_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamFixturesResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team_squad_api_v1_teams__team_id__squad_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Team id */
+                team_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamSquadResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team_season_stats_api_v1_teams__team_id__season_stats_get: {
+        parameters: {
+            query?: {
+                /** @description This or the last season; default this season */
+                season?: number | null;
+            };
+            header?: never;
+            path: {
+                /** @description Team id */
+                team_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamSeasonStatsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team_transfers_api_v1_teams__team_id__transfers_get: {
+        parameters: {
+            query?: {
+                /** @description This or the last season; default this season */
+                season?: number | null;
+            };
+            header?: never;
+            path: {
+                /** @description Team id */
+                team_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamTransfersResponse"];
                 };
             };
             /** @description Client error */

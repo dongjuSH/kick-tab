@@ -16,7 +16,7 @@ from app.core.kst import kst_today
 from app.core.rate_limit import Limit
 from app.db.session import get_db
 from app.models.news import NewsArticle
-from app.models.reference import Competition, CompetitionSeason
+from app.models.reference import Competition, CompetitionSeason, Team
 from app.schemas.schedule import (
     CompetitionItem,
     CompetitionSeasonInfo,
@@ -240,15 +240,25 @@ def read_news(
     badge: NewsBadge | None = None,
     cursor: Annotated[str | None, Query(max_length=200)] = None,
     size: Annotated[int, Query(ge=1, le=24)] = 6,
+    team: Annotated[
+        int | None,
+        Query(gt=0, le=2_147_483_647, description="Team news (chat 08): linked articles"),
+    ] = None,
 ) -> NewsResponse:
-    """NEWS-001·002: classified Korean articles, newest first; `nextCursor` loads more."""
+    """NEWS-001·002: classified Korean articles, newest first; `nextCursor` loads more.
+    With `team` (TEAM-004, NEWS-003): the team's linked articles; `badge` still narrows."""
     now = datetime.now(UTC)
+    if team is not None and db.get(Team, team) is None:
+        raise ApiError(404, "NOT_FOUND", "팀을 찾을 수 없습니다. 팀 탐색에서 다시 선택해 주세요.")
     state = collection_state(db, now)
-    if state.empty_store and (state.updated_at is None or state.stale):
+    never = state.updated_at is None
+    if (state.empty_store and (never or state.stale)) or (team is not None and never):
         # Nothing stored and the collection never worked / just failed: not "no news".
         raise ApiError(503, "UPSTREAM_UNAVAILABLE", NEWS_NOT_COLLECTED)
     try:
-        items, next_cursor, total = list_news(db, now, badge=badge, size=size, cursor=cursor)
+        items, next_cursor, total = list_news(
+            db, now, badge=badge, size=size, cursor=cursor, team=team
+        )
     except InvalidCursor:
         raise ApiError(
             422,

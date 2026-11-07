@@ -69,18 +69,34 @@ def upsert_competitions(session: Session) -> None:
 
 
 def upsert_teams(session: Session, teams: Iterable[dict[str, Any]], now: datetime) -> None:
-    """Provider identity only; the Korean name from the alias seed is never overwritten."""
+    """Provider identity only; the Korean name from the alias seed is never overwritten.
+
+    A team dict may carry the `venue` block of /teams?league=&season= (chat 08): a field it
+    gives (`name`, `capacity`) is stored as given (null clears it); a field it leaves out, or
+    an answer without a venue block (fixtures, player lists), keeps the stored value
+    (Codex 1차 지적 5)."""
     rows = {t["id"]: t for t in teams if t.get("id") and t.get("name")}
     for team in rows.values():
-        stmt = insert(Team).values(
-            id=team["id"],
-            name_en=team["name"],
-            logo_url=team.get("logo") or None,
-            country=team.get("country") or None,
-            updated_at=now,
-        )
+        venue = team.get("venue") if isinstance(team.get("venue"), dict) else {}
+        values: dict[str, Any] = {
+            "id": team["id"],
+            "name_en": team["name"],
+            "logo_url": team.get("logo") or None,
+            "country": team.get("country") or None,
+            "updated_at": now,
+        }
+        if "name" in venue:
+            values["venue_name"] = venue["name"] or None
+        if "capacity" in venue:
+            capacity = venue["capacity"]
+            usable = isinstance(capacity, int) and not isinstance(capacity, bool) and capacity > 0
+            values["venue_capacity"] = capacity if usable else None
+        stmt = insert(Team).values(**values)
         update = {"name_en": stmt.excluded.name_en, "updated_at": now}
         update["logo_url"] = func.coalesce(stmt.excluded.logo_url, Team.logo_url)
+        for column in ("venue_name", "venue_capacity"):
+            if column in values:
+                update[column] = getattr(stmt.excluded, column)
         if team.get("country"):
             update["country"] = stmt.excluded.country
         session.execute(stmt.on_conflict_do_update(index_elements=[Team.id], set_=update))
@@ -186,27 +202,30 @@ DetailLookup = Callable[[int], bool | None]
 def team_detail_lookup(session: Session, season: int | None = None) -> DetailLookup:
     """Team detail is offered only to current-season five-league teams (D-15).
 
-    The allow set is known once every league's team list has been collected; until then a
-    team outside the partial set is `None` (unknown), never "not available"."""
+    A team is allowed only as a member of a league whose current team list was collected
+    (`teams_synced_at`): rows that came from fixtures alone do not confirm membership, so the
+    links and the team-detail direct URL decide alike (08, Codex 1차 지적 2). The set is
+    complete once every league's list has been collected; until then a team outside it is
+    `None` (unknown), never "not available"."""
     season = season or settings.current_season
-    synced = session.scalar(
-        select(func.count())
-        .select_from(CompetitionSeason)
-        .where(
-            CompetitionSeason.season == season,
-            CompetitionSeason.competition_id.in_(LEAGUE_IDS),
-            CompetitionSeason.teams_synced_at.is_not(None),
+    synced = set(
+        session.scalars(
+            select(CompetitionSeason.competition_id).where(
+                CompetitionSeason.season == season,
+                CompetitionSeason.competition_id.in_(LEAGUE_IDS),
+                CompetitionSeason.teams_synced_at.is_not(None),
+            )
         )
     )
     allowed = set(
         session.scalars(
             select(TeamCompetitionSeason.team_id).where(
                 TeamCompetitionSeason.season == season,
-                TeamCompetitionSeason.competition_id.in_(LEAGUE_IDS),
+                TeamCompetitionSeason.competition_id.in_(synced),
             )
         )
     )
-    complete = synced == len(LEAGUE_IDS)
+    complete = len(synced) == len(LEAGUE_IDS)
     return lambda team_id: True if team_id in allowed else (False if complete else None)
 
 

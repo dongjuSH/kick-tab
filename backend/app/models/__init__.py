@@ -20,6 +20,13 @@ from app.models.standings import (
     Standing,
 )
 from app.models.sync_run import SyncRun
+from app.models.team_detail import (
+    SquadMember,
+    TeamCoach,
+    TeamSeasonStat,
+    TeamSync,
+    Transfer,
+)
 from app.models.top_matches import Top5Attempt, Top5Publication, Top5Week, WeeklyTopMatch
 
 __all__ = [
@@ -38,13 +45,18 @@ __all__ = [
     "PlayerSeasonStat",
     "Review",
     "ReviewReaction",
+    "SquadMember",
     "Standing",
     "SyncRun",
     "Team",
     "TeamAlias",
+    "TeamCoach",
     "TeamCompetitionSeason",
     "TeamForm",
+    "TeamSeasonStat",
+    "TeamSync",
     "Top5Attempt",
+    "Transfer",
     "Top5Publication",
     "Top5Week",
     "WeeklyTopMatch",

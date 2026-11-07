@@ -139,8 +139,11 @@ def sync_reference(ctx: JobContext) -> None:
             logger.warning("teams %s failed: %s", league_id, type(exc).__name__)
             failed.append(f"teams:{league_id}")
             continue
+        # The home ground travels with the team (TEAM-001 venue name and capacity).
         teams = [
-            item["team"] for item in result.response or [] if (item.get("team") or {}).get("id")
+            {**item["team"], "venue": item.get("venue")}
+            for item in result.response or []
+            if (item.get("team") or {}).get("id")
         ]
         if not teams:
             failed.append(f"teams:{league_id}:empty")
