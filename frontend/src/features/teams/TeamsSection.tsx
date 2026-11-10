@@ -7,7 +7,7 @@ import { TeamCrest } from "@/components/common/TeamCrest";
 import { Button, IconButton } from "@/components/ui/Button";
 import { DataState, StateMessage } from "@/components/ui/DataState";
 import { Pagination } from "@/components/ui/Pagination";
-import { chipClass } from "@/components/ui/chip";
+import { ChipLabel, chipClass } from "@/components/ui/chip";
 import { cx } from "@/components/ui/cx";
 import { FavoriteToggle } from "@/features/favorites/FavoriteToggle";
 import { useFavorites } from "@/features/favorites/useFavorites";
@@ -145,7 +145,7 @@ export function TeamsSection() {
 function LeagueChip({ label, selected, onSelect }: { label: string; selected: boolean; onSelect: () => void }) {
   return (
     <button type="button" aria-pressed={selected} className={chipClass(selected)} onClick={() => !selected && onSelect()}>
-      {label}
+      <ChipLabel>{label}</ChipLabel>
     </button>
   );
 }

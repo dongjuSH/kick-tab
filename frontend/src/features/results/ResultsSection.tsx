@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { StateMessage } from "@/components/ui/DataState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { chipClass } from "@/components/ui/chip";
+import { ChipLabel, chipClass } from "@/components/ui/chip";
 import { useFavorites } from "@/features/favorites/useFavorites";
 import { ListSkeleton, SectionSkeleton } from "@/features/schedule/ScheduleSection";
 import { ScheduleNotice, failedNames } from "@/features/schedule/ScheduleNotice";
@@ -266,7 +266,7 @@ export function ResultsSection() {
                     className={chipClass(active)}
                     onClick={() => selectTeam(active ? null : team)}
                   >
-                    {teamName(team)}
+                    <ChipLabel>{teamName(team)}</ChipLabel>
                   </button>
                 );
               })}

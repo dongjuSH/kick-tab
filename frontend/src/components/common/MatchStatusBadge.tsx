@@ -18,10 +18,19 @@ function statusLabel(match: MatchSummary): string {
  * Match status badge (Figma 187:591 schedule row): 진행 중 green; 연기·취소·경기 중단·
  * 행정 종료 amber; 예정·종료·확인 필요 grey. Used by match cards and TOP 5.
  */
-export function MatchStatusBadge({ match, size = "small" }: { match: MatchSummary; size?: BadgeSize }) {
+export function MatchStatusBadge({
+  match,
+  size = "small",
+  awaiting = false,
+}: {
+  match: MatchSummary;
+  size?: BadgeSize;
+  /** Kickoff passed without a provider start (`awaitingStatus`): "상태 확인 중", grey. */
+  awaiting?: boolean;
+}) {
   return (
     <Badge tone={tone(match)} size={size}>
-      {statusLabel(match)}
+      {awaiting ? "상태 확인 중" : statusLabel(match)}
     </Badge>
   );
 }

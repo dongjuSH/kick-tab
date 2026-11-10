@@ -1,11 +1,11 @@
 """Chat 03 pure rules: status mapping, names, news classification, URL dedupe, cursors."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.models.fixture import Fixture
-from app.services.fixtures import _score
+from app.services.fixtures import SYNC_DELAY, SyncState, _score
 from app.services.match_status import map_status
 from app.services.news import InvalidCursor, decode_cursor, encode_cursor
 from app.services.news_classify import (
@@ -280,3 +280,10 @@ def test_news_cursor_round_trip():
     assert decode_cursor(encode_cursor(stamp, 42)) == (stamp, 42)
     with pytest.raises(InvalidCursor):
         decode_cursor("not-a-cursor")
+
+
+def test_schedule_is_delayed_after_two_missed_collections():
+    now = datetime.now(UTC)
+    fresh = SyncState([], False, checked_at=now - SYNC_DELAY + timedelta(minutes=1))
+    late = SyncState([], False, checked_at=now - SYNC_DELAY - timedelta(minutes=1))
+    assert (fresh.delayed, late.delayed, SyncState([], True).delayed) == (False, True, False)

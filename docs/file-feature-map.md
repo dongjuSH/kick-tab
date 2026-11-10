@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-10 · 03 비회원 개선(Codex 교차 검증 3차 통과·`dev` 병합):** 백엔드 `services/fixtures.py`(`SyncState`에 `checked_at`·`checked_through`·`delayed`, `SYNC_DELAY` 75분)·`schemas/schedule.py`(`ScheduleMeta`에 `checkedAt`·`checkedThrough`·`delayed`)·`api/routes/schedule.py`(`_schedule_meta()`), `seed/team_aliases.json`(하위 리그 프로 구단 92팀 한국어 이름, 검색 전용). 프런트 `app/page.tsx`(sr-only H1, 두 구간 그리드, `StickyPanel`), `components/layout/StickyPanel.tsx`(새), `ui/chip.tsx`(`chip.ts`에서 이름 변경, `ChipLabel` 추가), `ui/Dialog.tsx`(`closeButton`·`scrollArea`), `common/MatchCard.tsx`(별표·카드 아래 링크·상태 확인 중 '—'·164px 상태 열), `common/MatchStatusBadge.tsx`(`awaiting`), `common/TeamSearch.tsx`(48px 입력·SVG 돋보기·30px X·`candidates`), `common/CompetitionFilter.tsx`(X 없는 하단 버튼·딤 포인터·목록만 스크롤), `features/schedule/`(`ScheduleSection` 지연 안내·간격·관심 팀 버튼·`pendingReset`, `DateBar` 52px·1/5 폭·짧은 상태·위치 복원, `useScheduleParams` `withTeam`·`withoutTeam`·`nearestMatchDate`), `features/favorites/`(`FavoriteSchedule` Guest Favorites 다섯 상태, `FavoriteStar`(새), `FavoriteToggle` `FAVORITE_REFUSALS`), `features/standings/`(`MainStandings` 경기·승무패·승점·끌기/휠 이동, 'Bundesliga'), `lib/hooks/useNow.ts`(새), `lib/format/match.ts`(`awaitingStatus`), 칩 사용처 `MainNews`·`ResultsSection`·`TeamsSection`. 테스트 `match-regressions.test.mjs`(+4)·`standings.test.mjs`, 백엔드 `test_schedule_rules.py`·`test_schedule_sources.py`.
+
 **2026-11-10 · 01 변경(비회원 개선, Codex 교차 검증 통과·`dev` 병합):** 프런트 `Logo.tsx`·`SiteHeader.tsx`·`HeaderHeight.tsx`(새)·`SiteFooter.tsx`·`layout.tsx`·`FeedbackButton.tsx`·`ui/Dialog.tsx`·`features/top5/`(`Top5Strip`·`Top5List`·`model`)·`globals.css`·`lib/format/kst.ts`·`tests/top5.test.mjs`(새), 삭제 `MobileBottomBar.tsx`·`public/brand/logo-footer.svg`·`logo-mobile.svg`. 백엔드 `services/top5_selection.py`(실행 누락 주 지연 처리)·`tests/test_top5_db.py`.
 
 **2026-11-07 · 08 변경(팀 상세, Codex 교차 검증 통과·`dev` 병합):** 백엔드 `migrations/versions/20261107_0012_team_detail.py`·`0013_transfer_counterpart_key.py`·`0014_transfer_identity_indexes.py`, `models/team_detail.py`(+`models/reference.py` 경기장·`models/standings.py` 프로필 확인 시각), `services/team_detail.py`(파싱·완전성 검증·저장·수집 일정·접근 판정·조회), `sync/team_detail.py`(`team_details`·`transfers`), `api/routes/teams.py`(팀 상세 5개 경로)·`schemas/team_detail.py`, `api/routes/schedule.py`·`services/news.py`(`GET /news?team=`), `services/reference.py`(`upsert_teams` 경기장·`team_detail_lookup` 수집된 리그 소속만), `sync/reference.py`. 프런트 `app/teams/[id]/page.tsx`, `features/team-detail/`, `lib/api`(타입·쿼리 키·생성 타입). 시작 전 처리로 `tests/test_schedule_db.py` 날짜 가정 수정. 아래 표는 이 변경을 반영했다.
@@ -220,8 +222,8 @@
 | `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning·error(04, 최근 흐름 '패'), small 12px·caption 11px) | 완료 |
 | `Pagination.tsx` | 페이지 분할(Figma 53:926: 이전·번호 3개·다음 44px, 640px 이상 첫·마지막 번호와 …) | 완료(05) |
 | `Tabs.tsx` | 탭(Figma Tab navigation: 44px·선택 굵은 파랑+밑줄·가로 스크롤, ARIA tabs·방향키/Home/End), `tabId`·`tabPanelId` | 완료(04, 06: `value` null = 선택 없음·첫 탭 Tab 순서, 스크롤 막대 숨김) |
-| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, 닫힘 전환 동안 내용 유지·`inert`·늦은 close 이벤트 가드(01, 2026-11-10), `BottomSheet` | 완료 |
-| `chip.ts` | `chipClass()` 필터 칩(관심 팀·뉴스 분류, Figma 49:171/49:173) | 완료 |
+| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백, 03: `closeButton={false}` 머리말 X 없음·`scrollArea` 내용이 스크롤 영역을 정함), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, 닫힘 전환 동안 내용 유지·`inert`·늦은 close 이벤트 가드(01, 2026-11-10), `BottomSheet` | 완료 |
+| `chip.tsx` | `chipClass()` 필터 칩(관심 팀·뉴스 분류·리그, Figma 49:171/49:173), `<ChipLabel>`(선택 시 굵기가 바뀌어도 폭 고정 — 칩 글자를 감쌈) | 완료 |
 | `Skeleton.tsx` | 로딩 자리 | 완료 |
 | `DataState.tsx` | `DataState`(로딩·정상·빈 결과·일부 미제공·실패+'다시 확인'·권한 거부), `StateMessage`(오류는 정보 아이콘, Figma 57:150), 06: `partialAction`(일부 미제공 안내 옆 조작, 없으면 기존 마크업), 07: `emptyAction`(빈 결과 아래 조작) | 완료 |
 | `Icon.tsx` | `public/icons/` SVG 아이콘(03: chevron-left·right, info, 04: thumbs 추가) | 완료 |
@@ -245,6 +247,7 @@
 | `components/layout/HeaderAuth.tsx` | 로그인(ghost)·회원가입(primary), 데스크톱·메뉴 배치 | 헤더·모바일 메뉴 | 골격(02가 `useAuth()`로 회원 상태 연결) |
 | `components/layout/nav.ts` | 메뉴 목록·현재 경로 판정 | 메뉴 컴포넌트 | 완료 |
 | `components/layout/HeaderHeight.tsx` | 실제 헤더 높이를 `--kt-header-height`에 동기화(ResizeObserver) | `SiteHeader.tsx`, 스크롤 여백·TOP 5 딤·패널·시트 | 완료 |
+| `components/layout/StickyPanel.tsx` | 메인 PC 우측 패널 고정(헤더·TOP 5 아래 12px, 가용 높이 520px 이상이고 패널이 들어갈 때만, 구간 끝에서 멈춤 — Figma 308:4617) | `app/page.tsx` | 완료 |
 | `components/layout/SiteFooter.tsx` | 로고 없음, 정책 항목(링크 없음)·의견 보내기, 구분선 아래 운영자 안내·출처·저작권(Figma `304:3823`) | `lib/site.ts`, `FeedbackButton` | 완료(정책 문서 생기면 링크 연결, 이미지 출처는 확인 중 더미) |
 
 ### 기능 (`src/features/`)
@@ -270,7 +273,7 @@
 | `standings/StandingsSection.tsx` | 리그 순위: 시즌 드롭다운·리그 탭·팀 표·선수 순위(리그·시즌별 다시 마운트 → 더 보기 초기화), 미지원 리그·시즌 안내, 하이드레이션 대기 | `useStandingsParams`·`StandingsTable`·`PlayerRankings` | 완료(06) |
 | `standings/StandingsTable.tsx` | 팀 순위 표(그룹, 모바일 가로 스크롤, 최근 5경기 승/무/패, 허용 집합 링크·'팀 상세 미제공'·지난 시즌 '당시 강등/승강 PO'), `DataState`로 로딩·빈 결과·일부 미제공(갱신 실패·소속 미확인 + '다시 확인')·조회 실패 | `queries`·`model` | 완료(06) |
 | `standings/PlayerRankings.tsx` | 선수 순위 5종 탭(득점·도움·경고·퇴장·선방), 10명 + 더 보기, 제공 상위 20명 안내·퇴장 red만 안내, 선방 제외 인원·'공동 N', `DataState` 상태 구분 | `queries`·`model` | 완료(06) |
-| `standings/MainStandings.tsx` | 메인 5대 리그 간소 순위: 칩(EPL·LaLiga·Serie A·BUN·Ligue 1)·상위 6팀·'전체 순위 보기'(같은 리그·현재 시즌), 리그별 미수집·갱신 실패 구분 | `queries`·`model` | 완료(06) |
+| `standings/MainStandings.tsx` | 메인 5대 리그 간소 순위(Figma 306:6221): 칩(EPL·LaLiga·Serie A·Bundesliga·Ligue 1, 9px 간격, 마우스 끌기·휠·터치 가로 이동)·상위 6팀 경기·승무패·승점·'전체 순위 보기'(같은 리그·현재 시즌), 리그별 미수집·갱신 실패 구분 | `queries`·`model` | 완료(06, 03 개선) |
 | `standings/useStandingsParams.ts` | URL 상태(`league`·`season`·`type`), 미지원 리그·시즌·유형 구분, 리그·시즌은 push·유형은 `replaceState` | `StandingsSection` | 완료(06) |
 | `standings/queries.ts` | `standingsQuery`·`standingsSummaryQuery`·`playerRankingsQuery`(5분 신선도) | `apiFetch` | 완료(06) |
 | `standings/model.ts` | `LEAGUES`(탭·칩 이름), `RANKING_TYPES`, `signed`·`numberText`·`formResults`·`zoneLabel`·`rankText`, `dataStatus`(실패 우선 → partial) | 06 화면, 07 리그 칩·상태 판정 | 완료(06) |
@@ -285,13 +288,14 @@
 | `team-detail/model.ts` | 탭·시즌 선택, 포지션 표기·정렬(`sortPlayers`·`nextSort`), 누락 표시(`statText`·`ratingText`), 시즌 기록 행, 이적 유형 문구·시작 전 안내, 경기장 표기 | — | 완료(08) |
 | `team-detail/queries.ts` | `teamOverviewQuery`(404·503 재시도 없음)·`teamFixturesQuery`(진행 경기 폴링)·`teamSquadQuery`·`teamSeasonStatsQuery`·`teamTransfersQuery`·`teamNewsQuery`(무한 조회) | `apiFetch` | 완료(08) |
 | `schedule/ScheduleSection.tsx` | 메인 일정(05: 하이드레이션 전 `SectionSkeleton`): 날짜 보기와 팀 21일 날짜별 보기(기본 6개·한 번에 전체 보기), 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 | 아래 파일, `MatchCard` | 완료 |
-| `schedule/useScheduleParams.ts` | URL 조건(`date`·`competitions`·`team`), push/replace 규칙, `useKstToday()`(KST 자정 전환) | `ScheduleSection` | 완료 |
+| `schedule/useScheduleParams.ts` | URL 조건(`date`·`competitions`·`team`·`from`), `selectTeam`·`clearTeam`(새 팀은 전체 대회, 첫 팀 직전 날짜·대회 보존·해제 시 복원 — `withTeam`·`withoutTeam`), `nearestMatchDate`(대회 적용 시 미확인 날짜를 건너뛴 가장 가까운 확인된 경기일), push/replace 규칙, `useKstToday()`(KST 자정 전환) | `ScheduleSection` | 완료 |
 | `schedule/queries.ts` | `competitionsQuery`, `fixturesByDateQuery`, `favoriteScheduleQuery`, `teamScheduleQuery`, `liveRefetchInterval`(진행 60초·임박 진입 시 시작·숨김 탭 정지, 04 경기 상세도 사용) | `apiFetch` | 완료 |
 | `schedule/DateBar.tsx` | 21일 날짜 막대(어제·오늘부터 시작)(데스크톱 화살표·모바일 터치 스크롤) | `ScheduleSection` | 완료 |
 | `schedule/ScheduleNotice.tsx` | 일정 안내 상자(neutral·warning·error, Figma 225:2374), `failedNames()` | 일정·관심 팀 | 완료 |
 | `favorites/store.ts`·`useFavorites.ts` | 비회원 관심 팀 localStorage(`kt-fav-guest`, 최대 5개, 저장 불가 처리, 다른 탭 반영, 07: 등록·해제 직전 더 새 목록을 발견하면 모든 구독자에 알림 `latest()`) | 관심 팀 UI | 완료(02가 회원 DB 동기화) |
 | `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시 — 누른 직후 목록에 묶이고 목록이 바뀌면 지움, 07: 5개가 차면 다른 팀 비활성 '최대 5개까지 등록할 수 있어요') | 07 사용, 08 사용 예정 | 완료(07) |
-| `favorites/FavoriteSchedule.tsx` | 관심 팀 일정 패널(팀별 진행 중·가장 가까운 예정 1경기, 일부 실패·재조회 실패 안내, 빈 상태 `/teams` 이동) | `favoriteScheduleQuery` | 완료 |
+| `favorites/FavoriteSchedule.tsx` | 메인 관심 팀 패널(Figma Guest Favorites 306:6220): n/5·팀 추가(`TeamSearch`, 등록 가능 팀만)·빈 상태·등록 목록 해제·5팀 제한·저장 실패 재시도, 팀별 진행 중·가장 가까운 예정 1경기 요약, 일부 실패·재조회 실패 안내 | `favoriteScheduleQuery`, `useFavorites` | 완료 |
+| `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) | `MatchCard` | 완료 |
 | `news/MainNews.tsx` | 주요 뉴스(분류 칩, 6개씩 더 보기, 추가 조회·재조회 실패 시 기존 기사 유지, 출처 안내) | `NewsCard` | 완료 |
 | `news/OriginalRedirect.tsx` | 원문 확인 후 이동, 404·410만 접근 불가 안내 | `/news/{id}/link` | 완료 |
 | `feedback/FeedbackProvider.tsx` | 전역 의견 모달 1개(`<Suspense>` 안, 04), `useFeedback().openFeedback()` | `layout.tsx` | 완료 |
@@ -311,6 +315,7 @@
 | `format/match.ts` | 경기 표기 공용 규칙: `teamName`·`competitionName`·`scoreText`·`penaltyText`·`kickoffTime`·`isChanged`·`statusWord` | 완료 |
 | `hooks/useMediaQuery.ts` | 미디어 쿼리 구독, `DESKTOP_QUERY`(1024px) | 완료 |
 | `hooks/useHydrated.ts` | 하이드레이션 완료 여부(공유 캐시를 읽는 Suspense 영역의 서버·클라이언트 불일치 방지) | 완료(05) |
+| `hooks/useNow.ts` | 30초마다 갱신되는 현재 시각(서버 렌더 0) — 킥오프 후 '상태 확인 중' 판정 | 완료 |
 | `site.ts` | 푸터 운영자 정보 설정값(`SITE_OPERATOR_*`) | 완료 |
 
 ### 정적 파일 (`public/`)

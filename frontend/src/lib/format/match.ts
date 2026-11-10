@@ -64,3 +64,11 @@ export function statusWord(match: MatchSummary): string {
       return "확인 필요";
   }
 }
+
+/**
+ * Kickoff time has passed but the stored status is still "scheduled": the provider has not
+ * confirmed the start yet (live sync pending), so the screen says 상태 확인 중, not 예정.
+ */
+export function awaitingStatus(match: MatchSummary, now: number): boolean {
+  return match.status === "scheduled" && match.timeConfirmed && Date.parse(match.kickoffAt) <= now;
+}

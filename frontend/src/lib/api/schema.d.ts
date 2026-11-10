@@ -1167,6 +1167,15 @@ export interface components {
             updatedAt: string | null;
             /** Failedcompetitionids */
             failedCompetitionIds: number[];
+            /** Checkedat */
+            checkedAt?: string | null;
+            /** Checkedthrough */
+            checkedThrough?: string | null;
+            /**
+             * Delayed
+             * @default false
+             */
+            delayed: boolean;
         };
         /**
          * SeasonItem

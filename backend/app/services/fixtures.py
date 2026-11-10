@@ -239,6 +239,19 @@ class SyncState:
 
     failed_competition_ids: list[int]
     never_synced: bool
+    # Oldest last-success time among the competitions and the end of the range every
+    # competition has confirmed: the "last normal check" shown while collection lags.
+    checked_at: datetime | None = None
+    checked_through: date | None = None
+
+    @property
+    def delayed(self) -> bool:
+        """The 30-minute schedule job missed about two runs (scheduler or provider down)."""
+        return self.checked_at is not None and datetime.now(UTC) - self.checked_at > SYNC_DELAY
+
+
+# `fixtures` runs every 30 minutes: past this, the stored schedule is shown as delayed.
+SYNC_DELAY = timedelta(minutes=75)
 
 
 def sync_state(
@@ -263,9 +276,14 @@ def sync_state(
         if ok_at is None or (failed_at is not None and failed_at > ok_at)
         or (window is not None and not (start and end and start <= window[0] <= window[1] <= end))
     ]
+    synced = [row for row in rows if row.fixtures_synced_at is not None]
     return SyncState(
         failed_competition_ids=sorted(failed),
-        never_synced=not rows or all(row.fixtures_synced_at is None for row in rows),
+        never_synced=not synced,
+        checked_at=min((row.fixtures_synced_at for row in synced), default=None),
+        checked_through=min(
+            (row.fixtures_window_end for row in synced if row.fixtures_window_end), default=None
+        ),
     )
 
 

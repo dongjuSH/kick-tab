@@ -2,7 +2,6 @@
 
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useDeferredValue, useEffect, useId, useRef, useState } from "react";
-import { IconButton } from "@/components/ui/Button";
 import { StateMessage } from "@/components/ui/DataState";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -37,12 +36,15 @@ export function TeamSearch({
   description,
   season = null,
   placeholder = "예: 맨시티, 레알 마드리드, Bayern Munich",
+  candidates,
 }: {
   selected: TeamRef | null;
   onSelect: (team: TeamRef | null) => void;
   description?: string;
   season?: number | null;
   placeholder?: string;
+  /** Narrows the candidates (main favourites: teams that can be registered and are not yet). */
+  candidates?: (team: TeamRef) => boolean;
 }) {
   const [text, setText] = useState(selected ? teamName(selected) : "");
   const [open, setOpen] = useState(false);
@@ -52,7 +54,7 @@ export function TeamSearch({
   const boxRef = useRef<HTMLDivElement>(null);
   const query = useDeferredValue(text.trim());
   const search = useQuery({ ...teamSearchQuery(query, season), enabled: open && query.length > 0 });
-  const results = search.data ?? [];
+  const results = (search.data ?? []).filter((team) => candidates?.(team) ?? true);
 
   // Follow outside changes (reset, favourite button, URL) without fighting the user's typing.
   const selectedKey = selected?.id ?? null;
@@ -90,10 +92,15 @@ export function TeamSearch({
 
   return (
     <div ref={boxRef} className="relative">
-      {description && <label htmlFor={`${listId}-input`} className="mb-2 block text-body font-bold">팀 일정 검색</label>}
-      {description && <p id={`${listId}-help`} className="mb-3 text-small text-fg-secondary">{description}</p>}
+      {/* Label, help and field read as one group (Figma 49:57 '팀 일정 검색'). */}
+      {description && (
+        <div className="mb-1.5 flex flex-col gap-1.5">
+          <label htmlFor={`${listId}-input`} className="text-body font-bold">팀 일정 검색</label>
+          <p id={`${listId}-help`} className="text-small text-fg-secondary">{description}</p>
+        </div>
+      )}
       <div className="relative flex items-center">
-        <span className="pointer-events-none absolute left-3 text-fg-secondary"><Icon name="search" /></span>
+        <SearchGlyph />
         <label className="flex min-h-11 min-w-0 flex-1 items-center">
           {!description && <span className="sr-only">팀 검색</span>}
           <input
@@ -133,10 +140,23 @@ export function TeamSearch({
                 pick(results[active]);
               }
             }}
-            className="h-11 w-full rounded-control border border-line-strong bg-surface pl-9 pr-11 text-body text-fg placeholder:text-fg-muted [&::-webkit-search-cancel-button]:hidden"
+            className="h-12 w-full rounded-control border border-line-strong bg-surface pl-[39px] pr-11 text-body text-fg placeholder:text-fg-muted [&::-webkit-search-cancel-button]:hidden"
           />
         </label>
-        {text && <IconButton className="absolute right-0" icon="x" label="검색어 지우기" onClick={clear} />}
+        {text && (
+          // 44px target; the hover fill stays a circle around the icon so it never covers the
+          // typed text or the field border.
+          <button
+            type="button"
+            aria-label="검색어 지우기"
+            onClick={clear}
+            className="group absolute right-0 inline-flex size-11 items-center justify-center rounded-control"
+          >
+            <span className="inline-flex size-[30px] items-center justify-center rounded-full group-hover:bg-subtle">
+              <Icon name="x" size={16} />
+            </span>
+          </button>
+        )}
       </div>
 
       {showList && (
@@ -185,5 +205,22 @@ export function TeamSearch({
         </div>
       )}
     </div>
+  );
+}
+
+/** Magnifier drawn inline at its display size, so the stroke stays crisp (no image scaling). */
+function SearchGlyph() {
+  return (
+    <svg
+      aria-hidden
+      width="19"
+      height="19"
+      viewBox="0 0 18 18"
+      fill="none"
+      className="pointer-events-none absolute left-3 text-fg-muted"
+    >
+      <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.75" />
+      <path d="m12.25 12.25 3.5 3.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
   );
 }
