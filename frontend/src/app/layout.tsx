@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, Noto_Sans_KR } from "next/font/google";
-import { MobileBottomBar } from "@/components/layout/MobileBottomBar";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { FeedbackProvider } from "@/features/feedback/FeedbackProvider";
@@ -42,7 +41,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               {children}
             </main>
             <SiteFooter />
-            <MobileBottomBar />
           </FeedbackProvider>
         </Providers>
       </body>

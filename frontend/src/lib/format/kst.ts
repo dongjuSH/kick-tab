@@ -95,11 +95,6 @@ export function formatShortDate(value: string): string {
   return p ? `${p.month}/${p.day}(${p.weekday})` : MISSING;
 }
 
-/** TOP 5 selection week, e.g. "10/26(월)–11/1(일)" (Figma 159:923). */
-export function formatPeriod(start: string, end: string): string {
-  return `${formatShortDate(start)}–${formatShortDate(end)}`;
-}
-
 /** Today's KST calendar date as "2026-11-02". */
 export function kstTodayIso(now: Date = new Date()): string {
   const p = kstParts(now)!;

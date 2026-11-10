@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { IconButton } from "./Button";
 import { cx } from "./cx";
 
@@ -63,6 +63,11 @@ export function Dialog({
   const titleId = useId();
   const returnFocus = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
+  // Content is mounted from the first open render until a closing dialog has finished its exit
+  // transition (TOP 5 sheet slides down with the same list and scroll position); dialogs
+  // without an exit transition drop it right away.
+  const [shown, setShown] = useState(open);
+  if (open && !shown) setShown(true);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -80,6 +85,9 @@ export function Dialog({
       document.documentElement.style.overflow = "hidden";
     } else if (!open && dialog.open) {
       dialog.close();
+      const exit = Math.max(0, ...getComputedStyle(dialog).transitionDuration.split(",").map(parseFloat)) * 1000;
+      const timer = window.setTimeout(() => setShown(false), exit);
+      return () => window.clearTimeout(timer);
     }
   }, [open, initialFocus]);
 
@@ -87,8 +95,12 @@ export function Dialog({
     const dialog = ref.current;
     if (!dialog) return;
     const handleClose = () => {
-      document.documentElement.style.overflow = "";
-      returnFocus.current?.focus?.();
+      // A queued close event can arrive after the dialog has reopened.
+      if (dialog.open) return;
+      if (!document.querySelector("dialog:modal")) {
+        document.documentElement.style.overflow = "";
+        returnFocus.current?.focus?.();
+      }
       returnFocus.current = null;
     };
     // Escape fires "cancel": let the parent own the open state.
@@ -102,7 +114,7 @@ export function Dialog({
       dialog.removeEventListener("close", handleClose);
       dialog.removeEventListener("cancel", handleCancel);
       if (dialog.open) dialog.close();
-      document.documentElement.style.overflow = "";
+      if (!document.querySelector("dialog:modal")) document.documentElement.style.overflow = "";
     };
   }, []);
 
@@ -110,6 +122,8 @@ export function Dialog({
     <dialog
       ref={ref}
       id={id}
+      // Not interactive while it animates out.
+      inert={!open}
       tabIndex={-1}
       aria-labelledby={titleId}
       style={{ "--kt-dialog-width": `${width}px` } as CSSProperties}
@@ -132,7 +146,7 @@ export function Dialog({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      {open && (
+      {shown && (
         <div
           className={cx(
             "flex flex-col",

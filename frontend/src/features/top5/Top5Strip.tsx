@@ -2,71 +2,122 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Badge } from "@/components/ui/Badge";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import { IconButton } from "@/components/ui/Button";
 import { BottomSheet } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
+import type { TopMatches } from "@/lib/api/types";
 import { DESKTOP_QUERY, useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { Top5List } from "./Top5List";
 import {
+  PREPARING,
+  TOP5_TITLE,
   isPrevious,
-  lineupText,
+  lineupItems,
   noticeCopy,
   noticeOf,
-  periodText,
-  titleOf,
+  selectedText,
+  weekLabel,
 } from "./model";
 import { currentTopMatchesQuery, isOutdated, topMatchesVersionQuery } from "./queries";
 
 const CLOSE_LABEL = "주목 경기 목록 닫기";
-// Before the first answer the strip names this week's list (the title follows the data).
-const DEFAULT_TITLE = "이번 주 주목 경기 TOP 5";
+const PANEL_NAME = "주목 경기 선정 목록";
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
-const STRIP_LAYOUT = "grid min-h-[72px] w-full grid-cols-[minmax(0,1fr)_44px] grid-rows-[44px_1fr] items-center gap-x-2 rounded-control text-left lg:min-h-11 lg:grid-cols-[auto_minmax(0,1fr)_44px] lg:grid-rows-1 lg:gap-x-4";
-const SUMMARY_POSITION = "col-span-2 row-start-2 min-w-0 self-start pb-2 text-small text-fg-secondary lg:col-span-1 lg:col-start-2 lg:row-start-1 lg:self-center lg:pb-0";
+/** Lineup speed (Figma 159:923): 24px per second, linear. */
+const TICKER_SPEED = 24;
 
-function Lineup({ text }: { text: string }) {
+/*
+ * Strip layout (Figma 159:923). Mobile 84px: badge · title over the week · arrow on the first
+ * row, the lineup on the second. Desktop 56px: one row with badge, title, week, lineup in the
+ * remaining width and the arrow. Badge, title, week and arrow never move.
+ */
+const STRIP = "grid w-full grid-cols-[auto_minmax(0,1fr)_44px] grid-rows-[minmax(44px,auto)_20px] items-center gap-x-2.5 gap-y-1.5 pt-2 pb-1.5 text-left lg:flex lg:h-14 lg:gap-5 lg:py-0";
+const BADGE = "col-start-1 row-start-1 shrink-0 rounded-badge bg-action px-2 py-1 text-small leading-[18px] font-bold text-fg-inverse";
+const TITLE_BLOCK = "col-start-2 row-start-1 flex min-w-0 flex-col gap-[3px] lg:contents";
+const TITLE = "truncate text-small leading-[18px] font-bold text-fg lg:shrink-0 lg:overflow-visible lg:text-body lg:leading-[22px]";
+const WEEK_LINE = "flex flex-wrap items-center gap-x-1.5 text-small font-medium text-fg-secondary lg:shrink-0 lg:flex-nowrap lg:gap-5";
+const VIEWPORT = "col-span-3 row-start-2 min-w-0 overflow-hidden text-small text-fg-secondary lg:flex-1 lg:text-body";
+const ARROW = "col-start-3 row-start-1 flex size-11 shrink-0 items-center justify-center";
+
+/**
+ * Ranks 1-5 as one line that keeps running and starts again at rank 1 at any width: the lap
+ * is repeated as many times as the viewport needs so the loop never shows a gap.
+ */
+function Lineup({ items }: { items: string[] }) {
   const viewport = useRef<HTMLSpanElement>(null);
-  const first = useRef<HTMLSpanElement>(null);
+  const lap = useRef<HTMLSpanElement>(null);
+  const copy = useRef<HTMLSpanElement>(null);
+  const [copies, setCopies] = useState(1);
+  const key = items.join("|");
+
   useEffect(() => {
     const box = viewport.current;
-    const item = first.current;
-    if (!box || !item) return;
+    const first = lap.current;
+    const next = copy.current;
+    if (!box || !first || !next) return;
     const measure = () => {
-      const width = item.getBoundingClientRect().width;
-      const distance = width + 48;
+      // Lap width plus the gap before the next copy (32px desktop / 28px mobile).
+      const distance = next.offsetLeft - first.offsetLeft;
+      if (distance <= 0) return;
       box.style.setProperty("--kt-ticker-distance", `${distance}px`);
-      box.style.setProperty("--kt-ticker-duration", `${distance / 32}s`);
-      box.toggleAttribute("data-overflow", width > box.clientWidth);
+      box.style.setProperty("--kt-ticker-duration", `${distance / TICKER_SPEED}s`);
+      box.setAttribute("data-ready", "");
+      setCopies(Math.max(1, Math.ceil(box.clientWidth / distance)));
     };
     const observer = new ResizeObserver(measure);
     observer.observe(box);
-    observer.observe(item);
+    observer.observe(first);
     measure();
     return () => observer.disconnect();
-  }, [text]);
+  }, [key]);
+
+  const run = (
+    <>
+      {items.map((item, index) => (
+        <Fragment key={index}>
+          {index > 0 && <span className="text-small font-medium text-fg-muted">·</span>}
+          <span>{item}</span>
+        </Fragment>
+      ))}
+    </>
+  );
   return (
     <span ref={viewport} className="kt-ticker block overflow-hidden">
-      <span className="sr-only">{text}</span>
-      <span aria-hidden className="kt-ticker-track flex w-max gap-12 whitespace-nowrap">
-        <span ref={first}>{text}</span>
-        <span className="kt-ticker-copy">{text}</span>
+      <span className="sr-only">{items.join(", ")}</span>
+      <span aria-hidden className="kt-ticker-track flex w-max gap-7 whitespace-nowrap lg:gap-8">
+        <span ref={lap} className="flex items-center gap-3 lg:gap-[18px]">{run}</span>
+        {Array.from({ length: copies }, (_, index) => (
+          <span key={index} ref={index === 0 ? copy : undefined} className="kt-ticker-copy items-center gap-3 lg:gap-[18px]">
+            {run}
+          </span>
+        ))}
       </span>
     </span>
   );
 }
 
-/** "AI 선정" badge over the title (Figma 159:924 header); read together as the heading. */
-function PanelTitle({ children }: { children: ReactNode }) {
+/** Week shown in the strip: last week is named as such and this week marked as in progress. */
+function WeekLine({ data }: { data: TopMatches }) {
   return (
-    <span className="flex flex-col items-start gap-1">
-      <Badge tone="accent">
-        AI 선정
-      </Badge>
-      {children}
+    <span className={WEEK_LINE}>
+      <span className="whitespace-nowrap">{weekLabel(data)}</span>
+      {isPrevious(data) && <span className="whitespace-nowrap">{PREPARING}</span>}
+    </span>
+  );
+}
+
+/** Panel/sheet heading (Figma 159:218 / 304:3837): the real week, preparing state, selection time. */
+function PanelHeading({ data }: { data: TopMatches | undefined }) {
+  const selected = data && selectedText(data);
+  return (
+    <span className="flex flex-col gap-1">
+      <span className="sr-only">{PANEL_NAME} </span>
+      <span className="text-subtitle leading-[27px] font-bold text-fg">{data ? weekLabel(data) : TOP5_TITLE}</span>
+      {data && isPrevious(data) && <span className="text-small font-normal text-fg-secondary">{PREPARING}</span>}
+      {selected && <span className="text-small font-normal text-fg-secondary">{selected}</span>}
     </span>
   );
 }
@@ -90,8 +141,8 @@ function inertOutside(keep: HTMLElement): () => void {
 
 /**
  * AI weekly TOP 5 strip, fixed under the header on every page (COM-003, TOP-003,
- * Figma 159:923). Desktop opens a 1280px panel right under the header with a dimmed,
- * inert page (128:3700); below 1024px it opens a bottom sheet (128:4408, 167:6697).
+ * Figma 159:923). Desktop unfolds a panel of the content width (max 1280px) right under the
+ * strip and folds it back up (159:218); below 1024px it opens a bottom sheet (159:621).
  */
 export function Top5Strip() {
   const { data, isPending, error, refetch, isStale } = useQuery(currentTopMatchesQuery);
@@ -170,8 +221,6 @@ export function Top5Strip() {
     };
   }, [open, isDesktop]);
 
-  const titleText = data ? titleOf(data) : DEFAULT_TITLE;
-  const title = <PanelTitle>{titleText}</PanelTitle>;
   const list = (layout: "desktop" | "mobile") => (
     <Top5List
       layout={layout}
@@ -185,7 +234,7 @@ export function Top5Strip() {
   const notice = data && noticeOf(data);
 
   return (
-    <div ref={root} className="bg-action-soft">
+    <div ref={root} className="border-b border-line bg-selected">
       <div className="kt-container">
         <button
           ref={toggle}
@@ -198,20 +247,21 @@ export function Top5Strip() {
             if (!open && isStale) void refetch();
             setOpen((value) => !value);
           }}
-          className={cx("kt-ticker-trigger", STRIP_LAYOUT)}
+          className={cx("kt-ticker-trigger rounded-control", STRIP)}
         >
-          <span className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-2 text-small lg:flex-nowrap">
-            <span className="shrink-0 font-medium text-action">AI 선정</span>
-            <span className="font-bold lg:hidden">{data && isPrevious(data) ? "지난주 TOP 5" : "이번 주 TOP 5"}</span>
-            <span className="hidden whitespace-nowrap font-bold lg:inline lg:text-body">{titleText}</span>
-            {data && <span className="whitespace-nowrap text-fg-secondary">{periodText(data)}</span>}
+          <span className={BADGE}>AI 선정</span>
+          <span className={TITLE_BLOCK}>
+            <span className={TITLE}>{TOP5_TITLE}</span>
+            {data ? <WeekLine data={data} /> : <Skeleton className="h-4 w-20" />}
           </span>
-          <span className={SUMMARY_POSITION}>
-            {data ? (notice ? noticeCopy(notice, data).short : <Lineup text={lineupText(data)} />)
-              : isPending ? <Skeleton className="h-4 w-40" />
-              : <span className="text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>}
+          <span className={VIEWPORT}>
+            {data ? (
+              notice ? <span className="block truncate">{noticeCopy(notice, data).title}</span>
+                : <Lineup items={lineupItems(data)} />
+            ) : isPending ? <Skeleton className="h-4 w-40" />
+              : <span className="block truncate text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>}
           </span>
-          <span className="col-start-2 row-start-1 flex size-11 items-center justify-center lg:col-start-3">
+          <span className={ARROW}>
             <Icon name="chevron-down" className={cx("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
           </span>
           <span className="sr-only">{open ? "목록 접기" : "목록 펼치기"}</span>
@@ -219,15 +269,17 @@ export function Top5Strip() {
       </div>
 
       {isDesktop ? (
-        <div id={panelId} hidden={!open}>
-          {/* Dimmed page below the header; clicking it closes the panel (Figma 128:3700). */}
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-label={CLOSE_LABEL}
-            onClick={closePanel}
-            className="fixed inset-x-0 bottom-0 top-(--kt-header-height) z-0 cursor-pointer bg-fg/12"
-          />
+        <div id={panelId}>
+          {/* Dimmed page below the header; clicking it closes the panel. */}
+          {open && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={CLOSE_LABEL}
+              onClick={closePanel}
+              className="fixed inset-x-0 bottom-0 top-(--kt-header-height) z-0 cursor-pointer bg-fg/12"
+            />
+          )}
           {/* The container's side gutters let clicks through to the dimmed backdrop. */}
           <div className="kt-container pointer-events-none absolute inset-x-0 top-full z-10">
             <section
@@ -235,15 +287,18 @@ export function Top5Strip() {
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
-              className="pointer-events-auto flex max-h-[calc(100dvh-var(--kt-header-height)-16px)] flex-col gap-3 rounded-b-card bg-surface p-6"
+              data-open={open ? "" : undefined}
+              // Out of the tab order and the accessibility tree as soon as it starts folding.
+              inert={!open}
+              className="kt-top5-panel pointer-events-auto flex max-h-[calc(100dvh-var(--kt-header-height)-16px)] flex-col gap-3 rounded-b-card bg-surface px-6 py-5"
             >
-              <div className="flex items-center gap-2">
-                <h2 id={titleId} className="min-w-0 flex-1 text-title font-bold">
-                  {title}
+              <div className="flex items-start gap-2">
+                <h2 id={titleId} className="min-w-0 flex-1">
+                  <PanelHeading data={data} />
                 </h2>
                 <IconButton icon="x" label={CLOSE_LABEL} onClick={closePanel} data-dialog-close />
               </div>
-              {open && list("desktop")}
+              {list("desktop")}
             </section>
           </div>
         </div>
@@ -252,10 +307,11 @@ export function Top5Strip() {
           id={panelId}
           open={open}
           onClose={() => setOpen(false)}
-          title={title}
+          title={<PanelHeading data={data} />}
           closeLabel={CLOSE_LABEL}
           initialFocus="close"
           compact
+          className="kt-top5-sheet"
         >
           {list("mobile")}
         </BottomSheet>
@@ -270,11 +326,15 @@ export function Top5Strip() {
  */
 export function Top5StripFallback() {
   return (
-    <div className="bg-action-soft" aria-busy>
+    <div className="border-b border-line bg-selected" aria-busy>
       <div className="kt-container">
-        <div className={STRIP_LAYOUT}>
-          <span className="text-small font-bold lg:text-body">AI 선정 <span className="lg:hidden">이번 주 TOP 5</span><span className="hidden lg:inline">{DEFAULT_TITLE}</span></span>
-          <span className={SUMMARY_POSITION}><Skeleton className="h-4 w-40" /></span>
+        <div className={STRIP}>
+          <span className={BADGE}>AI 선정</span>
+          <span className={TITLE_BLOCK}>
+            <span className={TITLE}>{TOP5_TITLE}</span>
+            <Skeleton className="h-4 w-20" />
+          </span>
+          <span className={VIEWPORT}><Skeleton className="h-4 w-40" /></span>
         </div>
       </div>
     </div>

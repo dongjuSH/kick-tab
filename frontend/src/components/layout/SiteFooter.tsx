@@ -1,4 +1,3 @@
-import { Logo } from "@/components/common/Logo";
 import { FeedbackButton } from "@/features/feedback/FeedbackButton";
 import { siteOperator } from "@/lib/site";
 
@@ -9,72 +8,46 @@ const POLICY_ITEMS = [
   { label: "문의" },
 ];
 
+// Image sources and rights notice are still being checked (user, 2026-11-10): keep the Figma
+// line as is until they are confirmed.
 const SOURCES = "데이터 API-Football · 뉴스 NAVER";
 
-function PolicyLinks() {
-  return (
-    <ul aria-label="서비스 정책과 문의" className="flex items-center gap-5 text-small text-fg-secondary">
-      {POLICY_ITEMS.map((item) => (
-        <li key={item.label} title="준비 중" className={item.emphasis ? "font-bold" : undefined}>
-          {item.label}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 /**
- * Operator line. The Figma values are fictional, so real ones come from settings
- * (SITE_OPERATOR_*); desktop shows one line, mobile three (Figma 127:3225 / 127:3250).
+ * Operator line. Until the service is public the design's notice is shown; real details come
+ * from settings (SITE_OPERATOR_*) once they exist.
  */
-function OperatorInfo() {
+function operatorText(): string {
   const { name, representative, email, address } = siteOperator;
-  if (!name && !representative && !email && !address) {
-    return <p className="text-caption text-fg-muted">운영자 정보는 서비스 공개 전에 안내합니다.</p>;
-  }
-  const lines = [
-    [name, representative && `대표 ${representative}`].filter(Boolean).join(" · "),
-    email && `문의 ${email}`,
-    address,
-  ].filter(Boolean);
-  return (
-    <p className="text-caption text-fg-muted">
-      {lines.map((line, index) => (
-        <span key={index} className="block lg:inline">
-          {index > 0 && <span className="hidden lg:inline"> · </span>}
-          {line}
-        </span>
-      ))}
-    </p>
-  );
+  const parts = [name, representative && `대표 ${representative}`, email && `문의 ${email}`, address];
+  return parts.some(Boolean) ? parts.filter(Boolean).join(" · ") : "운영자 정보는 서비스 공개 전에 안내합니다.";
 }
 
 /**
- * Global footer (COM-003; Figma 49:532 desktop / 49:1012 mobile, redesigned 2026-10-31).
- * Page menus stay in the header. Feedback is in the footer on desktop and in the fixed
- * bottom bar on mobile.
+ * Global footer without a logo (COM-003, Figma 304:3823). Desktop: policies·문의 left and
+ * 의견 보내기 right, then under a divider the operator notice·sources left and the copyright
+ * right. Mobile stacks policies → 의견 보내기 → operator·sources → copyright.
  */
 export function SiteFooter() {
   return (
     <footer className="border-t border-line bg-surface">
-      <div className="kt-container flex flex-col gap-2 py-5 lg:gap-3">
-        <div className="flex items-center gap-2 lg:gap-6">
-          <Logo size="footer" />
-          <div className="flex-1" />
-          <p className="text-caption text-fg-muted lg:hidden">© 2026 KickTab</p>
-          <div className="hidden items-center gap-6 lg:flex">
-            <PolicyLinks />
-            <FeedbackButton className="w-[120px]" />
+      <div className="kt-container flex flex-col gap-3 py-5 text-small">
+        <div className="flex flex-col items-start gap-3 lg:flex-row lg:items-center">
+          <ul aria-label="서비스 정책과 문의" className="flex items-center gap-4 whitespace-nowrap text-fg-secondary lg:flex-1">
+            {POLICY_ITEMS.map((item) => (
+              <li key={item.label} title="준비 중" className={item.emphasis ? "font-bold" : undefined}>
+                {item.label}
+              </li>
+            ))}
+          </ul>
+          <FeedbackButton className="w-[120px]" />
+        </div>
+        <hr className="border-line" />
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:gap-6">
+          <div className="flex flex-col gap-1 lg:flex-1">
+            <p className="text-fg-secondary">{operatorText()}</p>
+            <p className="text-fg-muted">{SOURCES}</p>
           </div>
-        </div>
-        <div className="lg:hidden">
-          <PolicyLinks />
-        </div>
-        <OperatorInfo />
-        <div className="flex items-center gap-4 text-caption text-fg-muted">
-          <p>{SOURCES}</p>
-          <div className="flex-1" />
-          <p className="hidden lg:block">© 2026 KickTab. All rights reserved.</p>
+          <p className="text-fg-muted lg:text-right">© 2026 KickTab. All rights reserved.</p>
         </div>
       </div>
     </footer>

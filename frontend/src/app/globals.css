@@ -32,8 +32,8 @@
   --kt-brand-arrow: #2563eb;
   --kt-brand-rim: #e2e8f0;
 
-  /* Sticky header + compact TOP 5: 69 + 72 on mobile, 85 + 44 on desktop. */
-  --kt-header-height: 141px;
+  /* Sticky header + TOP 5 strip with dividers: 68+1+84+1 on mobile, 86+1+56+1 on desktop. */
+  --kt-header-height: 154px;
   --kt-gutter: 16px;
 }
 
@@ -45,23 +45,66 @@
 
 @media (min-width: 1024px) {
   :root {
-    --kt-header-height: 129px;
+    --kt-header-height: 144px;
   }
 }
 
+/*
+ * TOP 5 lineup (Figma 159:923): ranks 1-5 run as one line and repeat, so the loop continues
+ * at any width (1920px included). 24px/s; pauses at its current place while the whole strip
+ * is hovered, focused or open. Reduced motion shows the first lap statically.
+ */
 .kt-ticker-copy { display: none; }
 
 @media (prefers-reduced-motion: no-preference) {
-  .kt-ticker[data-overflow] .kt-ticker-copy { display: inline; }
-  .kt-ticker[data-overflow] .kt-ticker-track {
+  .kt-ticker-copy { display: flex; }
+  .kt-ticker[data-ready] .kt-ticker-track {
     animation: kt-ticker-slide var(--kt-ticker-duration) linear infinite;
   }
-  .kt-ticker:hover .kt-ticker-track,
-  .kt-ticker-trigger:focus-within .kt-ticker-track { animation-play-state: paused; }
+  .kt-ticker-trigger:hover .kt-ticker-track,
+  .kt-ticker-trigger:focus-visible .kt-ticker-track,
+  .kt-ticker-trigger[aria-expanded="true"] .kt-ticker-track { animation-play-state: paused; }
 }
 
 @keyframes kt-ticker-slide {
   to { transform: translateX(calc(-1 * var(--kt-ticker-distance))); }
+}
+
+/* TOP 5 desktop panel: unfolds down 150ms ease-out, folds up 150ms ease-in (Figma 159:218). */
+/* Hidden once folded so its links leave the tab order and the accessibility tree. */
+.kt-top5-panel {
+  clip-path: inset(0 0 100% 0);
+  visibility: hidden;
+  transition: clip-path 150ms ease-in, visibility 0s linear 150ms;
+}
+.kt-top5-panel[data-open] {
+  clip-path: inset(0 0 0 0);
+  visibility: visible;
+  transition: clip-path 150ms ease-out, visibility 0s;
+}
+/*
+ * TOP 5 mobile sheet (Figma 159:621): slides up 150ms ease-out and back down ease-in, the dim
+ * is a pointer (clicking it closes). The <dialog> stays rendered while it leaves.
+ */
+.kt-top5-sheet {
+  transform: translateY(100%);
+  transition: transform 150ms ease-in, display 150ms allow-discrete, overlay 150ms allow-discrete;
+}
+.kt-top5-sheet[open] {
+  transform: none;
+  transition-timing-function: ease-out;
+}
+@starting-style {
+  .kt-top5-sheet[open] { transform: translateY(100%); }
+}
+.kt-top5-sheet::backdrop { cursor: pointer; }
+
+/* Reduced motion: both panels switch at once, in either direction. */
+@media (prefers-reduced-motion: reduce) {
+  .kt-top5-panel,
+  .kt-top5-panel[data-open],
+  .kt-top5-sheet,
+  .kt-top5-sheet[open] { transition: none; }
 }
 
 @theme inline {

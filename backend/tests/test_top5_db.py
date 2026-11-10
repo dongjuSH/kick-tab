@@ -266,6 +266,54 @@ def test_missed_retry_slot_does_not_start_extra_selection(factory):
     assert len(alerts) == 1 and public(factory).view == "delayed"
 
 
+def test_week_without_any_automatic_attempt_is_delayed_then_replaced(factory):
+    # Neither 00:00 nor 00:05 ran (service down): after the retry slot and its grace the
+    # reconciler publishes the delay notice and alerts once; a manual recovery replaces it.
+    alerts = []
+
+    def repair(at):
+        return top5_selection.reconcile_attempts(
+            session_factory=factory, clock=lambda: at,
+            alert=lambda notice: alerts.append(notice) or True,
+        )
+
+    assert week(factory) is None
+    assert repair(NOW + timedelta(minutes=5)) == 0  # 00:05:30 KST: the retry may still run
+    assert week(factory) is None and alerts == []
+    assert repair(NOW + timedelta(minutes=7)) == 1
+    assert repair(NOW + timedelta(minutes=8)) == 0
+    delayed = public(factory)
+    assert delayed.view == "delayed" and len(alerts) == 1
+    assert week(factory).status == "delayed" and week(factory).needs_manual
+    assert week(factory).auto_attempts == 0
+    assert run("retry", factory, good_model).status == "skipped"
+    assert run("manual", factory, good_model).status == "published"
+    replaced = public(factory)
+    assert replaced.view == "list" and replaced.version > delayed.version
+    assert [item.rank for item in replaced.items] == [1, 2, 3]
+
+
+def test_missed_week_found_before_the_week_ends_is_not_delayed_after_it(factory):
+    # Found missing late on Sunday, decided after Monday 00:00 KST: that week is over, so
+    # it gets no delay notice and no alert (and the new week is not touched either).
+    sunday = NOW + timedelta(days=6, hours=23, minutes=59)
+    times = iter([sunday, sunday, NOW + timedelta(days=7)])
+
+    def clock():
+        return next(times, NOW + timedelta(days=7))
+
+    assert top5_selection.reconcile_attempts(
+        session_factory=factory, clock=clock,
+        alert=lambda notice: pytest.fail("no alert for a week that already ended"),
+    ) == 0
+    weeks = [NOW.date() + timedelta(days=1), NOW.date() + timedelta(days=8)]
+    with factory() as session:
+        assert session.query(Top5Publication).filter(
+            Top5Publication.week_start.in_(weeks)
+        ).count() == 0
+    assert week(factory) is None
+
+
 def test_reconciliation_respects_active_week_lock(factory):
     interrupted(factory, "retry", 2)
     with factory() as session:

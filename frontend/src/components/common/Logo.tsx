@@ -1,26 +1,25 @@
 import Image from "next/image";
-import { cx } from "@/components/ui/cx";
 
-/** Approved brand exports include the outlined wordmark and their own slot geometry. */
-const SIZES = {
-  header: { height: 36, file: "logo-header.svg" },
-  "header-mobile": { height: 32, file: "logo-mobile.svg" },
-  footer: { height: 24, file: "logo-footer.svg" },
-} as const;
+/**
+ * Approved header logo (symbol + outlined wordmark, logo-header.svg). Figma 49:58 shows it
+ * in a 46px slot on desktop and 49:571 in a 40px slot on mobile; the width keeps its ratio.
+ */
+const SIZES = { header: 46, "header-mobile": 40 } as const;
+const RATIO = 154.16666666666666 / 36;
 
-export function Logo({ size, className }: { size: keyof typeof SIZES; className?: string }) {
-  const { height, file } = SIZES[size];
-  const width = (height * 154.16666666666666) / 36;
+export function Logo({ size }: { size: keyof typeof SIZES }) {
+  const height = SIZES[size];
+  const width = height * RATIO;
   return (
-    <span className={cx("inline-flex items-center", className)}>
+    <span className="inline-flex items-center">
       <Image
-        src={`/brand/${file}`}
+        src="/brand/logo-header.svg"
         alt="KickTab"
         width={Math.round(width)}
         height={height}
         style={{ width, height }}
         unoptimized
-        loading={size === "footer" ? "lazy" : "eager"}
+        loading="eager"
       />
     </span>
   );
