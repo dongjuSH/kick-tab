@@ -1,5 +1,25 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-10 (화) — 01 비회원 개선(헤더 로고·TOP 5·푸터)
+
+`dev` 작업 트리에서 작업(중간에 만든 별도 폴더 `apps-01`은 사용자 요청으로 변경을 `apps`로 옮긴 뒤 삭제). Codex 교차 검증 3회(1차 결함 4·개선 2·확인 1 → 2차 N1·N2·N3 → 3차 N4, N4는 Codex가 수정) 후 기존 `feat/01-header-footer`에 커밋·push, `dev`에 병합.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 헤더 로고 | `frontend/src/components/common/Logo.tsx`(PC 46px·모바일 40px, `logo-header.svg`만), `SiteHeader.tsx`, 삭제 `public/brand/logo-footer.svg`·`logo-mobile.svg` | Figma `49:58`·`49:571`: KICKTAB 글자를 키우고 메뉴와 겹치지 않게 |
+| TOP 5 띠 | `frontend/src/features/top5/Top5Strip.tsx`(`Lineup` 반복 사본으로 끊김 없는 순환, 띠 배치), `model.ts`(`weekLabel`·`PREPARING`·`lineupItems`·`periodText`), `src/app/globals.css`(띠·패널·시트 블록, 헤더 높이 144/154px) | Figma `159:923`: PC 56px·모바일 84px, 'AI 선정' 배지 복원, 1~5위 순환(24px/s), 호버·포커스·열림 정지, 모션 감소 정적 표시, 지난주 유지 시 실제 지난주 기간과 준비 상태 |
+| TOP 5 펼침 | `Top5List.tsx`(PC·모바일 행 재배치, 안내 상자, 목록 아래 한 줄 안내), `Top5Strip.tsx`(`PanelHeading`, PC 패널 150ms 펼침/접힘·접힘 즉시 `inert`, 시트 `kt-top5-sheet`) | Figma `128:4251`·`159:924`: 기간·선정 시각·닫기 머리글, 중복 제목·배지·긴 안내 제거, 낮은 창은 목록만 스크롤 |
+| 공통 | `src/components/layout/HeaderHeight.tsx`(새 파일, 실제 헤더 높이 → `--kt-header-height`), `src/components/ui/Dialog.tsx`(닫힘 전환 동안 내용 유지·`inert`, 늦은 close 이벤트 가드 — Codex 수정 포함) | 320px 지난주 상태에서 헤더 171px과 기준 154px 불일치, 시트 닫힘 중 목록 사라짐, 빠른 재열기 시 스크롤 잠금 해제 |
+| 푸터 | `SiteFooter.tsx`, `src/app/layout.tsx`, `FeedbackButton.tsx`, 삭제 `MobileBottomBar.tsx` | Figma `304:3823`: 로고 제거·재배치, 모바일 고정 의견 버튼 제거(사용자 결정: Figma 최종) |
+| TOP 5 백엔드 | `backend/app/services/top5_selection.py`(`_missed_week`, `recovery_due`, `reconcile_attempts`), `tests/test_top5_db.py`(실행 누락 지연→교체, 주 경계 테스트) | 00:00·00:05 기록이 없는 주가 지연 안내 대신 지난주 목록으로 남던 결함 |
+| 정리 | `lib/format/kst.ts`(`formatPeriod` 삭제), `frontend/tests/top5.test.mjs`(새 파일) | 쓰지 않게 된 코드 삭제, 띠 문구·상태 테스트 |
+
+- **실제 확인:** 11/9 주(실행 기록 없음)가 지난주 목록으로 표시되는 것을 확인하고 수정 후 `top5_reconcile` 1회 → 지연 공개(버전 437)·TOP 5 디스코드 알림 1회. `fixtures` 1회(API-Football 14회) 후 `top5` 수동 복구 1회 → 주 모델 504, 하위 모델 `gemini-3.5-flash-lite` 응답(Gemini 2회·API-Football 293회), 새 공개본 438(list)로 교체.
+- **예약 시각(시계 주입):** `top5_weekly` 11/16 00:00 KST, `top5_retry` 11/16 00:05 KST(유예 60초). 실제 월요일 실행은 미실행 — 11/16 00:00 이후 확인 필요.
+- **화면 검수:** 1920·375·320·1920×560에서 로고·띠·패널·시트·푸터, 다른 화면(지난 경기·리그 순위·팀 탐색·팀 상세·경기 상세) 회귀 없음. 모션 감소·빠른 Tab·시트 닫힘·헤더 높이는 헤드리스 Edge로 확인.
+- **검사:** 백엔드 ruff·pytest 285 통과·`KICKTAB_DB_TESTS=1` 355 통과·alembic check, 프런트 lint·`npm test` 36·tsc·build 통과.
+- **사용자 결정:** 이미지 출처는 확인 중이라 더미 유지, '실제 인기 순위 아님' 안내 불필요, 모바일 고정 의견 버튼 제거, UI는 Figma 최종, 이후 작업은 `apps` 폴더에서.
+
 ## 2026-11-07 (토) — 08 팀 상세
 
 브랜치 `feat/08-team-detail`(최신 `dev`의 작업 트리에서 분기)에 커밋·push 후 `dev`에 병합. Codex 교차 검증 통과(1차 차단 1·중요 3·경미 5, 2차 중요 2·경미 1, 3차 중요 1·경미 2, 4차 후속 N7·N8 보완). 05~07과 같이 `dev` 작업 트리에서 작업한 뒤 검증 완료 후 브랜치를 만들었다. 이로써 비회원 기준 서비스 전체(메인·경기 상세·지난 경기·리그 순위·팀 탐색·팀 상세)가 이어진다(로그인·회원가입만 02 전까지 404). 마이그레이션 `0012_team_detail`·`0013_transfer_counterpart_key`·`0014_transfer_identity_indexes`.
