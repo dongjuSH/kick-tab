@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-10 · 01 변경(비회원 개선, Codex 교차 검증 통과·`dev` 병합):** 프런트 `Logo.tsx`·`SiteHeader.tsx`·`HeaderHeight.tsx`(새)·`SiteFooter.tsx`·`layout.tsx`·`FeedbackButton.tsx`·`ui/Dialog.tsx`·`features/top5/`(`Top5Strip`·`Top5List`·`model`)·`globals.css`·`lib/format/kst.ts`·`tests/top5.test.mjs`(새), 삭제 `MobileBottomBar.tsx`·`public/brand/logo-footer.svg`·`logo-mobile.svg`. 백엔드 `services/top5_selection.py`(실행 누락 주 지연 처리)·`tests/test_top5_db.py`.
+
 **2026-11-07 · 08 변경(팀 상세, Codex 교차 검증 통과·`dev` 병합):** 백엔드 `migrations/versions/20261107_0012_team_detail.py`·`0013_transfer_counterpart_key.py`·`0014_transfer_identity_indexes.py`, `models/team_detail.py`(+`models/reference.py` 경기장·`models/standings.py` 프로필 확인 시각), `services/team_detail.py`(파싱·완전성 검증·저장·수집 일정·접근 판정·조회), `sync/team_detail.py`(`team_details`·`transfers`), `api/routes/teams.py`(팀 상세 5개 경로)·`schemas/team_detail.py`, `api/routes/schedule.py`·`services/news.py`(`GET /news?team=`), `services/reference.py`(`upsert_teams` 경기장·`team_detail_lookup` 수집된 리그 소속만), `sync/reference.py`. 프런트 `app/teams/[id]/page.tsx`, `features/team-detail/`, `lib/api`(타입·쿼리 키·생성 타입). 시작 전 처리로 `tests/test_schedule_db.py` 날짜 가정 수정. 아래 표는 이 변경을 반영했다.
 
 **2026-11-06 · 07 변경(팀 탐색, Codex 교차 검증 3차 통과·`dev` 병합):** 백엔드 `api/routes/teams.py`(`GET /teams`)·`schemas/teams.py`·`services/team_browse.py`(현재 시즌 5대 리그 소속·리그·검색·12개씩·소속 미확인 503), `services/team_search.py`(`match_teams()` 분리), `api/router.py`. 프런트 `app/teams/page.tsx`, `features/teams/`, `FavoriteToggle`(5개 꽉 참·거부 문구 목록 기준)·`favorites/store.ts`(`latest()`), `DataState`(`emptyAction`), `lib/api`(타입·쿼리 키·`MEMBERSHIP_UNKNOWN`). 마이그레이션 없음. 아래 표는 이 변경을 반영했다.
@@ -112,7 +114,7 @@
 | `app/schemas/feedback.py` | `FeedbackCreate`(본문·유형 필수, 페이지 경로, 허니팟 `website`), `FeedbackReceipt` | `routes/feedback.py` | 완료 |
 | `app/services/feedback.py` | `create_feedback`, `normalize_body`·`body_hash`, `lock_body_hash`(본문 해시별 트랜잭션 잠금), `is_duplicate`(24시간), `DuplicateFeedbackError` | `routes/feedback.py` | 완료 |
 | `app/services/top_matches.py` | `shown_publication()`(이번 주 공개본 → 바로 지난주 list·none → 지연 안내), `current_version()`, `get_current_top_matches()`, `current_kst_week()`·`week_of()` | `routes/top_matches.py`, 선정 | 완료(04) |
-| `app/services/top5_selection.py` | `run_attempt(trigger)`(주 잠금·시간 제한·데몬 스레드·게시 가드), `select_week`(일정 신선도·후보·순위표·근거 수집·프롬프트·Gemini·검증), `validate_picks`, `_publish`·`_fail`·`_start`, `reconcile_attempts`(중단 시도 정리), `retry_due`·`first_attempt_due`·`recovery_due`, `load_curation`, 00(2026-11-04): `gemini_generate()` 주 모델 오류 시 하위 모델 1회 대체·`AllModelsFailed`, 두 모델 실패 시 운영 알림, 응답 모델 기록 | `sync/top5.py` | 완료(04) |
+| `app/services/top5_selection.py` | `run_attempt(trigger)`(주 잠금·시간 제한·데몬 스레드·게시 가드), `select_week`(일정 신선도·후보·순위표·근거 수집·프롬프트·Gemini·검증), `validate_picks`, `_publish`·`_fail`·`_start`, `reconcile_attempts`(중단 시도 정리), `retry_due`·`first_attempt_due`·`recovery_due`, `load_curation`, 00(2026-11-04): `gemini_generate()` 주 모델 오류 시 하위 모델 1회 대체·`AllModelsFailed`, 두 모델 실패 시 운영 알림, 응답 모델 기록 | `sync/top5.py` | 완료(04) | 01(2026-11-10): `_missed_week`·`reconcile_attempts`가 시도 기록이 없는 현재 주를 슬롯+60초 뒤 지연 공개(잠금 후 현재 주 재확인).
 | `app/services/match_detail.py` | `save_provider_items`(경기 응답의 이벤트·상세 블록 저장), `detail_fetch_due`·`ensure_records`(요청 시 1회 보충), `final_record_targets`(종료 전환 대상), `read_records`(블록 상태 판정·통계·라인업·평점 해석) | 라우트·`sync/fixtures.py` | 완료(04) |
 | `app/services/head_to_head.py` | `fetch_meetings`·`fetch_form`(친선·미종료 제외, 범위 확대 1회), `ensure_meetings`·`ensure_form`(갱신 조건·쿨다운, `strict`는 TOP 5), `recent_form`·`result_for`, `read_head_to_head` | 라우트·TOP 5 | 완료(04, 08 재사용 가능) |
 | `app/services/reviews.py` | `list_reviews(sort)`(인기순·최신순·반응 수·평균), `reviews_available`(정상 종료만) | `routes/matches.py` | 완료(04, 02가 작성·반응·닉네임) |
@@ -142,7 +144,7 @@
 | `app/sync/team_detail.py` | 08: `team_details`(매일 15:00 KST, 팀마다 `/coachs`·`/players/squads`·`/teams/statistics` 3회, 지난 시즌 기록 1회, 선수단 국적 누락 `/players/profiles` 1회), `transfers`(매일 00:00 KST, 팀마다 `/transfers` 1회, 요청이 쓰려던 모든 시즌에 성공·실패 기록). `team`·`league`·`force` 파라미터, DB만 보는 사전 확인 | `services/team_detail.py` | 완료(08) |
 | `app/sync/fixtures.py` | `fixtures`(30분, 대회별 오늘−3~+17일 14회, 실패 대회는 기존 행 유지), `fixtures_live`(1분, 진행·임박 경기 없으면 건너뜀, 04: 응답 이벤트·상세 블록 저장), `fixture_details`(04, 5분, 최근 종료 경기 최종 기록 20개당 1회), 05: `fixtures_season`(시즌 전체 대회당 1회, 현재 시즌 매일 13:00 KST, 요청 실패·저장 오류 롤백·일부 저장을 실패로 기록), `fixtures` 일부 저장 시 실패 기록 | `services/fixtures.py`·`match_detail.py` | 완료 |
 | `app/sync/standings.py` | `standings`(매시 10분 확인, DB 사전 확인으로 경기일 55분·그 외 23시간·이전 시즌 보관), `player_rankings`(매일 14:00 KST, 리그당 4회), `player_stats`(매일 14:20 KST, 리그 전체 `/players` 페이지). `season`·`league`·`force` 파라미터, 단위(리그×종류)별 실패 기록 후 계속, 인증·한도 중단 시 남은 단위 실패 기록 | `services/standings.py` | 완료(06) |
-| `app/sync/top5.py` | `top5_weekly`(월 00:00 KST)·`top5_retry`(월 00:05 KST, 첫 시도 실패·미실행 시)·`top5`(관리 명령 수동 복구)·`top5_reconcile`(60초, 중단 시도 상태 정리만) | `services/top5_selection.py` | 완료(04) |
+| `app/sync/top5.py` | `top5_weekly`(월 00:00 KST)·`top5_retry`(월 00:05 KST, 첫 시도 실패·미실행 시)·`top5`(관리 명령 수동 복구)·`top5_reconcile`(60초, 중단 시도 상태 정리, 01: 00:00·00:05 실행 누락 주는 지연 공개·알림 1회) | `services/top5_selection.py` | 완료(04·01) |
 | `app/sync/news.py` | `news`(매시 정각, 네이버 8개 검색어), `normalize_url`·`url_hash`(중복 제거), 72시간 보관 | `services/news_classify.py`, `providers/naver_news.py` | 완료 |
 | `app/sync/scheduler.py` | `SCHEDULER_ENABLED`(전체) 또는 `NEWS_SCHEDULER_ENABLED`(뉴스만)일 때 APScheduler 시작, 중복·누락 실행 방지 | `main.py` | 완료 |
 | `app/sync/__main__.py` | CLI `python -m app.sync <job> [key=value] / --list` | `runner.py` | 완료 |
@@ -174,7 +176,7 @@
 | `tests/test_teams_rules.py` | 07 요청 규칙 10건(DB 없이): 0·음수·UEFA·컵·없는 리그 404(DB 조회 없음), 형식 오류·page 0·빈/41자 q 422 |
 | `tests/test_team_detail.py` | 08 규칙 단위 테스트(DB 없이): 현직 감독·시작 전 제외, 선수단·시즌 기록 파싱과 잘린 응답 거부, 반기 분류·7/1 경계·KST 하루 1회, 이적 필터·하루 차이 반복·반대 방향·상대 팀 ID 없음·같은 날 두 팀, 프로필 응답 |
 | `tests/test_team_detail_db.py` | `KICKTAB_DB_TESTS=1`일 때 08: 직접 URL 판정·링크 일치(소속 미확인), 영역 API 상태 코드, 선수 줄 중복 없음·평점 0 제외, 승격 팀 빈 상태, 반기·고정 규칙, 잘린 응답 보존·실패 기록, 7/1 실패 재시도, 같은 날 두 팀 이적 저장, 경기장 부분 응답, 팀 뉴스(롤백) |
-| `tests/test_top5_db.py` | `KICKTAB_DB_TESTS=1`일 때 첫 실패→재시도 공개, 두 번 실패→지연·알림 1회→수동 복구, 경기 없음, 오래된 일정 실패, 시간 초과 게시 차단, 후기 정렬·평균(롤백) |, 두 모델 실패 시 시도별 알림과 지연 알림 1회·대체 모델 응답 게시·기록(2026-11-04)
+| `tests/test_top5_db.py` | `KICKTAB_DB_TESTS=1`일 때 첫 실패→재시도 공개, 두 번 실패→지연·알림 1회→수동 복구, 경기 없음, 오래된 일정 실패, 시간 초과 게시 차단, 후기 정렬·평균(롤백) |, 두 모델 실패 시 시도별 알림과 지연 알림 1회·대체 모델 응답 게시·기록(2026-11-04), 실행 누락 주 지연→수동 복구 교체·주 경계에서 지난주 공개 금지(2026-11-10)
 
 ## 프런트엔드 (`frontend/`)
 
@@ -187,6 +189,7 @@
 | `tests/standings.test.mjs` | 06 테스트 8개(URL 기본값·시즌/리그 변경 시 유형 유지·유형은 replace, 미지원 리그·시즌·유형, 표기 규칙, `dataStatus` — 0건 뒤 갱신 실패는 partial, 메인 칩 'BUN', `DataState` `partialAction` 마크업) |
 | `tests/teams.test.mjs` | 07 테스트 6개(URL 기본값·리그/검색 변경 시 첫 페이지·replace, 잘못된 리그·페이지·검색어, `FavoriteToggle` 5개 꽉 참 마크업, 다른 탭 선저장 시 저장소 알림, `DataState` `emptyAction` 마크업) |
 | `tests/team-detail.test.mjs` | 08 테스트 7개(포지션순 기본 정렬, 누락값 두 방향 맨 뒤·같은 선수 집합, 정렬 전환, '—' 표시, 시즌 기록 행, 이적 유형 문구·후반기 안내, 경기장 표기) |
+| `tests/top5.test.mjs` | 01 테스트 3개(지난주 유지 시 실제 기간·준비 상태·대진 순서, 지연·경기 없음 문구 구분, 띠 고정 제목·배지 렌더) |
 | `tests/match-regressions.test.mjs` | 04 회귀 테스트 6개(상태 전환 재조회·중단 경기 타임라인만·지연 경고 시계·부분 실패 재시도·TOP 5 교체 재시도 등), 실제 TS 모듈을 변환해 실행 | 완료(04) |
 | `next.config.ts` | `cacheComponents`·`partialPrefetching`, `/api/*` → `BACKEND_ORIGIN` rewrites | 완료 |
 | `scripts/gen-api.mjs` | 백엔드 OpenAPI(실행 중 서버 또는 파일)로 `src/lib/api/schema.d.ts` 생성 | 완료 |
@@ -196,7 +199,7 @@
 
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
-| `layout.tsx` | `lang="ko"`, 글꼴, 메타데이터, Provider·의견 Provider·헤더·`main`·푸터·모바일 하단 고정 영역 배치 | 아래 컴포넌트 전부 | 완료 |
+| `layout.tsx` | `lang="ko"`, 글꼴, 메타데이터, Provider·의견 Provider·헤더·`main`·푸터 배치 | 아래 컴포넌트 전부 | 완료 |
 | `globals.css` | Figma 색상 토큰(`--kt-*`)·Tailwind 테마(색·글자·반경, 03: `rounded-tile`), 포커스 3px, `kt-container`, 버튼류 포인터 커서(03) | 전 컴포넌트 | 완료 |
 | `providers.tsx` | TanStack Query 클라이언트(4xx 재시도 안 함) | `layout.tsx` | 완료 |
 | `page.tsx` | 메인: 일정(Suspense)·관심 팀 일정·뉴스·5대 리그 간소 순위 그리드(데스크톱 오른쪽 열 관심 팀 아래, 모바일 뉴스 다음) | `features/schedule`·`favorites`·`news`·`standings` | 완료(06 간소 순위) |
@@ -217,7 +220,7 @@
 | `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning·error(04, 최근 흐름 '패'), small 12px·caption 11px) | 완료 |
 | `Pagination.tsx` | 페이지 분할(Figma 53:926: 이전·번호 3개·다음 44px, 640px 이상 첫·마지막 번호와 …) | 완료(05) |
 | `Tabs.tsx` | 탭(Figma Tab navigation: 44px·선택 굵은 파랑+밑줄·가로 스크롤, ARIA tabs·방향키/Home/End), `tabId`·`tabPanelId` | 완료(04, 06: `value` null = 선택 없음·첫 탭 Tab 순서, 스크롤 막대 숨김) |
-| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, `BottomSheet` | 완료 |
+| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, 닫힘 전환 동안 내용 유지·`inert`·늦은 close 이벤트 가드(01, 2026-11-10), `BottomSheet` | 완료 |
 | `chip.ts` | `chipClass()` 필터 칩(관심 팀·뉴스 분류, Figma 49:171/49:173) | 완료 |
 | `Skeleton.tsx` | 로딩 자리 | 완료 |
 | `DataState.tsx` | `DataState`(로딩·정상·빈 결과·일부 미제공·실패+'다시 확인'·권한 거부), `StateMessage`(오류는 정보 아이콘, Figma 57:150), 06: `partialAction`(일부 미제공 안내 옆 조작, 없으면 기존 마크업), 07: `emptyAction`(빈 결과 아래 조작) | 완료 |
@@ -228,7 +231,7 @@
 
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
-| `components/common/Logo.tsx` | 로고 심벌 + 워드마크(헤더 36·모바일 32·푸터 24px) | 헤더·푸터 | 완료 |
+| `components/common/Logo.tsx` | 승인 `logo-header.svg`(심벌+워드마크) PC 46px·모바일 40px | 헤더 | 완료 |
 | `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지, 고정 크기 | 경기 카드·팀 검색 | 완료 |
 | `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크 | 일정·관심 팀(04·05·08 재사용) | 완료 |
 | `components/common/MatchStatusBadge.tsx` | 상태 뱃지(진행 중 `63′`·예정/종료 회색·변경 주황) | `MatchCard`, TOP 5 | 완료 |
@@ -241,17 +244,17 @@
 | `components/layout/MobileMenu.tsx` | 모바일 메뉴 버튼·하단 시트, 현재 페이지 강조 | `nav.ts`, `HeaderAuth.tsx` | 완료 |
 | `components/layout/HeaderAuth.tsx` | 로그인(ghost)·회원가입(primary), 데스크톱·메뉴 배치 | 헤더·모바일 메뉴 | 골격(02가 `useAuth()`로 회원 상태 연결) |
 | `components/layout/nav.ts` | 메뉴 목록·현재 경로 판정 | 메뉴 컴포넌트 | 완료 |
-| `components/layout/SiteFooter.tsx` | 로고·정책 항목(링크 없음)·의견 보내기·운영자·출처·저작권 | `lib/site.ts` | 완료(정책 문서 생기면 링크 연결) |
-| `components/layout/MobileBottomBar.tsx` | 1024px 미만 하단 고정 의견 보내기 + 여백 | `FeedbackButton` | 완료 |
+| `components/layout/HeaderHeight.tsx` | 실제 헤더 높이를 `--kt-header-height`에 동기화(ResizeObserver) | `SiteHeader.tsx`, 스크롤 여백·TOP 5 딤·패널·시트 | 완료 |
+| `components/layout/SiteFooter.tsx` | 로고 없음, 정책 항목(링크 없음)·의견 보내기, 구분선 아래 운영자 안내·출처·저작권(Figma `304:3823`) | `lib/site.ts`, `FeedbackButton` | 완료(정책 문서 생기면 링크 연결, 이미지 출처는 확인 중 더미) |
 
 ### 기능 (`src/features/`)
 
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `top5/queries.ts` | `currentTopMatchesQuery`(5분 신선도·30분 주기·포커스 재조회), `topMatchesVersionQuery`(30초 공개 버전 확인), `isOutdated` | `apiFetch`, `query-keys.ts` | 완료(04) |
-| `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(실제 표시 주 제목·기간, 모바일 경기 없음·지연은 두 줄), 공개 버전 변경 시 즉시 재조회(실패 시 기존 결과 유지·다음 확인에서 재시도), `Top5StripFallback`, 펼칠 때 오래된 결과 재조회, 데스크톱 패널(헤더 아래 1280px·배경 딤·배경 inert·첫 포커스 닫기·Tab 순환·Escape/바깥/화살표 닫기·포커스 복귀), 모바일 시트, 로딩·조회 실패 | `Top5List`, `model.ts`, `Dialog` | 완료 |
-| `top5/Top5List.tsx` | 펼침 본문(기간·선정 시각, 지난주 안내, 고정 순서·대회·현재 상태·선정 당시 킥오프·대진·VS/스코어/—·선정 이유·변경 일시, 경기 없음·지연 안내 상자, 5개 미만 안내, 선정 정책 안내, 목록만 스크롤) | `model.ts`, `kst.ts` | 완료(04) |
-| `top5/model.ts` | 공개 UI 3종(list·none·delayed) 판정과 문구, 지난주 여부·제목, 메타데이터·변경 일시(D-01-10) 규칙, 띠 요약 | `kst.ts`, `match.ts` | 완료(04) |
+| `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(PC 56px·모바일 84px, 'AI 선정' 배지·고정 제목·실제 표시 주 기간·지난주 준비 상태·화살표 고정, `Lineup` 1~5위 끊김 없는 순환), 공개 버전 변경 시 즉시 재조회(실패 시 기존 결과 유지), `Top5StripFallback`, 펼칠 때 오래된 결과 재조회, PC 패널(본문 폭 1280px·150ms 펼침/접힘·접힘 즉시 inert·딤·배경 inert·첫 포커스 닫기·Tab 순환·Escape/바깥/화살표 닫기·포커스 복귀), 모바일 시트(`kt-top5-sheet` 슬라이드·딤 포인터), `PanelHeading` | `Top5List`, `model.ts`, `Dialog` | 완료(04·01) |
+| `top5/Top5List.tsx` | 펼침 본문(PC 행: 순위·대진/대회·일시·선정 이유·상태, 모바일 행: 순위·대회·상태/일시/대진/이유, 변경 일시, 경기 없음·지연 안내 상자, 5개 미만 안내, 'AI 선정 · 순서와 이유는 해당 주 동안 유지됩니다.', 목록만 스크롤) | `model.ts`, `kst.ts` | 완료(04·01) |
+| `top5/model.ts` | 공개 UI 3종(list·none·delayed) 판정과 문구, 지난주 여부·`weekLabel`(요일 없는 기간)·`PREPARING`·선정 시각, 변경 일시(D-01-10), 띠 대진 `lineupItems` | `kst.ts`, `match.ts` | 완료(04·01) |
 | `match/MatchDetail.tsx` | 경기 상세 조립: 상태별 영역(MAT-001), 탭·정렬 URL(`history.replaceState`), 제목 포커스, '경기 목록으로'(같은 사이트 이전 목록 복귀), 404 안내 | 아래 파일 | 완료(04) |
 | `match/Scoreboard.tsx` | 대회·상태 뱃지, 팀(상세 링크·'팀 상세 미제공'), 스코어/VS/—·승부차기, 시즌·라운드·킥오프, 진행 중 마지막 확인·지연 경고(시계 갱신) | `MatchDetail` | 완료(04) |
 | `match/StatusNotice.tsx` | 연기·취소·경기 중단·행정 종료·확인 필요 안내(제공 사유만) | `MatchDetail` | 완료(04) |
@@ -292,7 +295,7 @@
 | `news/MainNews.tsx` | 주요 뉴스(분류 칩, 6개씩 더 보기, 추가 조회·재조회 실패 시 기존 기사 유지, 출처 안내) | `NewsCard` | 완료 |
 | `news/OriginalRedirect.tsx` | 원문 확인 후 이동, 404·410만 접근 불가 안내 | `/news/{id}/link` | 완료 |
 | `feedback/FeedbackProvider.tsx` | 전역 의견 모달 1개(`<Suspense>` 안, 04), `useFeedback().openFeedback()` | `layout.tsx` | 완료 |
-| `feedback/FeedbackButton.tsx` | 의견 보내기 진입 버튼 | 푸터·하단 고정 영역 | 완료 |
+| `feedback/FeedbackButton.tsx` | 의견 보내기 진입 버튼(모든 화면에서 푸터 하나) | 푸터 | 완료 |
 | `feedback/FeedbackDialog.tsx` | 의견 입력·검증·전송·실패/중복/요청 제한/성공 상태, 허니팟, 열기 단위 세션(지난 요청 결과가 새 초안을 바꾸지 않음), 전송 중 입력 잠금, 저장소 불가 안내 | `apiFetch`, `draft.ts` | 완료 |
 | `feedback/draft.ts` | 미전송 초안 sessionStorage 저장·복원, 저장 실패 여부 반환, `sameDraft` | `FeedbackDialog` | 완료 |
 
