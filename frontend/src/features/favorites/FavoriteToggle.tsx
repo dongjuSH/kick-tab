@@ -6,7 +6,8 @@ import { cx } from "@/components/ui/cx";
 import type { FavoriteChange } from "./store";
 import { useFavorites } from "./useFavorites";
 
-const MESSAGES: Partial<Record<FavoriteChange, string>> = {
+/** Why a change was refused (FAV-002); shared by the toggle and the match-card star. */
+export const FAVORITE_REFUSALS: Partial<Record<FavoriteChange, string>> = {
   limit: "관심 팀은 최대 5개까지 등록할 수 있습니다.",
   unavailable: "이 브라우저에서는 관심 팀을 저장할 수 없습니다.",
   failed: "저장하지 못했습니다. 다시 시도해 주세요.",
@@ -45,7 +46,7 @@ export function FavoriteToggle({
 
   const toggle = () => {
     const result = active ? favorites.remove(teamId) : favorites.add(teamId);
-    const text = MESSAGES[result];
+    const text = FAVORITE_REFUSALS[result];
     setRefusal(text ? { text, listKey: null } : null);
   };
 

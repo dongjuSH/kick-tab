@@ -2,7 +2,7 @@
 
 import { infiniteQueryOptions, useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { chipClass } from "@/components/ui/chip";
+import { ChipLabel, chipClass } from "@/components/ui/chip";
 import { NEWS_BADGE_LABELS, NewsCard } from "@/components/common/NewsCard";
 import { Button } from "@/components/ui/Button";
 import { DataState } from "@/components/ui/DataState";
@@ -70,7 +70,7 @@ export function MainNews() {
               className={chipClass(badge === value)}
               onClick={() => setBadge(value)}
             >
-              {value ? NEWS_BADGE_LABELS[value] : "전체"}
+              <ChipLabel>{value ? NEWS_BADGE_LABELS[value] : "전체"}</ChipLabel>
             </button>
           ))}
         </div>

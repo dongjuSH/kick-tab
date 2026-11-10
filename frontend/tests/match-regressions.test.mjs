@@ -230,3 +230,48 @@ test("unchanged version checks retry a failed TOP5 replacement with TanStack str
     client.clear();
   }
 });
+
+test("after kickoff a still-scheduled match reads 상태 확인 중, never 예정 (03 guest UX 2026-11-09)", () => {
+  const { awaitingStatus } = loader()("@/lib/format/match");
+  const kickoff = Date.parse("2026-11-10T18:00:00Z");
+  const match = { status: "scheduled", timeConfirmed: true, kickoffAt: "2026-11-10T18:00:00Z" };
+  assert.equal(awaitingStatus(match, kickoff - 60_000), false);
+  assert.equal(awaitingStatus(match, kickoff + 60_000), true);
+  // The server render passes 0 (no clock), and an unfixed time or a started match never waits.
+  assert.equal(awaitingStatus(match, 0), false);
+  assert.equal(awaitingStatus({ ...match, timeConfirmed: false }, kickoff + 60_000), false);
+  assert.equal(awaitingStatus({ ...match, status: "live" }, kickoff + 60_000), false);
+});
+
+test("main team view starts at every competition and clearing restores the earlier date and competitions (SCH-006, 2026-11-10)", () => {
+  const { withTeam, withoutTeam } = loader()("@/features/schedule/useScheduleParams");
+  const decode = (q) => Object.fromEntries(new URLSearchParams(q));
+  // Date view with Serie A on 11/14 → pick a team: every competition, return point saved.
+  const picked = withTeam("date=2026-11-14&competitions=135", 50);
+  assert.deepEqual(decode(picked), { date: "2026-11-14", team: "50", from: "135" });
+  // Narrowing the team view and switching teams keep the return point; a new team starts at all.
+  const narrowed = new URLSearchParams(picked); narrowed.set("competitions", "39");
+  assert.deepEqual(decode(withTeam(narrowed.toString(), 42)), { date: "2026-11-14", team: "42", from: "135" });
+  // Clearing restores date and competitions.
+  assert.deepEqual(decode(withoutTeam(narrowed.toString())), { date: "2026-11-14", competitions: "135" });
+  // From "every competition" (no competitions param) the restore is every competition again.
+  const fromAll = withTeam("date=2026-11-12", 50);
+  assert.equal(new URLSearchParams(fromAll).get("from"), "all");
+  assert.deepEqual(decode(withoutTeam(fromAll)), { date: "2026-11-12" });
+  // A shared team link without a return point clears to every competition.
+  assert.deepEqual(decode(withoutTeam("team=50&competitions=39")), {});
+});
+
+test("applying competitions skips unconfirmed dates and moves to the nearest confirmed match day (SCH-004, Figma 308:4631)", () => {
+  const { nearestMatchDate } = loader()("@/features/schedule/useScheduleParams");
+  const dates = ["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13"];
+  const states = { "2026-11-09": "ready", "2026-11-10": "empty", "2026-11-11": "unknown", "2026-11-12": "ready", "2026-11-13": "ready" };
+  const stateOf = (d) => states[d];
+  // Codex case: today 11/10 confirmed empty, 11/11 unconfirmed, 11/12 has matches → 11/12.
+  assert.equal(nearestMatchDate(dates, "2026-11-10", "2026-11-10", stateOf), "2026-11-12");
+  // A date with matches (or an unconfirmed one) stays; past dates are never chosen.
+  assert.equal(nearestMatchDate(dates, "2026-11-10", "2026-11-12", stateOf), undefined);
+  assert.equal(nearestMatchDate(dates, "2026-11-10", "2026-11-11", stateOf), undefined);
+  // Before the availability arrives nothing moves.
+  assert.equal(nearestMatchDate(dates, "2026-11-10", "2026-11-10", (d) => (d === "2026-11-10" ? "empty" : "pending")), undefined);
+});

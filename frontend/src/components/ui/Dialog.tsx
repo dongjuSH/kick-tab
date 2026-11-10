@@ -31,6 +31,18 @@ interface DialogProps {
   compact?: boolean;
   /** Drag handle on the bottom sheet only (Figma competition picker 187:1372, 2026-11-02). */
   handle?: boolean;
+  /**
+   * Header X button (default). false when the content's own buttons close it (03
+   * competition picker, Figma 2026-11-09: cancel · apply at the bottom); Escape and the
+   * backdrop still close.
+   */
+  closeButton?: boolean;
+  /**
+   * The content owns the scroll area (03 competition picker, Figma 308:4628): the dialog keeps
+   * its height limit without scrolling as a whole, so fixed rows (count, buttons) stay put and
+   * only the child marked `min-h-0 flex-1 overflow-y-auto` scrolls.
+   */
+  scrollArea?: boolean;
   /** Where focus starts on open: the dialog itself (default) or its close button. */
   initialFocus?: "dialog" | "close";
   id?: string;
@@ -55,6 +67,8 @@ export function Dialog({
   closeLabel = "닫기",
   compact = false,
   handle = false,
+  closeButton = true,
+  scrollArea = false,
   initialFocus = "dialog",
   id,
   className,
@@ -131,7 +145,8 @@ export function Dialog({
         "overscroll-contain rounded-card border border-line bg-surface p-0 text-fg outline-none",
         // The compact sheet never scrolls as a whole: a flex <dialog> reports extra scroll
         // height even when its content fits, so its body scrolls inside instead.
-        compact ? "overflow-clip" : "overflow-y-auto",
+        compact || scrollArea ? "overflow-clip" : "overflow-y-auto",
+        scrollArea && "open:flex open:flex-col",
         "backdrop:bg-fg/12 lg:max-w-(--kt-dialog-width)",
         layout === "center" && "max-w-(--kt-dialog-width)",
         // Sheet height: 85% of the screen; the compact sheet stops at the bottom of the sticky
@@ -151,6 +166,7 @@ export function Dialog({
           className={cx(
             "flex flex-col",
             compact ? "min-h-0 gap-3 overflow-y-auto p-4" : handle ? "gap-3 p-4 lg:gap-4 lg:p-6" : "gap-4 p-6",
+            scrollArea && "min-h-0 flex-1",
           )}
         >
           {(compact || (handle && layout !== "center")) && (
@@ -166,7 +182,7 @@ export function Dialog({
             <h2 id={titleId} className={cx("min-w-0 flex-1 font-bold", compact ? "text-lead" : "text-title")}>
               {title}
             </h2>
-            <IconButton icon="x" label={closeLabel} onClick={onClose} data-dialog-close />
+            {closeButton && <IconButton icon="x" label={closeLabel} onClick={onClose} data-dialog-close />}
           </div>
           {children}
         </div>

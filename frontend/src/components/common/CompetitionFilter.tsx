@@ -74,14 +74,18 @@ export function CompetitionFilter({
         title="대회 선택"
         width={560}
         handle
+        closeButton={false}
+        scrollArea
+        className="backdrop:cursor-pointer"
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
           <p className="text-small text-fg-secondary">
             한 개 또는 여러 개를 체크한 뒤 적용하세요. 적용 전에는 기존 조건을 유지합니다.
           </p>
           <Button fullWidth onClick={() => apply([])}>전체 대회 보기</Button>
 
-          <div className="max-h-[min(42dvh,340px)] overflow-y-auto overscroll-contain px-1">
+          {/* Only the check list scrolls; the count and the buttons below stay in view. */}
+          <div className="min-h-0 max-h-[340px] flex-1 overflow-y-auto overscroll-contain px-1">
             <div className="gap-6 lg:columns-2">
               {GROUPS.map((group) => {
               const items = competitions.filter((c) => c.group === group);
@@ -116,11 +120,11 @@ export function CompetitionFilter({
               <p role="status" className="text-small text-fg-secondary">
                 {draft.length ? `${draft.length}개 선택` : "0개 선택 · 최소 1개를 선택하세요"}
               </p>
-              <div className="flex gap-2">
+              {/* No header X (Figma 2026-11-09): cancel, Escape and the dim drop the draft only. */}
+              <div className="grid grid-cols-2 gap-2">
                 <Button onClick={() => setOpen(false)}>취소</Button>
                 <Button
                   variant="primary"
-                  className="flex-1"
                   disabled={draft.length === 0}
                   onClick={() => apply(competitions.filter((c) => draft.includes(c.id)).map((c) => c.id))}
                 >

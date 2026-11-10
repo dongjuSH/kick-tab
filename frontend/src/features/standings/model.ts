@@ -9,7 +9,7 @@ export const LEAGUES = [
   { id: 39, label: "Premier League", chip: "EPL" },
   { id: 140, label: "LaLiga", chip: "LaLiga" },
   { id: 135, label: "Serie A", chip: "Serie A" },
-  { id: 78, label: "Bundesliga", chip: "BUN" },
+  { id: 78, label: "Bundesliga", chip: "Bundesliga" },
   { id: 61, label: "Ligue 1", chip: "Ligue 1" },
 ] as const;
 

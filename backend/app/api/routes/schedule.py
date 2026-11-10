@@ -39,6 +39,7 @@ from app.schemas.schedule import (
     TeamSearchResponse,
 )
 from app.services.fixtures import (
+    SyncState,
     collection_window,
     fixture_availability,
     fixtures_on,
@@ -110,6 +111,16 @@ def require_supported_season(db: Session, season: int) -> None:
         raise ApiError(404, "NOT_FOUND", UNSUPPORTED_SEASON)
 
 
+def _schedule_meta(state: SyncState, updated_at: datetime | None) -> ScheduleMeta:
+    return ScheduleMeta(
+        updated_at=updated_at,
+        failed_competition_ids=state.failed_competition_ids,
+        checked_at=state.checked_at,
+        checked_through=state.checked_through,
+        delayed=state.delayed,
+    )
+
+
 @router.get("/fixtures")
 def read_fixtures(
     db: Db,
@@ -134,9 +145,7 @@ def read_fixtures(
         raise ApiError(503, "UPSTREAM_UNAVAILABLE", NOT_COLLECTED)
     return FixturesResponse(
         data=matches,
-        meta=ScheduleMeta(
-            updated_at=updated_at, failed_competition_ids=state.failed_competition_ids
-        ),
+        meta=_schedule_meta(state, updated_at),
     )
 
 
@@ -190,9 +199,7 @@ def read_favorite_schedule(
     lookup = team_detail_lookup(db)
     return FavoriteScheduleResponse(
         data=FavoriteSchedule(teams=[team_ref(t, lookup) for t in known], matches=matches),
-        meta=ScheduleMeta(
-            updated_at=updated_at, failed_competition_ids=state.failed_competition_ids
-        ),
+        meta=_schedule_meta(state, updated_at),
     )
 
 
@@ -214,9 +221,7 @@ def read_team_schedule(
         data=TeamSchedule(
             team=team_ref(found, team_detail_lookup(db)), start=start, end=end, matches=matches
         ),
-        meta=ScheduleMeta(
-            updated_at=updated_at, failed_competition_ids=state.failed_competition_ids
-        ),
+        meta=_schedule_meta(state, updated_at),
     )
 
 

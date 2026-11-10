@@ -148,7 +148,9 @@ def test_news_rejects_unknown_badge(client):
 
 def test_openapi_exposes_typed_meta():
     schema = json.loads(TestClient(app).get("/openapi.json").text)["components"]["schemas"]
-    assert set(schema["ScheduleMeta"]["properties"]) == {"updatedAt", "failedCompetitionIds"}
+    assert set(schema["ScheduleMeta"]["properties"]) == {
+        "updatedAt", "failedCompetitionIds", "checkedAt", "checkedThrough", "delayed",
+    }
     assert set(schema["NewsMeta"]["properties"]) == {
         "nextCursor", "updatedAt", "stale", "total", "noNew",
     }

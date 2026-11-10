@@ -54,6 +54,11 @@ class ScheduleMeta(ApiModel):
     updated_at: datetime | None
     # Competitions whose last schedule sync failed: their matches may be missing or stale.
     failed_competition_ids: list[int]
+    # Last time every competition's schedule was confirmed and the last date all of them
+    # cover; `delayed` once the 30-minute collection has missed about two runs.
+    checked_at: datetime | None = None
+    checked_through: date | None = None
+    delayed: bool = False
 
 
 class FixturesResponse(ApiModel):

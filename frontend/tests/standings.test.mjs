@@ -113,9 +113,9 @@ test("0 rows then a failed refresh is partial, never a normal empty result (Code
   assert.equal(dataStatus({ isPending: false, isError: false, data: {} }, true, false), "empty");
 });
 
-test("main chips follow Figma 49:368 (EPL·LaLiga·Serie A·BUN·Ligue 1); standings tabs keep full names", () => {
+test("main chips follow Figma 49:57 / 306:6221 (EPL·LaLiga·Serie A·Bundesliga·Ligue 1); standings tabs keep full names", () => {
   const { LEAGUES } = loader()("@/features/standings/model");
-  assert.equal(LEAGUES.map((l) => l.chip).join("|"), "EPL|LaLiga|Serie A|BUN|Ligue 1");
+  assert.equal(LEAGUES.map((l) => l.chip).join("|"), "EPL|LaLiga|Serie A|Bundesliga|Ligue 1");
   assert.equal(LEAGUES.map((l) => l.label).join("|"), "Premier League|LaLiga|Serie A|Bundesliga|Ligue 1");
 });
 

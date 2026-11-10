@@ -1,5 +1,26 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-10 (화) — 03 경기 일정 비회원 개선
+
+브랜치 `feat/03-schedule`(최신 `dev` 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 3회(1차 수정 필요 5·문서 1 → 2차 미충족 2 → 3차 통과, 3차에서 Codex가 날짜 막대 폭 200px 경계 조건 1줄 수정).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 메인 배치 | `app/page.tsx`(sr-only H1, 일정·관심 팀 / 뉴스·순위 두 구간), `components/layout/StickyPanel.tsx`(새) | 소개 제거, PC 우측 패널이 자기 구간에서만 고정(헤더 아래 12px, 가용 높이 520px 이상이고 패널이 들어갈 때만 — Figma 308:4617), 모바일 순서 일정→관심 팀→뉴스→순위 |
+| 날짜 막대 | `features/schedule/DateBar.tsx` | 전날(요일)·오늘부터, 양끝 화살표, 모바일 52px·막대 1/5 폭(320에서도 5일), 상태는 요일 자리(좁으면 '없음·미확인·일부'), 팀 보기 해제 시 이전 위치 복원 |
+| 대회 선택 | `components/common/CompetitionFilter.tsx`, `components/ui/Dialog.tsx`(`closeButton`·`scrollArea`) | 상단 X 없이 하단 취소·선택 적용, 딤 포인터, 목록만 스크롤 |
+| 일정 화면 | `features/schedule/ScheduleSection.tsx`, `useScheduleParams.ts`(`withTeam`·`withoutTeam`·`nearestMatchDate`), `components/common/TeamSearch.tsx` | Figma 간격(12·6·8·16px), 48px 검색 입력·SVG 돋보기·30px X, 수집 지연 안내, 미확인 날짜를 건너뛴 경기일 이동, 팀 선택 시 전체 대회·해제 시 날짜·막대·대회 복원(개정 기획 SCH-003·004·006), 초기화 순서(`pendingReset`) |
+| 경기 카드 | `components/common/MatchCard.tsx`, `MatchStatusBadge.tsx`, `lib/format/match.ts`(`awaitingStatus`), `lib/hooks/useNow.ts`(새), `features/favorites/FavoriteStar.tsx`(새) | 등록 가능한 팀 옆 별표(이동 없이 등록·해제), 본문은 경기 상세, 스코어 카드 중앙, 킥오프 후 '상태 확인 중'·'—' |
+| 관심 팀 | `features/favorites/FavoriteSchedule.tsx`, `FavoriteToggle.tsx`(`FAVORITE_REFUSALS`) | Figma Guest Favorites 다섯 상태, 팀 추가는 팀 일정 검색과 같은 UI(사용자 결정), 일정의 관심 팀 버튼은 선택 효과 없음 |
+| 간소 순위·칩 | `features/standings/MainStandings.tsx`·`model.ts`, `components/ui/chip.tsx`(`ChipLabel`), 칩 사용처 `MainNews`·`ResultsSection`·`TeamsSection` | 'Bundesliga', 경기·승무패·승점, 마우스 끌기·휠 가로 이동, 칩 선택 시 폭 고정 |
+| 일정 응답·이름 | 백엔드 `services/fixtures.py`(`SyncState` 확인 시각·범위·`delayed`), `schemas/schedule.py`, `api/routes/schedule.py`, `seed/team_aliases.json`(92팀) | 수집 지연 표시, 하위 리그 프로 구단 한국어 이름(아마추어는 원문 — 사용자 결정 A안) |
+
+- **수집·예약:** `backend/.env`에 `SCHEDULER_ENABLED=true`(커밋 대상 아님). 14개 작업 예약, 실측 `news` 15:59·`fixtures` 16:04·`standings` 16:09(2026 순위 11/6 → 11/10 갱신), 수동 `fixtures` 1회, 별칭 시드 적용.
+- **실제 실행 검수:** 1920·375·320·낮은 PC(1920×570·760)에서 항목 1~11과 사용자 확인 후 보완(설명 문구, 관심 팀 UI, 카드 정렬, 순위 칩·끌기, 칩 폭, 액티브 효과 제거, 패널 고정 조건, 팀 선택 규칙). DB 값은 확인용으로 잠시 바꾼 뒤 모두 원복.
+- **검사:** 백엔드 ruff·pytest 286(DB 포함 356)·alembic check, 프런트 lint·tsc·npm test 39·build·`git diff --check`.
+- **외부 호출:** API-Football 수동 14회 + 스케줄러 자동 실행분, 네이버는 정시 뉴스 작업만. Codex 검증 0회.
+- **미실행:** 실제 진행 경기 실시간 갱신(첫 킥오프 11/11 03:00 KST), 월요일 TOP 5 자동 실행(11/16 00:00·00:05 KST).
+
 ## 2026-11-10 (화) — 01 비회원 개선(헤더 로고·TOP 5·푸터)
 
 `dev` 작업 트리에서 작업(중간에 만든 별도 폴더 `apps-01`은 사용자 요청으로 변경을 `apps`로 옮긴 뒤 삭제). Codex 교차 검증 3회(1차 결함 4·개선 2·확인 1 → 2차 N1·N2·N3 → 3차 N4, N4는 Codex가 수정) 후 기존 `feat/01-header-footer`에 커밋·push, `dev`에 병합.
