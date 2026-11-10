@@ -9,7 +9,7 @@ import { MobileMenu } from "./MobileMenu";
 
 /**
  * Global header + TOP 5 strip, fixed together at the top while scrolling (COM-003).
- * Figma 49:58 (desktop, 86 + 1 + 56 + 1 = 144px) / 49:571 (mobile, 68 + 1 + 84 + 1 = 154px). Parts that read the current path
+ * Figma 49:58 (desktop, 86 + 1 + 50 + 1 = 138px) / 49:571 (mobile, 68 + 1 + 68 + 1 = 138px). Parts that read the current path
  * sit in Suspense so pages with a runtime param (`/matches/[id]`) keep a prerendered shell.
  */
 export function SiteHeader() {

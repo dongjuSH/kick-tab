@@ -252,7 +252,7 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `top5/queries.ts` | `currentTopMatchesQuery`(5분 신선도·30분 주기·포커스 재조회), `topMatchesVersionQuery`(30초 공개 버전 확인), `isOutdated` | `apiFetch`, `query-keys.ts` | 완료(04) |
-| `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(PC 56px·모바일 84px, 'AI 선정' 배지·고정 제목·실제 표시 주 기간·지난주 준비 상태·화살표 고정, `Lineup` 1~5위 끊김 없는 순환), 공개 버전 변경 시 즉시 재조회(실패 시 기존 결과 유지), `Top5StripFallback`, 펼칠 때 오래된 결과 재조회, PC 패널(본문 폭 1280px·150ms 펼침/접힘·접힘 즉시 inert·딤·배경 inert·첫 포커스 닫기·Tab 순환·Escape/바깥/화살표 닫기·포커스 복귀), 모바일 시트(`kt-top5-sheet` 슬라이드·딤 포인터), `PanelHeading` | `Top5List`, `model.ts`, `Dialog` | 완료(04·01) |
+| `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(PC 50px 한 줄·모바일 68px 두 줄 — 첫째 줄 배지·제목·기간, 둘째 줄 준비 상태·대진·화살표, PC는 두 줄을 `contents`로 한 줄 배치. 'AI 선정' 배지·고정 제목·실제 표시 주 기간·지난주 준비 상태·화살표 고정, `Lineup` 1~5위 끊김 없는 순환), 공개 버전 변경 시 즉시 재조회(실패 시 기존 결과 유지), `Top5StripFallback`, 펼칠 때 오래된 결과 재조회, PC 패널(본문 폭 1280px·150ms 펼침/접힘·접힘 즉시 inert·딤·배경 inert·첫 포커스 닫기·Tab 순환·Escape/바깥/화살표 닫기·포커스 복귀), 모바일 시트(`kt-top5-sheet` 슬라이드·딤 포인터), `PanelHeading` | `Top5List`, `model.ts`, `Dialog` | 완료(04·01) |
 | `top5/Top5List.tsx` | 펼침 본문(PC 행: 순위·대진/대회·일시·선정 이유·상태, 모바일 행: 순위·대회·상태/일시/대진/이유, 변경 일시, 경기 없음·지연 안내 상자, 5개 미만 안내, 'AI 선정 · 순서와 이유는 해당 주 동안 유지됩니다.', 목록만 스크롤) | `model.ts`, `kst.ts` | 완료(04·01) |
 | `top5/model.ts` | 공개 UI 3종(list·none·delayed) 판정과 문구, 지난주 여부·`weekLabel`(요일 없는 기간)·`PREPARING`·선정 시각, 변경 일시(D-01-10), 띠 대진 `lineupItems` | `kst.ts`, `match.ts` | 완료(04·01) |
 | `match/MatchDetail.tsx` | 경기 상세 조립: 상태별 영역(MAT-001), 탭·정렬 URL(`history.replaceState`), 제목 포커스, '경기 목록으로'(같은 사이트 이전 목록 복귀), 404 안내 | 아래 파일 | 완료(04) |

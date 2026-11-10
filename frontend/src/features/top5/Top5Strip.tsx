@@ -30,17 +30,20 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
 const TICKER_SPEED = 24;
 
 /*
- * Strip layout (Figma 159:923). Mobile 84px: badge · title over the week · arrow on the first
- * row, the lineup on the second. Desktop 56px: one row with badge, title, week, lineup in the
- * remaining width and the arrow. Badge, title, week and arrow never move.
+ * Strip layout (Figma 159:923). Mobile 68px: badge, title and week on the first row; the
+ * lineup (after "preparing" while last week is shown) on the second, with the arrow at its
+ * right end. Desktop 50px: one row of badge, title, week, preparing, the lineup in the
+ * remaining width and the arrow; the two mobile rows become `contents`. Badge, title, week
+ * and arrow never move.
  */
-const STRIP = "grid w-full grid-cols-[auto_minmax(0,1fr)_44px] grid-rows-[minmax(44px,auto)_20px] items-center gap-x-2.5 gap-y-1.5 pt-2 pb-1.5 text-left lg:flex lg:h-14 lg:gap-5 lg:py-0";
-const BADGE = "col-start-1 row-start-1 shrink-0 rounded-badge bg-action px-2 py-1 text-small leading-[18px] font-bold text-fg-inverse";
-const TITLE_BLOCK = "col-start-2 row-start-1 flex min-w-0 flex-col gap-[3px] lg:contents";
-const TITLE = "truncate text-small leading-[18px] font-bold text-fg lg:shrink-0 lg:overflow-visible lg:text-body lg:leading-[22px]";
-const WEEK_LINE = "flex flex-wrap items-center gap-x-1.5 text-small font-medium text-fg-secondary lg:shrink-0 lg:flex-nowrap lg:gap-5";
-const VIEWPORT = "col-span-3 row-start-2 min-w-0 overflow-hidden text-small text-fg-secondary lg:flex-1 lg:text-body";
-const ARROW = "col-start-3 row-start-1 flex size-11 shrink-0 items-center justify-center";
+const STRIP = "relative flex w-full flex-col gap-1.5 py-2 text-left lg:h-[50px] lg:flex-row lg:items-center lg:gap-5 lg:py-0";
+const FIRST_ROW = "flex flex-wrap items-center gap-x-3 lg:contents";
+const SECOND_ROW = "flex h-5 items-center gap-2 pr-[46px] lg:contents";
+const BADGE = "shrink-0 rounded-badge bg-action px-2 py-1 text-small leading-[18px] font-bold text-fg-inverse";
+const TITLE = "shrink-0 whitespace-nowrap text-small leading-[18px] font-bold text-fg lg:text-body lg:leading-[22px]";
+const META = "shrink-0 whitespace-nowrap text-small font-medium text-fg-secondary";
+const VIEWPORT = "min-w-0 flex-1 overflow-hidden text-small text-fg-secondary lg:text-body";
+const ARROW = "absolute right-0 bottom-0 flex size-11 items-center justify-center pt-2 lg:static lg:shrink-0 lg:pt-0";
 
 /**
  * Ranks 1-5 as one line that keeps running and starts again at rank 1 at any width: the lap
@@ -95,16 +98,6 @@ function Lineup({ items }: { items: string[] }) {
           </span>
         ))}
       </span>
-    </span>
-  );
-}
-
-/** Week shown in the strip: last week is named as such and this week marked as in progress. */
-function WeekLine({ data }: { data: TopMatches }) {
-  return (
-    <span className={WEEK_LINE}>
-      <span className="whitespace-nowrap">{weekLabel(data)}</span>
-      {isPrevious(data) && <span className="whitespace-nowrap">{PREPARING}</span>}
     </span>
   );
 }
@@ -249,17 +242,21 @@ export function Top5Strip() {
           }}
           className={cx("kt-ticker-trigger rounded-control", STRIP)}
         >
-          <span className={BADGE}>AI 선정</span>
-          <span className={TITLE_BLOCK}>
+          <span className={FIRST_ROW}>
+            <span className={BADGE}>AI 선정</span>
             <span className={TITLE}>{TOP5_TITLE}</span>
-            {data ? <WeekLine data={data} /> : <Skeleton className="h-4 w-20" />}
+            {data ? <span className={META}>{weekLabel(data)}</span> : <Skeleton className="h-4 w-20" />}
           </span>
-          <span className={VIEWPORT}>
-            {data ? (
-              notice ? <span className="block truncate">{noticeCopy(notice, data).title}</span>
-                : <Lineup items={lineupItems(data)} />
-            ) : isPending ? <Skeleton className="h-4 w-40" />
-              : <span className="block truncate text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>}
+          <span className={SECOND_ROW}>
+            {/* Last week's result is kept until this week's is published. */}
+            {data && isPrevious(data) && <span className={META}>{PREPARING}</span>}
+            <span className={VIEWPORT}>
+              {data ? (
+                notice ? <span className="block truncate lg:text-small">{noticeCopy(notice, data).title}</span>
+                  : <Lineup items={lineupItems(data)} />
+              ) : isPending ? <Skeleton className="h-4 w-40" />
+                : <span className="block truncate text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>}
+            </span>
           </span>
           <span className={ARROW}>
             <Icon name="chevron-down" className={cx("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
@@ -329,12 +326,14 @@ export function Top5StripFallback() {
     <div className="border-b border-line bg-selected" aria-busy>
       <div className="kt-container">
         <div className={STRIP}>
-          <span className={BADGE}>AI 선정</span>
-          <span className={TITLE_BLOCK}>
+          <span className={FIRST_ROW}>
+            <span className={BADGE}>AI 선정</span>
             <span className={TITLE}>{TOP5_TITLE}</span>
             <Skeleton className="h-4 w-20" />
           </span>
-          <span className={VIEWPORT}><Skeleton className="h-4 w-40" /></span>
+          <span className={SECOND_ROW}>
+            <span className={VIEWPORT}><Skeleton className="h-4 w-40" /></span>
+          </span>
         </div>
       </div>
     </div>
