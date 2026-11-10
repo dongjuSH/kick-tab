@@ -897,9 +897,18 @@ def _recovery_weeks(session: Session, now: datetime) -> list[date]:
     ]
 
 
+def _missed_week(session: Session, now: datetime) -> date | None:
+    """The current week when neither automatic slot ran at all (e.g. the service was down at
+    00:00 and 00:05 KST): once the retry slot and its grace have passed it is a delay."""
+    current = current_kst_week(now).start
+    if now <= retry_slot(current) + RETRY_GRACE or session.get(Top5Week, current) is not None:
+        return None
+    return current
+
+
 def recovery_due(session: Session, now: datetime) -> bool:
     """DB-only precheck. Recovery records failures; it never starts a selection."""
-    return bool(_recovery_weeks(session, now))
+    return bool(_recovery_weeks(session, now)) or _missed_week(session, now) is not None
 
 
 def reconcile_attempts(
@@ -911,13 +920,41 @@ def reconcile_attempts(
 
     A first failure can still use the fixed 00:05 slot. If the service missed that slot
     (including its normal one-minute grace), stop automation and ask for manual recovery.
+    A current week where no automatic attempt ran at all is handled the same way.
     An old week is closed internally without publishing or alerting for the new week.
     """
     clock = clock or (lambda: datetime.now(UTC))
     with _bounded_session(session_factory, clock) as session:
         engine = session.get_bind().engine
         targets = _recovery_weeks(session, clock())
+        missed = _missed_week(session, clock())
     repaired = 0
+    if missed is not None:
+        with week_lock(engine, missed) as acquired:
+            send = False
+            if acquired:
+                with _bounded_session(session_factory, clock) as session:
+                    now = clock()
+                    # Decide again under the lock: the week may have ended (Sunday -> Monday)
+                    # or an attempt may have started since the first look.
+                    if _missed_week(session, now) == missed:
+                        session.add(
+                            Top5Week(
+                                week_start=missed, status="delayed", auto_attempts=0,
+                                needs_manual=True, updated_at=now,
+                                last_error="Automatic attempts at 00:00 and 00:05 KST did not run",
+                            )
+                        )
+                        session.flush()
+                        _publish_delay(session, missed)
+                        session.commit()
+                        repaired += 1
+                        send = True
+            if send:
+                _send_alert(
+                    session_factory, missed,
+                    "Automatic attempts at 00:00 and 00:05 KST did not run", clock(), alert,
+                )
     for week_start in targets:
         with week_lock(engine, week_start) as acquired:
             if not acquired:
