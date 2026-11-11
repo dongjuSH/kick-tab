@@ -1,5 +1,24 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-11 (수) — 04 경기 상세 개선
+
+브랜치 `feat/04-match-detail`(최신 `dev` d5ee55a 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 2회(1차 수정 필요 4건(중요 2·경미 2) → 보완 후 통과). 기획 문서(PRD·기능 명세서 v1.10)의 선수명 영문 유지·평가 정책 확정 문구는 Codex가 개정.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 경기 평가(백엔드) | `migrations/versions/20261111_0015_text_reviews.py`(새), `models/review.py`(`REVIEW_BODY_SPACE_CLASS`), `services/reviews.py`(`review_open`), `schemas/match_detail.py`, `api/routes/matches.py` | 별점·평균 제거, 텍스트 평가·유효 건수. 진행 중~일반 종료 공개 조회·작성 가능 서버 판정(02 쓰기 API 재사용). 사용자 지시로 추천안 확정: SUSP 닫힘·INT 열림·AWD/WO 불가. 공백만 본문은 Python `str.isspace()` 기준으로 DB에서 거부(Codex 1차) |
+| 기록 조회(백엔드) | `services/match_detail.py`(`detail_fetch_due`·`_empty_status`·`_name`) | 예정·연기 라인업 반복 조회 삭제(MAT-004 규칙 4), 선수·감독 이름 HTML 엔티티 해제(`O&apos;Brien` → `O'Brien`) |
+| 상단·배치 | `features/match/Scoreboard.tsx`, `MatchDetail.tsx`, `model.ts`(`areasOf`) | 로고+팀명 한 링크(`detailAvailable`만), 종료 PC 기록 좌·평가 우 384px, 진행 중 평가 아래 640px, 모바일 세로(Figma 52:151·161:4161) |
+| 경기 기록 | `MatchRecords.tsx`, `icons.tsx`(새), `model.ts`(`eventKind`·`eventText`), `queries.ts` | 타임라인 아이콘 5종+텍스트·반복 문구 삭제, '경기 기록' 헤더·진행 중 '마지막 갱신', 선수 평점 팀별 카드(Figma 94:4418), 기록 재조회를 경기 정보 갱신 한 경로로(종료 전환 1회, Codex 1차) |
+| 예정 | `HeadToHeadSection.tsx`, `model.ts`(`formPreview`) | 상대 전적 812·최근 5경기 444 좌우/모바일 세로, 배지 31px, 호버·포커스·탭 미리보기 '홈팀 스코어 원정팀'(미리보기 위 호버 유지, Codex 1차), 라인업 영역 없음 |
+| 경기 평가(화면) | `ReviewSection.tsx`, `ReviewGuidance.tsx`, `StatusNotice.tsx`, 삭제 `public/icons/thumbs.svg`·`Icon`의 thumbs | '경기 평가'·건수, 벡터 엄지·주의사항 아이콘, 평점·후기 문구 정리 |
+| 테스트 | `tests/test_review_window.py`(새), `test_match_detail.py`, `test_review_regressions.py`, `test_top5_db.py`, `frontend/tests/match-regressions.test.mjs` | 상태별 판정·공백 기준·엔티티·조회 시점·화면 규칙 회귀 |
+
+- **선수 한글명:** Wikidata 표본 비교(3팀 96명 중 약 60%)와 중계사 라인업 매칭(경기 라인업 팀+등번호 95.1% 일치)을 검토했으나, 혼재·화면 간 불일치·오표기 위험·운영 비용으로 사용자 결정에 따라 영문 유지. 중간에 만든 한글명 테이블·시드·작업은 커밋 전 삭제.
+- **실제 실행 검수:** 1920·1024·375·320에서 종료(1379344 골 취소·1557458 퇴장·1557455 엔티티), 예정(1557474), 행정 종료(1388000), 취소(1449968) 확인. 진행 중↔종료는 같은 경기 ID에서 경기 정보 응답 상태만 바꿔 재현(정보 1회당 기록 1회, 종료 전환 1회). 실제 진행 경기 검수는 사용자가 직접 진행 예정.
+- **검사:** 백엔드 ruff·pytest 306(DB 포함 376)·0015 왕복·alembic check, 프런트 lint·tsc·npm test 46·build.
+- **외부 호출:** API-Football 0회, Wikidata 3회(한글명 비교 표본).
+
 ## 2026-11-10 (화) — 03 경기 일정 비회원 개선
 
 브랜치 `feat/03-schedule`(최신 `dev` 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 3회(1차 수정 필요 5·문서 1 → 2차 미충족 2 → 3차 통과, 3차에서 Codex가 날짜 막대 폭 200px 경계 조건 1줄 수정).

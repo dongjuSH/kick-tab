@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
+import { NoticeIcon } from "./icons";
 
 const GUTTER = 16;
 const GAP = 4;
@@ -88,12 +89,12 @@ export function ReviewGuidance() {
       <button
         ref={trigger}
         type="button"
-        aria-label="후기 작성 주의사항"
+        aria-label="평가 작성 주의사항"
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls={open ? id : undefined}
-        className={cx("grid size-11 cursor-pointer place-items-center rounded-control hover:bg-subtle",
-          mode === "pinned" && "bg-subtle")}
+        className={cx("grid size-11 cursor-pointer place-items-center rounded-control text-fg-muted hover:bg-subtle hover:text-fg-secondary",
+          mode === "pinned" && "bg-subtle text-fg-secondary")}
         onClick={() => {
           if (mode === "pinned") close(true);
           else {
@@ -103,7 +104,7 @@ export function ReviewGuidance() {
           }
         }}
       >
-        <span aria-hidden className="grid size-5 place-items-center rounded-full border-2 border-current text-small font-bold leading-none text-fg-secondary">!</span>
+        <NoticeIcon />
       </button>
       {open && (
         <div
@@ -114,7 +115,7 @@ export function ReviewGuidance() {
           className="fixed z-40 flex flex-col gap-3 overflow-hidden rounded-card border border-line-strong bg-surface p-4 shadow-lg"
         >
           <div className="flex shrink-0 items-center justify-between gap-2">
-            <h3 id={`${id}-title`} className="text-label font-bold">후기 작성 주의사항</h3>
+            <h3 id={`${id}-title`} className="text-label font-bold">평가 작성 주의사항</h3>
             <IconButton icon="x" label="주의사항 닫기" onClick={() => close(true)} />
           </div>
           <div className="flex max-h-[280px] min-h-0 flex-col gap-3 overflow-y-auto text-small text-fg-secondary" tabIndex={0}>
@@ -125,7 +126,7 @@ export function ReviewGuidance() {
               <li>광고·도배·불법 베팅 홍보 등 경기와 무관한 내용은 제한합니다.</li>
             </ul>
             <p className="font-bold">
-              농담이어도 대상과 맥락·수위·반복성을 함께 판단하며, 기준을 넘은 후기는 삭제될 수 있습니다.
+              농담이어도 대상과 맥락·수위·반복성을 함께 판단하며, 기준을 넘은 평가는 삭제될 수 있습니다.
             </p>
           </div>
         </div>

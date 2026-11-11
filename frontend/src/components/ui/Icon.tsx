@@ -8,8 +8,7 @@ export type IconName =
   | "menu"
   | "x"
   | "search"
-  | "info"
-  | "thumbs";
+  | "info";
 
 const NATURAL_SIZE: Record<IconName, number> = {
   "chevron-down": 16,
@@ -19,7 +18,6 @@ const NATURAL_SIZE: Record<IconName, number> = {
   x: 18,
   search: 24,
   info: 24,
-  thumbs: 16,
 };
 
 interface IconProps {

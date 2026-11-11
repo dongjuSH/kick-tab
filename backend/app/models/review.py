@@ -1,5 +1,8 @@
 """Member match reviews and reactions (REV-001~004).
 
+A review is text only: the body is required (not blank) and at most 300 characters. There
+is no star rating or member average (04 개선, migration 0015). One review per member+match.
+
 Chat 04 creates the tables and the public read side. `users` does not exist yet (chat 02),
 so `user_id` has no foreign key here; chat 02 adds `REFERENCES users(id) ON DELETE CASCADE`
 on both tables (P-03: a withdrawn member's reviews and reactions are deleted and leave the
@@ -27,14 +30,21 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 REVIEW_BODY_MAX = 300
+# A body must contain a character outside this class: exactly the characters Python's
+# str.isspace() treats as whitespace (tabs, line breaks, NBSP U+00A0, ideographic space
+# U+3000, ...), so a body passes the DB check iff `body.strip()` is not empty (02 validates
+# the same way). PostgreSQL ARE escapes; tests/test_review_window.py keeps it in sync.
+REVIEW_BODY_SPACE_CLASS = (
+    r"\t\n\v\f\r\u001c-\u001f \u0085   -     　"
+)
 
 
 class Review(Base):
     __tablename__ = "reviews"
     __table_args__ = (
         UniqueConstraint("user_id", "fixture_id", name="uq_reviews_user_fixture"),
-        CheckConstraint("rating BETWEEN 1 AND 5", name="rating_range"),
         CheckConstraint(f"char_length(body) <= {REVIEW_BODY_MAX}", name="body_length"),
+        CheckConstraint(f"body ~ '[^{REVIEW_BODY_SPACE_CLASS}]'", name="body_not_blank"),
         Index("ix_reviews_fixture_created", "fixture_id", "created_at"),
     )
 
@@ -43,8 +53,7 @@ class Review(Base):
     fixture_id: Mapped[int] = mapped_column(
         ForeignKey("fixtures.id", ondelete="CASCADE"), nullable=False
     )
-    rating: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    body: Mapped[str | None] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -17,9 +17,10 @@ import type {
   StatRow,
   TeamLineup,
 } from "@/lib/api/types";
-import { MISSING } from "@/lib/format/kst";
+import { MISSING, formatKstTime } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
-import { eventText, minuteText, positionText, statLabel, statShares, statValue } from "./model";
+import { EventIcon } from "./icons";
+import { eventKind, eventText, minuteText, positionText, statLabel, statShares, statValue } from "./model";
 import { matchRecordsQuery } from "./queries";
 
 export const RECORD_TABS = [
@@ -78,19 +79,19 @@ function BlockMessage({ tab, status, onRetry }: { tab: RecordTab; status: BlockS
 
 function Timeline({ events, names }: { events: MatchEvent[]; names: Names }) {
   if (events.length === 0) return <StateMessage title="아직 기록된 이벤트가 없습니다" />;
-  // Latest first (Figma 52:257…).
+  // Latest first, each record with its icon and text (MAT-002, Figma 52:151).
   return (
-    <div className="flex flex-col">
-      <ol>
-        {[...events].reverse().map((event, index) => (
-          <li key={index} className="flex items-center gap-4 border-b border-line py-4 first:pt-0">
-            <span className="w-13 shrink-0 text-center text-label font-bold text-action">{minuteText(event)}</span>
-            <span className="min-w-0 text-body text-fg">{eventText(event, names)}</span>
-          </li>
-        ))}
-      </ol>
-      <p className="pt-3 text-small text-fg-muted">데이터 제공사가 전달한 이벤트만 표시합니다.</p>
-    </div>
+    <ol>
+      {[...events].reverse().map((event, index) => (
+        <li key={index} className="flex items-center gap-3 border-b border-line py-3 first:pt-0 lg:gap-4">
+          <span className="w-13 shrink-0 text-center text-label font-bold text-action">{minuteText(event)}</span>
+          <span className="grid size-4 shrink-0 place-items-center">
+            <EventIcon kind={eventKind(event)} />
+          </span>
+          <span className="min-w-0 text-body text-fg">{eventText(event, names)}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -171,41 +172,45 @@ function Lineups({ lineups, names }: { lineups: TeamLineup[]; names: Names }) {
   );
 }
 
-function Ratings({ players, names }: { players: PlayerRating[]; names: Names }) {
+function RatingCard({ name, players }: { name: string; players: PlayerRating[] }) {
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <h3 className="text-lead font-bold text-fg">선수 경기 평점</h3>
-        <p className="text-small text-fg-secondary">
-          데이터 제공사의 선수 평점입니다. 회원이 남기는 경기 평점과 별도로 표시됩니다.
-        </p>
+    <section className="flex min-w-0 flex-col rounded-control bg-canvas p-3">
+      <div className="flex items-baseline justify-between gap-2 pb-2">
+        <h3 className="min-w-0 text-body font-bold text-fg">{name}</h3>
+        <span className="text-caption text-fg-muted" aria-hidden>평점</span>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[320px] text-left text-body">
-          <thead className="bg-subtle text-small text-fg-muted">
-            <tr>
-              <th scope="col" className="px-2 py-2 font-normal">선수</th>
-              <th scope="col" className="px-2 py-2 font-normal">팀</th>
-              <th scope="col" className="px-2 py-2 text-right font-normal">평점</th>
-            </tr>
-          </thead>
-          <tbody>
-            {players.map((player, index) => (
-              <tr key={`${player.playerId}-${index}`} className="border-b border-line">
-                <td className="px-2 py-3">
-                  <span className="flex items-center gap-2">
-                    <PlayerPhoto src={player.photoUrl} name={player.name} size={20} />
-                    <span className="min-w-0 text-fg">{player.name}</span>
-                  </span>
-                </td>
-                <td className="px-2 py-3 text-fg-secondary">{names[player.side]}</td>
-                <td className="px-2 py-3 text-right font-bold text-action">
-                  {player.rating === null ? MISSING : player.rating.toFixed(1)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {players.length ? (
+        <ol aria-label={`${name} 선수 평점, 높은 순`}>
+          {players.map((player, index) => (
+            <li
+              key={`${player.playerId}-${index}`}
+              className="flex items-center gap-2 border-b border-line py-1.5 text-body last:border-b-0"
+            >
+              <PlayerPhoto src={player.photoUrl} name={player.name} size={20} />
+              <span className="min-w-0 flex-1 text-fg">{player.name}</span>
+              <span className="font-bold text-action">
+                <span className="sr-only">평점 </span>
+                {player.rating === null ? MISSING : player.rating.toFixed(1)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="py-1.5 text-small text-fg-muted">제공된 선수 평점이 없습니다.</p>
+      )}
+    </section>
+  );
+}
+
+/** Provider player ratings by team, home left and away right on PC (Figma 94:4418). */
+function Ratings({ players, names }: { players: PlayerRating[]; names: Names }) {
+  const sides = ["home", "away"] as const;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+        {sides.map((side) => (
+          <RatingCard key={side} name={names[side]} players={players.filter((p) => p.side === side)} />
+        ))}
       </div>
       <p className="text-small text-fg-muted">미제공 평점은 —로 표시합니다.</p>
     </div>
@@ -238,26 +243,45 @@ const loading = (
 );
 
 /**
- * Match records (MAT-002·004, Figma 52:239 / 94:3748 / 94:4061 / 94:4418, mobile 59:*).
- * Live and finished matches: four tabs; abandoned matches: timeline only. Missing blocks
- * says so in its tab (domestic cups often have goals only). Before kickoff only the
- * lineup appears, as "라인업 발표 전" until it is announced (Figma 63:1909).
+ * Match records (MAT-002·004, Figma 52:151 / 161:4161, mobile 52:404 / 161:5190).
+ * Live and finished matches: four tabs; abandoned matches: timeline only. A missing block
+ * says so in its tab (domestic cups often have goals only). Shown from kickoff on only:
+ * before kickoff there is no lineup area and no request (MAT-004 rule 4). While live the
+ * header shows when the records were last updated.
+ *
+ * Refresh follows the match query only (`infoUpdatedAt` = its last successful update):
+ * one read per update while live, one read when the status changes (kickoff, finish,
+ * stop, resume). There is no second timer, so a finish never reads the record twice.
  */
-export function MatchRecords({ info, tab, onTab }: { info: MatchInfo; tab: RecordTab; onTab: (tab: RecordTab) => void }) {
+export function MatchRecords({
+  info,
+  infoUpdatedAt,
+  tab,
+  onTab,
+}: {
+  info: MatchInfo;
+  infoUpdatedAt: number;
+  tab: RecordTab;
+  onTab: (tab: RecordTab) => void;
+}) {
   const query = useQuery(matchRecordsQuery(info.match));
-  const previousStatus = useRef(info.match.status);
+  const status = info.match.status;
+  const seen = useRef({ status, infoUpdatedAt });
   const { refetch } = query;
   useEffect(() => {
-    if (previousStatus.current !== info.match.status) {
-      previousStatus.current = info.match.status;
-      // Keep the cached blocks visible, but fetch once on kickoff, finish, stop or resume.
+    const before = seen.current;
+    if (before.status === status && before.infoUpdatedAt === infoUpdatedAt) return;
+    seen.current = { status, infoUpdatedAt };
+    if (before.status !== status) {
+      // Keep the cached blocks visible; a read already running may predate the change.
       void refetch();
+    } else if (status === "live") {
+      void refetch({ cancelRefetch: false });
     }
-  }, [info.match.status, refetch]);
+  }, [status, infoUpdatedAt, refetch]);
   const idBase = useId();
   const names = { home: teamName(info.match.home), away: teamName(info.match.away) };
   const retry = () => void query.refetch();
-  const beforeKickoff = info.match.status === "scheduled" || info.match.status === "postponed";
 
   if (!query.data) {
     return (
@@ -285,22 +309,6 @@ export function MatchRecords({ info, tab, onTab }: { info: MatchInfo; tab: Recor
     );
   }
 
-  if (beforeKickoff) {
-    const lineups = records.lineups;
-    return lineups.status === "available" && lineups.data ? (
-      <section className={CARD} aria-labelledby={`${idBase}-lineup`}>
-        <h2 id={`${idBase}-lineup`} className="text-subtitle font-bold">라인업</h2>
-        {query.isError && <RefreshFailure onRetry={retry} />}
-        <Lineups lineups={lineups.data} names={names} />
-      </section>
-    ) : (
-      <section className="rounded-card bg-surface">
-        {query.isError && <RefreshFailure onRetry={retry} />}
-        <BlockMessage tab="lineups" status={lineups.status} onRetry={retry} />
-      </section>
-    );
-  }
-
   const statuses = RECORD_TABS.map((t) => records[BLOCK_OF[t.value]].status);
   if (statuses.every((s) => s === "not_provided")) {
     return (
@@ -312,9 +320,16 @@ export function MatchRecords({ info, tab, onTab }: { info: MatchInfo; tab: Recor
     );
   }
   const partial = statuses.some((s) => s === "not_provided");
+  const updatedAt = query.data.meta.updatedAt;
 
   return (
-    <section className={cx(CARD, "gap-0")} aria-label="경기 기록">
+    <section className={cx(CARD, "gap-0")} aria-labelledby={`${idBase}-title`}>
+      <div className="flex items-baseline justify-between gap-3 pb-3">
+        <h2 id={`${idBase}-title`} className="text-subtitle font-bold">경기 기록</h2>
+        {info.match.status === "live" && updatedAt && (
+          <p className="text-small text-fg-muted">{`마지막 갱신 ${formatKstTime(updatedAt)}`}</p>
+        )}
+      </div>
       <Tabs items={RECORD_TABS} value={tab} onChange={onTab} label="경기 기록" idBase={idBase} />
       {query.isError && <RefreshFailure onRetry={retry} />}
       {partial && (

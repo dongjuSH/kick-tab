@@ -124,11 +124,11 @@ def test_concurrent_failures_share_cooldown(operation):
     ("status", "kickoff_in", "expected"),
     [
         # A failure is reported where the server reads the provider again.
-        ("scheduled", timedelta(minutes=50), "unavailable"),
         ("live", timedelta(minutes=-30), "unavailable"),
         ("finished", timedelta(hours=-3), "unavailable"),
-        # Failed inside the lineup window, then postponed or moved later: no request is
-        # made now, so the block is "not yet" instead of a retry that can never succeed.
+        # Before kickoff nothing is read (MAT-004 rule 4): an old failure (e.g. from before
+        # a postponement) is "not yet" instead of a retry that can never succeed.
+        ("scheduled", timedelta(minutes=50), "not_yet"),
         ("postponed", timedelta(minutes=50), "not_yet"),
         ("scheduled", timedelta(days=7), "not_yet"),
     ],
@@ -140,7 +140,7 @@ def test_failed_empty_blocks_are_unavailable_only_while_lookups_run(status, kick
     session = Mock()
     session.get.return_value = FixtureDetail(fixture_id=1, last_failed_at=NOW)
     session.scalars.return_value = []
-    records, _ = read_records(session, fixture, NOW)
+    records, _ = read_records(session, fixture)
     blocks = ("events", "statistics", "lineups", "players")
     assert {getattr(records, name).status for name in blocks} == {expected}
 

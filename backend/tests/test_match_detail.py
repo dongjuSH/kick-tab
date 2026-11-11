@@ -107,13 +107,13 @@ def test_detail_fetch_timing():
     live = fixture(status="live")
     assert not detail_fetch_due(live, detail(fetched_at=NOW - timedelta(seconds=60)), NOW)
     assert detail_fetch_due(live, detail(fetched_at=NOW - timedelta(seconds=120)), NOW)
-    # Scheduled: nothing until an hour before kickoff, then lineups every 10 minutes.
+    # Scheduled: never, however close kickoff is (the lineup is shown from kickoff on,
+    # MAT-004 rule 4), with or without a stored record.
     later = fixture(status="scheduled", kickoff_at=NOW + timedelta(hours=5))
     soon = fixture(status="scheduled", kickoff_at=NOW + timedelta(minutes=50))
     assert not detail_fetch_due(later, None, NOW)
-    assert detail_fetch_due(soon, None, NOW)
-    assert not detail_fetch_due(soon, detail(fetched_at=NOW - timedelta(minutes=5)), NOW)
-    assert detail_fetch_due(soon, detail(fetched_at=NOW - timedelta(minutes=11)), NOW)
+    assert not detail_fetch_due(soon, None, NOW)
+    assert not detail_fetch_due(soon, detail(fetched_at=NOW - timedelta(minutes=11)), NOW)
     # Postponed / cancelled: no request.
     assert not detail_fetch_due(fixture(status="postponed"), None, NOW)
     assert not detail_fetch_due(fixture(status="cancelled"), None, NOW)
@@ -185,3 +185,22 @@ def test_form_does_not_widen_when_history_is_short_and_reads_results():
     assert [result_for(r, 10) for r in recent_form(rows, 10)] == ["W", "D", "L"]
     before = datetime(2026, 10, 2, 12, tzinfo=UTC)
     assert [r["fixtureId"] for r in recent_form(rows, 10, before)] == [2, 3]
+
+
+def test_provider_names_keep_english_with_html_entities_decoded():
+    # The provider sends some names HTML-escaped (seen: "N. O&apos;Reilly"). Names stay in
+    # the provider's English (MAT-004 decision 2026-11-11); only the escaping is undone.
+    lineups = _lineups(FIXTURE, [
+        {"team": {"id": 10}, "formation": "4-3-3", "coach": {"name": "P. O&apos;Neil"},
+         "startXI": [{"player": {"name": "N. O&apos;Reilly", "number": 33, "pos": "D"}},
+                     {"player": {"name": "  ", "number": 1, "pos": "G"}}],
+         "substitutes": [{"player": {"name": "A &amp; B", "number": 12, "pos": "M"}}]},
+    ])
+    [home] = lineups
+    assert [p.name for p in home.start_xi] == ["N. O'Reilly"]  # a blank name is skipped
+    assert home.substitutes[0].name == "A & B"
+    assert home.coach == "P. O'Neil"
+    ratings = _ratings(FIXTURE, [{"team": {"id": 10}, "players": [
+        {"player": {"id": 1, "name": "N. O&apos;Reilly", "photo": None},
+         "statistics": [{"games": {"rating": "7.0", "minutes": 90}}]}]}])
+    assert ratings[0].name == "N. O'Reilly"

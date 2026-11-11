@@ -22,8 +22,6 @@ export interface MatchData<T> {
   meta: UpdatedMeta;
 }
 
-export const LIVE_POLL_MS = 60_000;
-
 export function matchInfoQuery(id: number) {
   return queryOptions({
     queryKey: queryKeys.matches.info(id),
@@ -38,25 +36,18 @@ export function matchInfoQuery(id: number) {
   });
 }
 
-const LINEUP_LEAD_MS = 60 * 60_000;
-const LINEUP_POLL_MS = 10 * 60_000;
-
-/** The server merges requests and enforces its own supplement cooldown. Before kickoff,
- * wake at the lineup window and check every ten minutes until a lineup is available. */
-export function matchRecordsQuery(match: MatchSummary) {
+/** Records exist from kickoff on: the page asks for them only then (no lineup polling
+ * before kickoff, MAT-004 rule 4). The query has no timer of its own: `MatchRecords`
+ * re-reads it once per match update while live and once on a status change, so a finish
+ * costs exactly one final read (LIVE-004). The server merges requests and keeps its own
+ * supplement cooldown. */
+export function matchRecordsQuery(match: Pick<MatchSummary, "id">) {
   const id = match.id;
   return queryOptions({
     queryKey: queryKeys.matches.records(id),
     queryFn: ({ signal }): Promise<MatchData<MatchRecords>> =>
       apiFetch<MatchRecords, UpdatedMeta>(`/fixtures/${id}/detail`, { signal }),
-    refetchInterval: (query) => {
-      if (match.status === "live") return LIVE_POLL_MS;
-      if (match.status !== "scheduled" || query.state.data?.data.lineups.status === "available") return false;
-      const wait = Date.parse(match.kickoffAt) - LINEUP_LEAD_MS - Date.now();
-      return wait > 0 ? Math.min(wait + 1_000, 2 ** 31 - 1) : LINEUP_POLL_MS;
-    },
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }
 

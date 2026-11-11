@@ -92,41 +92,173 @@ const leaves = {
   "@/components/common/TeamCrest": { TeamCrest: () => null, PlayerPhoto: () => null },
 };
 
-test("records wake for lineups, then poll live and stop after finish", () => {
+test("records query has no timer of its own: the match update drives it (MAT-004 rule 4, LIVE-004)", () => {
   const load = loader({ "@/lib/api/client": { apiFetch: () => { throw Error("unexpected network"); } } });
   const { matchRecordsQuery } = load("@/features/match/queries");
-  const now = Date.now();
-  const scheduled = { ...match("scheduled"), kickoffAt: new Date(now + 2 * 60 * 60_000).toISOString() };
-  const pending = { state: { data: { data: records } } };
-  const wait = matchRecordsQuery(scheduled).refetchInterval(pending);
-  assert.ok(wait > 59 * 60_000 && wait <= 60 * 60_000 + 1_000);
-  scheduled.kickoffAt = new Date(now + 30 * 60_000).toISOString();
-  assert.equal(matchRecordsQuery(scheduled).refetchInterval(pending), 10 * 60_000);
-  assert.equal(matchRecordsQuery(scheduled).refetchInterval({ state: { data: { data: {
-    ...records, lineups: { status: "available", data: [] },
-  } } } }), false);
-  assert.equal(matchRecordsQuery(match("live")).refetchInterval(pending), 60_000);
-  assert.equal(matchRecordsQuery(match("finished")).refetchInterval(pending), false);
+  for (const status of ["scheduled", "live", "finished"]) {
+    const options = matchRecordsQuery(match(status));
+    assert.equal(options.refetchInterval, undefined);
+    assert.equal(options.refetchOnWindowFocus, false);
+  }
+});
+
+test("page areas by state: no lineup or review area before kickoff, reviews beside finished records", () => {
+  const { areasOf } = loader()("@/features/match/model");
+  const of = (status, reviewsAvailable, headToHeadAvailable = false) =>
+    areasOf({ ...info(status), reviewsAvailable, headToHeadAvailable });
+  assert.deepEqual({ ...of("scheduled", false, true) }, { records: false, headToHead: true, reviews: false, reviewsBeside: false });
+  assert.deepEqual({ ...of("live", true) }, { records: true, headToHead: false, reviews: true, reviewsBeside: false });
+  assert.deepEqual({ ...of("finished", true) }, { records: true, headToHead: false, reviews: true, reviewsBeside: true });
+  // Rulings and stopped matches: the server closes reviews.
+  assert.deepEqual({ ...of("finished", false) }, { records: true, headToHead: false, reviews: false, reviewsBeside: false });
+  assert.deepEqual({ ...of("abandoned", false) }, { records: true, headToHead: false, reviews: false, reviewsBeside: false });
+});
+
+test("timeline records carry an icon kind and text: goal, substitution, cards, cancelled goal (MAT-002)", () => {
+  const { eventKind, eventText } = loader()("@/features/match/model");
+  const names = { home: "레알 마드리드", away: "PSV" };
+  const ev = (type, detail, extra = {}) => ({ elapsed: 10, extra: null, side: "home", type, detail, player: "A", assist: null, ...extra });
+  const cases = [
+    [ev("goal", "Normal Goal", { assist: "B" }), "goal", "골 · 레알 마드리드 · A (도움 B)"],
+    [ev("goal", "Missed Penalty", { assist: "B" }), "missed", "페널티킥 실축 · 레알 마드리드 · A"],
+    [ev("subst", "Substitution 1", { assist: "B" }), "subst", "교체 · 레알 마드리드 · A → B"],
+    [ev("card", "Yellow Card", { side: "away" }), "yellow", "경고 · PSV · A"],
+    [ev("card", "Red Card", { side: "away" }), "red", "퇴장 · PSV · A"],
+    [ev("card", "Second Yellow card"), "red", "경고 누적 퇴장 · 레알 마드리드 · A"],
+    [ev("var", "Goal cancelled"), "cancelled", "골 취소 · 레알 마드리드 · A"],
+    [ev("var", "Penalty confirmed"), "var", "VAR · 페널티킥 인정 · 레알 마드리드 · A"],
+  ];
+  for (const [event, kind, text] of cases) {
+    assert.equal(eventKind(event), kind);
+    assert.equal(eventText(event, names), text);
+  }
+});
+
+test("timeline shows an icon per record and no repeated provider notice", () => {
+  const h = hooks();
+  const withEvents = { ...records, events: { status: "available", data: [
+    { elapsed: 12, extra: null, side: "home", type: "goal", detail: "Normal Goal", player: "A", assist: null },
+    { elapsed: 79, extra: null, side: "home", type: "var", detail: "Goal cancelled", player: "A", assist: null },
+  ] } };
+  const load = loader({ ...leaves, react: h.react,
+    "@tanstack/react-query": { useQuery: () => ({ data: { data: withEvents, meta: { updatedAt: null } }, refetch() {} }) },
+    "./queries": { matchRecordsQuery: () => ({}) },
+  });
+  const { MatchRecords } = load("@/features/match/MatchRecords");
+  const { html } = h.render(MatchRecords, { info: info("finished"), tab: "timeline", onTab() {} });
+  assert.equal((html.match(/<svg/g) ?? []).length, 2);
+  assert.match(html, /골 취소 · 팀 50 · A/);
+  assert.doesNotMatch(html, /데이터 제공사가 전달한 이벤트만/);
+});
+
+test("player ratings show one card per team, home first, with missing ratings as a dash (Figma 94:4418)", () => {
+  const h = hooks();
+  const players = [
+    { playerId: 1, name: "Home Best", photoUrl: null, side: "home", rating: 8.4 },
+    { playerId: 2, name: "Away Best", photoUrl: null, side: "away", rating: 8.1 },
+    { playerId: 3, name: "Home Unrated", photoUrl: null, side: "home", rating: null },
+  ];
+  const withRatings = { ...records, players: { status: "available", data: players } };
+  const load = loader({ ...leaves, react: h.react,
+    "@tanstack/react-query": { useQuery: () => ({ data: { data: withRatings, meta: { updatedAt: null } }, refetch() {} }) },
+    "./queries": { matchRecordsQuery: () => ({}) },
+  });
+  const { MatchRecords } = load("@/features/match/MatchRecords");
+  const { html } = h.render(MatchRecords, { info: info("finished"), tab: "ratings", onTab() {} });
+  const cards = html.match(/<section class="flex min-w-0 flex-col rounded-control[\s\S]*?<\/section>/g) ?? [];
+  assert.equal(cards.length, 2);
+  assert.match(cards[0], /팀 50[\s\S]*Home Best[\s\S]*8\.4[\s\S]*Home Unrated[\s\S]*—/);
+  assert.match(cards[1], /팀 42[\s\S]*Away Best[\s\S]*8\.1/);
+  assert.doesNotMatch(cards[1], /Home/);
+  assert.match(html, /미제공 평점은 —로 표시합니다/);
+  assert.doesNotMatch(html, /<table/);
+});
+
+test("recent-form preview reads home team, score, away team (MAT-005)", () => {
+  const { formPreview } = loader()("@/features/match/model");
+  assert.deepEqual(
+    { ...formPreview("도르트문트", { opponentName: "라이프치히", venue: "home", goalsFor: 2, goalsAgainst: 1 }) },
+    { home: "도르트문트", away: "라이프치히", score: "2 : 1" },
+  );
+  assert.deepEqual(
+    { ...formPreview("도르트문트", { opponentName: "바이에른", venue: "away", goalsFor: 0, goalsAgainst: 3 }) },
+    { home: "바이에른", away: "도르트문트", score: "3 : 0" },
+  );
+  assert.equal(formPreview("A", { opponentName: "B", venue: "home", goalsFor: null, goalsAgainst: 1 }).score, "— : 1");
+});
+
+test("match reviews show the count only: no star rating or average", () => {
+  const h = hooks();
+  const list = { summary: { count: 2 }, items: [
+    { id: 1, authorNickname: null, body: "좋은 경기", likes: 3, dislikes: 1, createdAt: "", updatedAt: "" },
+    { id: 2, authorNickname: "축구좋아", body: "후반 집중력", likes: 0, dislikes: 0, createdAt: "", updatedAt: "" },
+  ] };
+  const reviewLoader = (data) => loader({ ...leaves, react: h.react,
+    "@tanstack/react-query": { useQuery: () => ({ data, isPending: false }) },
+    "./queries": { reviewsQuery: () => ({}) },
+  })("@/features/match/ReviewSection");
+  const { html } = h.render(reviewLoader(list).ReviewSection, { fixtureId: 1, sort: "popular", onSort() {} });
+  assert.match(html, /경기 평가/);
+  assert.match(html, /2건/);
+  assert.match(html, /좋아요 3/);
+  assert.match(html, /인기순/);
+  assert.doesNotMatch(html, /평점|평균|★/);
+  const none = h.render(reviewLoader({ summary: { count: 0 }, items: [] }).ReviewSection,
+    { fixtureId: 1, sort: "latest", onSort() {} }).html;
+  assert.match(none, /아직 평가가 없습니다/);
+  assert.match(none, /평가 0건/);
+});
+
+test("team crest and name are one link only for team-browse teams", () => {
+  const h = hooks();
+  const { Scoreboard } = loader({ ...leaves, react: h.react })("@/features/match/Scoreboard");
+  const base = info("finished");
+  const props = { info: { ...base, match: { ...base.match, home: { ...team(50), detailAvailable: true } } },
+    updatedAt: null, checkedAt: 0, heading: "경기" };
+  const { html } = h.render(Scoreboard, props);
+  const links = html.match(/<a [^>]*>[\s\S]*?<\/a>/g) ?? [];
+  assert.equal(links.length, 1);
+  assert.match(links[0], /href="\/teams\/50"/);
+  assert.match(links[0], /팀 50/);
+  assert.doesNotMatch(html, /teams\/42/);
+  assert.match(html, /팀 42/);
+  assert.doesNotMatch(html, /팀 상세 미제공/);
 });
 
 test("live to finished fetches final records once and keeps cached records on failure", () => {
   const h = hooks();
   let calls = 0;
-  const result = { data: { data: records }, isError: false, refetch: () => { calls++; } };
+  const options = [];
+  const result = { data: { data: records, meta: { updatedAt: null } }, isError: false,
+    refetch: (o) => { calls++; options.push(o); } };
   const load = loader({ ...leaves, react: h.react,
     "@tanstack/react-query": { useQuery: () => result },
     "./queries": { matchRecordsQuery: () => ({}) },
   });
   const { MatchRecords } = load("@/features/match/MatchRecords");
-  const props = { info: info("live"), tab: "timeline", onTab() {} };
+  const props = { info: info("live"), infoUpdatedAt: 1, tab: "timeline", onTab() {} };
   h.render(MatchRecords, props);
   assert.equal(calls, 0);
-  props.info = info("finished");
+  // Each live match update reads the record once, joining a read already running.
+  props.infoUpdatedAt = 2;
   h.render(MatchRecords, props);
   assert.equal(calls, 1);
+  assert.deepEqual({ ...options[0] }, { cancelRefetch: false });
+  h.render(MatchRecords, props);
+  assert.equal(calls, 1);
+  // The update that brings the finish reads the final record exactly once (Codex 2026-11-11).
+  props.info = info("finished");
+  props.infoUpdatedAt = 3;
+  h.render(MatchRecords, props);
+  assert.equal(calls, 2);
+  assert.equal(options[1], undefined);
+  // A finished match is not re-read by later match updates.
+  props.infoUpdatedAt = 4;
+  h.render(MatchRecords, props);
+  assert.equal(calls, 2);
   result.isError = true;
   const { html } = h.render(MatchRecords, props);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   assert.match(html, /최신 기록으로 갱신하지 못했습니다/);
   assert.match(html, /아직 기록된 이벤트가 없습니다/);
 });
@@ -134,7 +266,7 @@ test("live to finished fetches final records once and keeps cached records on fa
 test("abandoned match exposes timeline only even if URL selects another tab", () => {
   const h = hooks();
   const load = loader({ ...leaves, react: h.react,
-    "@tanstack/react-query": { useQuery: () => ({ data: { data: records }, refetch() {} }) },
+    "@tanstack/react-query": { useQuery: () => ({ data: { data: records, meta: { updatedAt: null } }, refetch() {} }) },
     "./queries": { matchRecordsQuery: () => ({}) },
   });
   const { MatchRecords } = load("@/features/match/MatchRecords");

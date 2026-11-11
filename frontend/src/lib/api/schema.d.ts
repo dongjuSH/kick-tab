@@ -521,7 +521,7 @@ export interface paths {
         };
         /**
          * Read Match Reviews
-         * @description Public member ratings and reviews of a normally finished match (REV-004).
+         * @description Public text reviews and their count, live or normally finished (REV-001·004).
          */
         get: operations["read_match_reviews_api_v1_fixtures__fixture_id__reviews_get"];
         put?: never;
@@ -1121,10 +1121,8 @@ export interface components {
             id: number;
             /** Authornickname */
             authorNickname: string | null;
-            /** Rating */
-            rating: number;
             /** Body */
-            body: string | null;
+            body: string;
             /** Likes */
             likes: number;
             /** Dislikes */
@@ -1156,8 +1154,6 @@ export interface components {
         };
         /** ReviewSummary */
         ReviewSummary: {
-            /** Average */
-            average: number | null;
             /** Count */
             count: number;
         };

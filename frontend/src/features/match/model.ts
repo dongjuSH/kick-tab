@@ -13,10 +13,11 @@ export function minuteText(event: Pick<MatchEvent, "elapsed" | "extra">): string
   return event.extra ? `${event.elapsed}+${event.extra}′` : `${event.elapsed}′`;
 }
 
+// Record names follow MAT-002 / Figma 52:151 (골·교체·경고·퇴장·골 취소).
 const GOALS: Record<string, string> = {
-  "Normal Goal": "득점",
+  "Normal Goal": "골",
   "Own Goal": "자책골",
-  Penalty: "페널티킥 득점",
+  Penalty: "페널티킥 골",
   "Missed Penalty": "페널티킥 실축",
 };
 const CARDS: Record<string, string> = {
@@ -25,20 +26,39 @@ const CARDS: Record<string, string> = {
   "Second Yellow card": "경고 누적 퇴장",
 };
 const VAR: Record<string, string> = {
-  "Goal cancelled": "득점 취소",
-  "Goal confirmed": "득점 인정",
+  "Goal cancelled": "골 취소",
+  "Goal confirmed": "골 인정",
   "Penalty confirmed": "페널티킥 인정",
   "Penalty cancelled": "페널티킥 취소",
   "Card upgrade": "카드 상향",
 };
 
-/** "득점 · 레알 마드리드 · 비니시우스 (도움 벨링엄)", "교체 · PSV · A → B" (A off, B on). */
+export type EventKind = "goal" | "missed" | "subst" | "yellow" | "red" | "cancelled" | "var" | "other";
+
+/** Icon of a timeline record: goal, substitution, yellow card, red card, cancelled goal. */
+export function eventKind(event: Pick<MatchEvent, "type" | "detail">): EventKind {
+  switch (event.type) {
+    case "goal":
+      return event.detail === "Missed Penalty" ? "missed" : "goal";
+    case "subst":
+      return "subst";
+    case "card":
+      return event.detail === "Yellow Card" ? "yellow" : event.detail ? "red" : "other";
+    case "var":
+      return event.detail === "Goal cancelled" ? "cancelled" : "var";
+    default:
+      return "other";
+  }
+}
+
+/** "골 · 레알 마드리드 · 비니시우스 (도움 벨링엄)", "교체 · PSV · A → B" (A off, B on),
+ * "골 취소 · 레알 마드리드 · 비니시우스". */
 export function eventText(event: MatchEvent, teamNames: { home: string; away: string }): string {
   const team = event.side ? teamNames[event.side] : null;
   const join = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ");
   switch (event.type) {
     case "goal": {
-      const kind = GOALS[event.detail ?? ""] ?? "득점";
+      const kind = GOALS[event.detail ?? ""] ?? "골";
       const assist = event.assist && kind !== "페널티킥 실축" ? ` (도움 ${event.assist})` : "";
       return join(kind, team, event.player ? `${event.player}${assist}` : null);
     }
@@ -47,6 +67,7 @@ export function eventText(event: MatchEvent, teamNames: { home: string; away: st
     case "subst":
       return join("교체", team, `${event.player ?? MISSING} → ${event.assist ?? MISSING}`);
     case "var":
+      if (event.detail === "Goal cancelled") return join(VAR["Goal cancelled"], team, event.player);
       return join("VAR", VAR[event.detail ?? ""] ?? event.detail, team, event.player);
     default:
       return join(event.detail, team, event.player);
@@ -109,18 +130,35 @@ export function isRuling(info: MatchInfo): boolean {
   return info.match.finishType === "awarded" || info.match.finishType === "walkover";
 }
 
-/** Areas of the page by state (MAT-001 table). */
+/** Areas of the page by state (MAT-001 table). Before kickoff there is no lineup or
+ * review area (MAT-004 rule 4, REV-001): only head-to-head and recent form. */
 export function areasOf(info: MatchInfo) {
   const status = info.match.status;
-  const beforeKickoff = status === "scheduled" || status === "postponed";
+  const reviews = info.reviewsAvailable;
   return {
     // Timeline / team stats / lineups / player ratings tabs.
     records: status === "live" || status === "finished" || status === "abandoned",
-    // Before kickoff only the lineup is shown (once announced).
-    lineupOnly: beforeKickoff,
     headToHead: info.headToHeadAvailable,
-    reviews: info.reviewsAvailable,
-    // "경기가 종료되면 평점과 후기를 남길 수 있습니다."
-    reviewLater: beforeKickoff || status === "live",
+    // Live and normally finished matches, decided by the server (`review_open`).
+    reviews,
+    // PC: a finished match puts the reviews in a narrow column right of the records;
+    // live matches keep them below (Figma 52:151 / 161:4161). Mobile always stacks.
+    reviewsBeside: reviews && status === "finished",
+  };
+}
+
+/** "도르트문트 2 : 1 라이프치히" preview of a recent-form match (MAT-005): home first. */
+export function formPreview(
+  teamName: string,
+  match: Pick<FormMatch, "opponentName" | "venue" | "goalsFor" | "goalsAgainst">,
+): { home: string; away: string; score: string } {
+  const goal = (value: number | null) => (value === null ? MISSING : String(value));
+  const home = match.venue === "home";
+  return {
+    home: home ? teamName : match.opponentName,
+    away: home ? match.opponentName : teamName,
+    score: home
+      ? `${goal(match.goalsFor)} : ${goal(match.goalsAgainst)}`
+      : `${goal(match.goalsAgainst)} : ${goal(match.goalsFor)}`,
   };
 }

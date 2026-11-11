@@ -38,7 +38,7 @@ export function StatusNotice({ info }: { info: MatchInfo }) {
           noScore
             ? "스코어가 제공되지 않아 —로 표시합니다."
             : "제공사가 기록한 스코어를 그대로 표시합니다.",
-          "행정 종료된 경기에는 평점과 후기를 남길 수 없습니다. 주간 AI 선정 후 상태가 바뀐 경우 목록과 순서는 유지됩니다.",
+          "행정 종료된 경기에는 경기 평가를 제공하지 않습니다. 주간 AI 선정 후 상태가 바뀐 경우 목록과 순서는 유지됩니다.",
         ]}
       />
     );
@@ -55,7 +55,7 @@ export function StatusNotice({ info }: { info: MatchInfo }) {
       return (
         <Box
           title="취소된 경기입니다."
-          lines={[reason ?? "제공사가 취소 사유를 제공하지 않았습니다.", "취소된 경기에는 평점과 후기를 남길 수 없습니다."]}
+          lines={[reason ?? "제공사가 취소 사유를 제공하지 않았습니다.", "취소된 경기에는 경기 평가를 제공하지 않습니다."]}
         />
       );
     case "abandoned":
