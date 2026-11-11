@@ -16,6 +16,7 @@ import httpx
 import pytest
 from pydantic import SecretStr
 from sqlalchemy import text, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.fixture import Fixture
@@ -371,7 +372,7 @@ def test_interrupted_manual_attempt_preserves_remaining_auto_slot(factory):
     assert run("retry", factory, good_model).status == "published"
 
 
-def test_reviews_popular_and_latest_order_with_average(connection):
+def test_reviews_popular_and_latest_order_with_count(connection):
     with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
         kickoff = NOW - timedelta(days=1)
         session.add(
@@ -383,9 +384,9 @@ def test_reviews_popular_and_latest_order_with_average(connection):
         )
         session.flush()
 
-        def review(rating, minutes_ago, likes, dislikes):
+        def review(label, minutes_ago, likes, dislikes):
             row = Review(
-                user_id=uuid.uuid4(), fixture_id=BASE_ID + 50, rating=rating, body=f"r{rating}",
+                user_id=uuid.uuid4(), fixture_id=BASE_ID + 50, body=f"r{label}",
                 created_at=NOW - timedelta(minutes=minutes_ago),
                 updated_at=NOW - timedelta(minutes=minutes_ago),
             )
@@ -409,8 +410,20 @@ def test_reviews_popular_and_latest_order_with_average(connection):
         latest = list_reviews(session, BASE_ID + 50, "latest")
         assert [i.id for i in latest.items] == [newest_few, ratio_mid, ratio_high,
                                                  ratio_tie_more_likes]
-        assert popular.summary.count == 4 and popular.summary.average == 3.5
-        assert list_reviews(session, BASE_ID + 51, "popular").summary.average is None
+        # Text reviews only: the summary is the valid count, no average (REV-004).
+        assert popular.summary.model_dump() == {"count": 4}
+        assert "rating" not in popular.items[0].model_dump()
+        assert list_reviews(session, BASE_ID + 51, "popular").summary.count == 0
+
+        # The body is required and never blank, whatever the whitespace (migration 0015):
+        # the DB agrees with Python's str.strip(), which chat 02 uses to validate.
+        for body in (None, "   ", "\t\n", " ", "　 ", " \r\n"):
+            with pytest.raises(IntegrityError), session.begin_nested():
+                session.add(Review(user_id=uuid.uuid4(), fixture_id=BASE_ID + 50, body=body))
+                session.flush()
+        with session.begin_nested():
+            session.add(Review(user_id=uuid.uuid4(), fixture_id=BASE_ID + 50, body=" 골!\n"))
+            session.flush()
 
 
 def test_both_models_failing_alerts_each_attempt_and_delay_once(factory):

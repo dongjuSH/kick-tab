@@ -30,7 +30,7 @@ from app.services.fixtures import to_summary
 from app.services.head_to_head import ensure_form, ensure_meetings, read_head_to_head
 from app.services.match_detail import BEFORE_KICKOFF, ensure_records, read_records
 from app.services.reference import team_detail_lookup
-from app.services.reviews import ReviewSort, list_reviews, reviews_available
+from app.services.reviews import ReviewSort, list_reviews, review_open
 
 router = APIRouter(prefix="/fixtures", tags=["matches"])
 Db = Annotated[Session, Depends(get_db)]
@@ -61,7 +61,7 @@ def read_match(db: Db, fixture_id: FixtureId) -> MatchInfoResponse:
             season_label=season_label(fixture.season),
             status_long=fixture.status_long_raw,
             status_code=fixture.status_short_raw,
-            reviews_available=reviews_available(fixture),
+            reviews_available=review_open(fixture),
             head_to_head_available=fixture.status in BEFORE_KICKOFF,
         ),
         meta=UpdatedMeta(updated_at=fixture.synced_at),
@@ -72,10 +72,8 @@ def read_match(db: Db, fixture_id: FixtureId) -> MatchInfoResponse:
 def read_match_records(db: Db, fixture_id: FixtureId) -> MatchRecordsResponse:
     """Timeline, team statistics, lineups and provider player ratings (MAT-002·004)."""
     fixture = _fixture(db, fixture_id)
-    now = datetime.now(UTC)
-    ensure_records(db, fixture, now, ApiFootballClient)
-    fixture = _fixture(db, fixture_id)
-    records, fetched_at = read_records(db, fixture, now)
+    ensure_records(db, fixture, datetime.now(UTC), ApiFootballClient)
+    records, fetched_at = read_records(db, _fixture(db, fixture_id))
     return MatchRecordsResponse(data=records, meta=UpdatedMeta(updated_at=fetched_at))
 
 
@@ -98,8 +96,8 @@ def read_match_head_to_head(db: Db, fixture_id: FixtureId) -> HeadToHeadResponse
 def read_match_reviews(
     db: Db, fixture_id: FixtureId, sort: Annotated[ReviewSort, Query()] = "popular"
 ) -> ReviewListResponse:
-    """Public member ratings and reviews of a normally finished match (REV-004)."""
+    """Public text reviews and their count, live or normally finished (REV-001·004)."""
     fixture = _fixture(db, fixture_id)
-    if not reviews_available(fixture):
-        raise ApiError(409, "CONFLICT", "이 경기는 평점과 후기를 제공하지 않습니다.")
+    if not review_open(fixture):
+        raise ApiError(409, "CONFLICT", "이 경기는 경기 평가를 제공하지 않습니다.")
     return ReviewListResponse(data=list_reviews(db, fixture_id, sort))

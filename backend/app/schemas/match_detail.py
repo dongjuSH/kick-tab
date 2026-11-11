@@ -25,8 +25,9 @@ class MatchInfo(ApiModel):
     # Provider wording and code, shown for rulings (e.g. "Technical loss" / AWD).
     status_long: str | None
     status_code: str
-    # Member ratings/reviews are shown only for normally finished matches; rulings are on
-    # hold (P-05) and a match that is no longer finished hides them until it is (P-07).
+    # Match reviews are open (read publicly; members may write, chat 02) from kickoff to a
+    # normal finish on the same match id (REV-001, `review_open`). Closed before kickoff,
+    # for postponed/cancelled/abandoned matches and rulings (AWD/WO).
     reviews_available: bool
     # MAT-005: head-to-head and recent form only before kickoff (scheduled/postponed).
     head_to_head_available: bool
@@ -176,8 +177,8 @@ class ReviewItem(ApiModel):
     id: int
     # Filled from `users` by chat 02 (null until members exist).
     author_nickname: str | None
-    rating: int
-    body: str | None
+    # Text review: 1-300 characters, no star rating (REV, 04 개선).
+    body: str
     likes: int
     dislikes: int
     created_at: datetime
@@ -185,8 +186,7 @@ class ReviewItem(ApiModel):
 
 
 class ReviewSummary(ApiModel):
-    # null when there is no review: never shown as 0 points (REV-004).
-    average: float | None
+    # Valid reviews of the match (one per member). No average is computed (REV-004).
     count: int
 
 

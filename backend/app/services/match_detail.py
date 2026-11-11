@@ -5,13 +5,16 @@ Collection (guide §6.5):
   answers (matches that just finished are read that way), at no extra request;
 - the `fixture_details` job reads recently finished matches still missing a final record;
 - opening a page fetches `/fixtures?id=` once when nothing usable is stored (see
-  `detail_fetch_due`), merging concurrent requests. A failure keeps stored data and only
-  sets `last_failed_at`, which also holds back further attempts for a while.
+  `detail_fetch_due`), merging concurrent requests. Nothing is fetched before kickoff: the
+  lineup is shown from kickoff on (MAT-004 rule 4), so it is never polled ahead of time.
+  A failure keeps stored data and only sets `last_failed_at`, which also holds back further
+  attempts for a while.
 """
 
 import logging
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
+from html import unescape
 from typing import Any
 
 from sqlalchemy import delete, insert, or_, select
@@ -47,9 +50,6 @@ ClientFactory = Callable[[], ApiFootballClient]
 FAILURE_COOLDOWN = timedelta(minutes=5)
 # A live match is re-read on request at most this often (the live sync runs every minute).
 LIVE_REFRESH = timedelta(seconds=90)
-# Lineups are usually published about an hour before kickoff; until then nothing is fetched.
-LINEUP_LEAD = timedelta(minutes=60)
-LINEUP_RECHECK = timedelta(minutes=10)
 # Statuses whose record is final once fetched in that status.
 FINAL_STATUSES = ("finished", "abandoned")
 BEFORE_KICKOFF = ("scheduled", "postponed")
@@ -199,8 +199,7 @@ def detail_fetch_due(fixture: Fixture, row: FixtureDetail | None, now: datetime)
         return not fetched or row.fetched_status != fixture.status
     if fixture.status == "live":
         return not fetched or now - row.fetched_at > LIVE_REFRESH
-    if fixture.status == "scheduled" and fixture.kickoff_at - now <= LINEUP_LEAD:
-        return not fetched or (not row.lineups and now - row.fetched_at > LINEUP_RECHECK)
+    # Scheduled, postponed, cancelled, unknown: no record to read (MAT-004 rule 4).
     return False
 
 
@@ -290,16 +289,23 @@ def _statistics(fixture: Fixture, blocks: list[dict[str, Any]]) -> list[StatRow]
     return rows
 
 
+def _name(value: Any) -> str | None:
+    """Provider name as given, with HTML entities decoded ("O&apos;Reilly" -> "O'Reilly").
+    Names are shown in the provider's English; nothing is translated (MAT-004)."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return unescape(value).strip()
+
+
 def _players(entries: list[dict[str, Any]]) -> list[LineupPlayer]:
     players: list[LineupPlayer] = []
     for entry in entries:
         player = entry.get("player") or {}
-        if not player.get("name"):
+        name = _name(player.get("name"))
+        if name is None:
             continue
         players.append(
-            LineupPlayer(
-                number=player.get("number"), name=player["name"], position=player.get("pos")
-            )
+            LineupPlayer(number=player.get("number"), name=name, position=player.get("pos"))
         )
     return players
 
@@ -315,7 +321,7 @@ def _lineups(fixture: Fixture, blocks: list[dict[str, Any]]) -> list[TeamLineup]
             TeamLineup(
                 side=side,
                 formation=block.get("formation"),
-                coach=(block.get("coach") or {}).get("name"),
+                coach=_name((block.get("coach") or {}).get("name")),
                 start_xi=start,
                 substitutes=_players(block.get("substitutes") or []),
             )
@@ -337,12 +343,13 @@ def _ratings(fixture: Fixture, blocks: list[dict[str, Any]]) -> list[PlayerRatin
             # rating. Players without minutes did not play and are left out.
             if not rating:
                 rating = None
-            if not player.get("name") or (rating is None and not games.get("minutes")):
+            name = _name(player.get("name"))
+            if name is None or (rating is None and not games.get("minutes")):
                 continue
             ratings.append(
                 PlayerRating(
                     player_id=player.get("id"),
-                    name=player["name"],
+                    name=name,
                     photo_url=crest(player.get("photo")),
                     side=side,
                     rating=rating,
@@ -351,29 +358,21 @@ def _ratings(fixture: Fixture, blocks: list[dict[str, Any]]) -> list[PlayerRatin
     return sorted(ratings, key=lambda p: (p.rating is None, -(p.rating or 0), p.name))
 
 
-def _lookup_open(fixture: Fixture, now: datetime) -> bool:
-    """Whether the provider is read for this match now (see `detail_fetch_due`). A failure
-    from an earlier window (e.g. before a postponement) is not offered as retryable."""
-    if fixture.status in BEFORE_KICKOFF:
-        return fixture.status == "scheduled" and fixture.kickoff_at - now <= LINEUP_LEAD
-    return True
-
-
-def _empty_status(fixture: Fixture, fetched: bool, failed: bool, now: datetime) -> BlockStatus:
-    if not fetched and failed and _lookup_open(fixture, now):
+def _empty_status(fixture: Fixture, fetched: bool, failed: bool) -> BlockStatus:
+    # Before kickoff nothing is read, so an old failure (e.g. from a match that was live
+    # before a postponement) is not offered as retryable.
+    if not fetched and failed and fixture.status not in BEFORE_KICKOFF:
         return "unavailable"
     if fixture.status in BEFORE_KICKOFF:
         return "not_yet"
     return "not_provided"
 
 
-def read_records(
-    session: Session, fixture: Fixture, now: datetime
-) -> tuple[MatchRecords, datetime | None]:
+def read_records(session: Session, fixture: Fixture) -> tuple[MatchRecords, datetime | None]:
     row = session.get(FixtureDetail, fixture.id)
     fetched = row is not None and row.fetched_at is not None
     failed = row is not None and row.last_failed_at is not None
-    empty = _empty_status(fixture, fetched, failed, now)
+    empty = _empty_status(fixture, fetched, failed)
 
     events = [
         MatchEvent(
@@ -382,8 +381,8 @@ def read_records(
             side=_side(fixture, e.team_id),
             type=EVENT_TYPES.get(e.type.casefold(), "other"),
             detail=e.detail,
-            player=e.player_name,
-            assist=e.assist_name,
+            player=_name(e.player_name),
+            assist=_name(e.assist_name),
         )
         for e in session.scalars(
             select(FixtureEvent)

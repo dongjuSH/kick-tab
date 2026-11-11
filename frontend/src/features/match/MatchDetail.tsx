@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
+import { cx } from "@/components/ui/cx";
 import { DataState, StateMessage } from "@/components/ui/DataState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { isApiError } from "@/lib/api/errors";
@@ -135,16 +136,32 @@ export function MatchDetail({ id }: { id: number }) {
       )}
       <StatusNotice info={info} />
       {areas.headToHead && <HeadToHeadSection info={info} />}
-      {(areas.records || areas.lineupOnly) && (
-        <MatchRecords info={info} tab={tab} onTab={(value) => setParam("tab", value, "timeline")} />
-      )}
-      {areas.reviews && (
-        <ReviewSection fixtureId={id} sort={sort} onSort={(value) => setParam("sort", value, "popular")} />
-      )}
-      {areas.reviewLater && (
-        <p className="rounded-control bg-subtle p-3 text-small text-fg-secondary">
-          경기가 종료되면 평점과 후기를 남길 수 있습니다.
-        </p>
+      {/* Finished (PC): wide records left, narrow reviews right (384px, Figma 52:151). Live: the
+          reviews below the records at 640px (161:4161). Mobile stacks both. */}
+      {(areas.records || areas.reviews) && (
+      <div
+        className={cx(
+          "grid items-start gap-4 lg:gap-6",
+          areas.reviewsBeside && "lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]",
+          areas.reviews && !areas.reviewsBeside && "lg:grid-cols-[minmax(0,640px)_minmax(0,1fr)]",
+        )}
+      >
+        {areas.records && (
+          <div className={cx("min-w-0", areas.reviews && !areas.reviewsBeside && "lg:col-span-2")}>
+            <MatchRecords
+              info={info}
+              infoUpdatedAt={query.dataUpdatedAt}
+              tab={tab}
+              onTab={(value) => setParam("tab", value, "timeline")}
+            />
+          </div>
+        )}
+        {areas.reviews && (
+          <div className="min-w-0">
+            <ReviewSection fixtureId={id} sort={sort} onSort={(value) => setParam("sort", value, "popular")} />
+          </div>
+        )}
+      </div>
       )}
     </>
   );

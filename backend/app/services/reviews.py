@@ -1,4 +1,8 @@
-"""Public review list and aggregates (REV-004). Writing belongs to chat 02.
+"""Match reviews: the open window (REV-001), public list and count (REV-004).
+
+Reviews are text only: no star rating and no average; the list carries the valid review
+count. Writing (create/edit/delete, one per member and match, body 1-300 characters)
+belongs to chat 02 and must check `review_open` on the server before saving.
 
 Popular order (REV-004 rule 5): reviews with at least 3 reactions first, by like ratio,
 then likes, then newest; the rest after them, newest first. Latest order: newest first.
@@ -15,12 +19,23 @@ from app.schemas.match_detail import ReviewItem, ReviewList, ReviewSummary
 
 ReviewSort = Literal["popular", "latest"]
 POPULAR_MIN_REACTIONS = 3
-# Normal results only: rulings are on hold (P-05) and abandoned/cancelled/changed matches
-# hide their reviews until they are finished again (P-07).
+# Normal results only. Rulings (AWD/WO) stay closed (P-05, recommended option applied
+# 2026-11-11: a result decided off the pitch is not reviewed), and abandoned/cancelled/
+# changed matches hide their reviews until they are finished normally again (P-07).
 REVIEWABLE_FINISH_TYPES = ("normal", "aet", "pen")
+# Live codes closed like a stopped match (recommended option 2026-11-11): SUSP is a
+# suspension whose resumption is uncertain (it often ends as ABD). INT, a short
+# interruption inside the match, stays open. Reviews reappear when play resumes (P-07).
+CLOSED_LIVE_CODES = frozenset({"SUSP"})
 
 
-def reviews_available(fixture: Fixture) -> bool:
+def review_open(fixture: Fixture) -> bool:
+    """REV-001: reviews are read publicly and may be written from kickoff (live) to a
+    normal finish, on the same match id, so a review written live stays after the finish.
+    Closed: scheduled, postponed, cancelled, abandoned, suspended (SUSP), rulings (AWD/WO)
+    and unknown. Open live codes: 1H·HT·2H·ET·BT·P·LIVE·INT."""
+    if fixture.status == "live":
+        return (fixture.status_short_raw or "").strip().upper() not in CLOSED_LIVE_CODES
     return fixture.status == "finished" and fixture.finish_type in REVIEWABLE_FINISH_TYPES
 
 
@@ -63,7 +78,6 @@ def list_reviews(session: Session, fixture_id: int, sort: ReviewSort) -> ReviewL
             id=review.id,
             # `users` arrives with chat 02, which joins the nickname here.
             author_nickname=None,
-            rating=review.rating,
             body=review.body,
             likes=int(up),
             dislikes=int(down),
@@ -72,6 +86,4 @@ def list_reviews(session: Session, fixture_id: int, sort: ReviewSort) -> ReviewL
         )
         for review, up, down in rows
     ]
-    count = len(items)
-    average = round(sum(i.rating for i in items) / count, 1) if count else None
-    return ReviewList(summary=ReviewSummary(average=average, count=count), items=items)
+    return ReviewList(summary=ReviewSummary(count=len(items)), items=items)
