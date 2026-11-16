@@ -5,17 +5,16 @@ import { Icon } from "@/components/ui/Icon";
 import { cx } from "@/components/ui/cx";
 import type { SeasonItem } from "@/lib/api/types";
 
-/** "2026-27 · 현재 시즌", "2025-26 · 이전 시즌" (Figma 65:1616 / 65:1633). */
-function optionLabel(season: SeasonItem, seasons: readonly SeasonItem[]): string {
-  if (season.current) return `${season.label} · 현재 시즌`;
-  const current = seasons.find((s) => s.current);
-  return current && season.season === current.season - 1 ? `${season.label} · 이전 시즌` : season.label;
+/** "2025-26 시즌" on the trigger and every option (HIST-001 rule 4, Figma 65:1616 / 65:1633). */
+function seasonText(season: SeasonItem): string {
+  return `${season.label} 시즌`;
 }
 
 /**
  * Season dropdown (HIST-002, CMP-003; Figma trigger 93:3198 220×44, list 65:1616): past
- * results and standings (chat 06). `value` null = the URL named a season the service does
- * not offer: the trigger asks for a choice instead of showing another season.
+ * results and standings (chat 06) — both Figma screens use the same "2025-26 시즌" labels.
+ * `value` null = the URL named a season the service does not offer: the trigger asks for a
+ * choice instead of showing another season.
  * A listbox popover: arrows/Home/End move, Enter/Space picks, Escape or an outside press
  * closes and focus returns to the trigger.
  */
@@ -89,7 +88,7 @@ export function SeasonSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? `${id}-list` : undefined}
-        aria-label={`시즌 선택: ${selected ? `${selected.label} 시즌` : "선택 필요"}`}
+        aria-label={`시즌 선택: ${selected ? seasonText(selected) : "선택 필요"}`}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -100,7 +99,7 @@ export function SeasonSelect({
         className="flex min-h-11 w-full items-center gap-2 rounded-control border border-line-strong bg-surface px-3 text-body text-fg hover:bg-subtle"
       >
         <span className={cx("min-w-0 flex-1 truncate text-center", !selected && "text-fg-muted")}>
-          {selected ? `${selected.label} 시즌` : "시즌 선택"}
+          {selected ? seasonText(selected) : "시즌 선택"}
         </span>
         <Icon name="chevron-down" />
       </button>
@@ -135,7 +134,7 @@ export function SeasonSelect({
                   index === active && "ring-2 ring-focus ring-inset",
                 )}
               >
-                {optionLabel(season, seasons)}
+                {seasonText(season)}
               </li>
             ))}
           </ul>

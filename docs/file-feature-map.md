@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-16 · 05 지난 경기 개선(Codex 교차 검증 통과·`dev` 병합):** 프런트 `app/results/page.tsx`(보이는 제목·소개 문구 제거, sr-only H1), `components/common/SeasonSelect.tsx`(트리거·옵션 '2025-26 시즌' 공통 표기 — 리그 순위 함께), `components/common/TeamSearch.tsx`(`placeholder` 옵션 삭제, 자리표시자 공통), `features/results/ResultsSection.tsx`(메인과 같은 검색 묶음·선택 시즌 보조 문구, 시즌 버튼 모바일 175px·초기화 76px), `features/favorites/FavoriteTeamButtons.tsx`(새: '★ 관심 팀' 버튼 줄, 메인·지난 경기 공통), `features/schedule/ScheduleSection.tsx`(관심 팀 버튼 줄을 공통 컴포넌트로 교체 — 출력 동일), `tests/results.test.mjs`(시즌 옵션 표기·관심 팀 버튼 테스트).
+
 **2026-11-11 · 04 경기 상세 개선(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `migrations/versions/20261111_0015_text_reviews.py`(새: `reviews.rating` 삭제·body 필수·Python 공백 기준 공백 금지), `models/review.py`(`REVIEW_BODY_SPACE_CLASS`), `services/reviews.py`(`review_open` — 진행 중(SUSP 제외)·일반 종료, 건수만), `schemas/match_detail.py`(`ReviewItem.rating`·`ReviewSummary.average` 삭제), `services/match_detail.py`(킥오프 전 조회 삭제, `_name()` HTML 엔티티 해제), `api/routes/matches.py`, 테스트 `test_review_window.py`(새)·`test_match_detail.py`·`test_review_regressions.py`·`test_top5_db.py`. 프런트 `features/match/icons.tsx`(새: 타임라인·엄지·주의사항 벡터 아이콘), `Scoreboard`(로고+팀명 한 링크), `MatchRecords`(기록 헤더·아이콘 타임라인·선수 평점 팀별 카드·경기 정보 갱신 연동 재조회), `HeadToHeadSection`(좌우 배치·최근 5경기 미리보기), `ReviewSection`·`ReviewGuidance`('경기 평가', 건수), `MatchDetail`(종료 384px·진행 중 640px 배치), `model.ts`(`eventKind`·`formPreview`·`areasOf`), `queries.ts`(기록 자체 타이머 삭제), `StatusNotice` 문구, 삭제 `public/icons/thumbs.svg`·`Icon`의 thumbs, `tests/match-regressions.test.mjs`. 선수명은 제공사 영문 유지(사용자 결정).
 
 **2026-11-10 · 03 비회원 개선(Codex 교차 검증 3차 통과·`dev` 병합):** 백엔드 `services/fixtures.py`(`SyncState`에 `checked_at`·`checked_through`·`delayed`, `SYNC_DELAY` 75분)·`schemas/schedule.py`(`ScheduleMeta`에 `checkedAt`·`checkedThrough`·`delayed`)·`api/routes/schedule.py`(`_schedule_meta()`), `seed/team_aliases.json`(하위 리그 프로 구단 92팀 한국어 이름, 검색 전용). 프런트 `app/page.tsx`(sr-only H1, 두 구간 그리드, `StickyPanel`), `components/layout/StickyPanel.tsx`(새), `ui/chip.tsx`(`chip.ts`에서 이름 변경, `ChipLabel` 추가), `ui/Dialog.tsx`(`closeButton`·`scrollArea`), `common/MatchCard.tsx`(별표·카드 아래 링크·상태 확인 중 '—'·164px 상태 열), `common/MatchStatusBadge.tsx`(`awaiting`), `common/TeamSearch.tsx`(48px 입력·SVG 돋보기·30px X·`candidates`), `common/CompetitionFilter.tsx`(X 없는 하단 버튼·딤 포인터·목록만 스크롤), `features/schedule/`(`ScheduleSection` 지연 안내·간격·관심 팀 버튼·`pendingReset`, `DateBar` 52px·1/5 폭·짧은 상태·위치 복원, `useScheduleParams` `withTeam`·`withoutTeam`·`nearestMatchDate`), `features/favorites/`(`FavoriteSchedule` Guest Favorites 다섯 상태, `FavoriteStar`(새), `FavoriteToggle` `FAVORITE_REFUSALS`), `features/standings/`(`MainStandings` 경기·승무패·승점·끌기/휠 이동, 'Bundesliga'), `lib/hooks/useNow.ts`(새), `lib/format/match.ts`(`awaitingStatus`), 칩 사용처 `MainNews`·`ResultsSection`·`TeamsSection`. 테스트 `match-regressions.test.mjs`(+4)·`standings.test.mjs`, 백엔드 `test_schedule_rules.py`·`test_schedule_sources.py`.
@@ -191,7 +193,7 @@
 | 파일 | 역할 | 상태 |
 | --- | --- | --- |
 | `package.json` | 스크립트(`dev`·`build`·`lint`·`test`(04, Node 테스트 실행기)·`gen:api`), 의존성(Next 16.4.3, React 19.3.0, TanStack Query 5.105.0, openapi-typescript 7.13.0) | 완료 |
-| `tests/results.test.mjs` | 05 테스트 6개(시즌 변경·팀 해제·초기화 URL, 미지원 시즌, 잘못된 팀·대회·페이지, 페이지 분할 번호, 시즌 드롭다운 표기) | 완료(05) |
+| `tests/results.test.mjs` | 05 테스트 7개(시즌 변경·팀 해제·초기화 URL, 미지원 시즌, 잘못된 팀·대회·페이지, 페이지 분할 번호, 시즌 드롭다운 트리거·옵션 '2025-26 시즌' 표기, 공통 관심 팀 버튼 줄) | 완료(05) |
 | `tests/standings.test.mjs` | 06 테스트 8개(URL 기본값·시즌/리그 변경 시 유형 유지·유형은 replace, 미지원 리그·시즌·유형, 표기 규칙, `dataStatus` — 0건 뒤 갱신 실패는 partial, 메인 칩 'BUN', `DataState` `partialAction` 마크업) |
 | `tests/teams.test.mjs` | 07 테스트 6개(URL 기본값·리그/검색 변경 시 첫 페이지·replace, 잘못된 리그·페이지·검색어, `FavoriteToggle` 5개 꽉 참 마크업, 다른 탭 선저장 시 저장소 알림, `DataState` `emptyAction` 마크업) |
 | `tests/team-detail.test.mjs` | 08 테스트 7개(포지션순 기본 정렬, 누락값 두 방향 맨 뒤·같은 선수 집합, 정렬 전환, '—' 표시, 시즌 기록 행, 이적 유형 문구·후반기 안내, 경기장 표기) |
@@ -210,7 +212,7 @@
 | `providers.tsx` | TanStack Query 클라이언트(4xx 재시도 안 함) | `layout.tsx` | 완료 |
 | `page.tsx` | 메인: 일정(Suspense)·관심 팀 일정·뉴스·5대 리그 간소 순위 그리드(데스크톱 오른쪽 열 관심 팀 아래, 모바일 뉴스 다음) | `features/schedule`·`favorites`·`news`·`standings` | 완료(06 간소 순위) |
 | `news/original/page.tsx` | `/news/original?id=` 원문 이동 전환 화면(NEWS-004) | `OriginalRedirect` | 완료 |
-| `results/page.tsx` | `/results` 지난 경기(제목·설명, Suspense 안 `ResultsSection`) | `features/results` | 완료(05) |
+| `results/page.tsx` | `/results` 지난 경기(05 개선: 보이는 제목·소개 문구 없이 필터 카드부터, sr-only H1, Suspense 안 `ResultsSection`) | `features/results` | 완료(05) |
 | `standings/page.tsx` | `/standings?league=&season=&type=` 리그 순위(제목·설명, Suspense 안 `StandingsSection`) | `features/standings` | 완료(06) |
 | `teams/page.tsx` | `/teams?league=&q=&page=` 팀 탐색(제목·설명, Suspense 안 `TeamsSection`) | `features/teams` | 완료(07) |
 | `teams/[id]/page.tsx` | `/teams/[id]` 팀 상세(정적 셸 + Suspense 안 `params`, 숫자 아닌 ID는 404 페이지) | `features/team-detail` | 완료(08) |
@@ -242,8 +244,8 @@
 | `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크 | 일정·관심 팀(04·05·08 재사용) | 완료 |
 | `components/common/MatchStatusBadge.tsx` | 상태 뱃지(진행 중 `63′`·예정/종료 회색·변경 주황) | `MatchCard`, TOP 5 | 완료 |
 | `components/common/CompetitionFilter.tsx` | 대회 단일 버튼 + 선택창(체크 초안·적용·취소·'전체 대회 보기'·0개 적용 불가), 데스크톱 560px·모바일 시트, 05: `season`(그 시즌 데이터 없음 표기) | 메인·지난 경기 | 완료 |
-| `components/common/TeamSearch.tsx` | 팀 검색 combobox(별칭·여러 후보·일치 없음), ×·전체 삭제 시 선택 해제, 05: `season`·`placeholder` | 메인·지난 경기(07 팀 탐색은 목록 거르기라 쓰지 않고 별칭 매칭 `match_teams()`만 공유) | 완료 |
-| `components/common/SeasonSelect.tsx` | 시즌 드롭다운(Figma 93:3198·65:1616, listbox 팝오버·키보드·포커스 복귀, 미지원 시즌은 '시즌 선택') | 지난 경기(06 재사용) | 완료(05) |
+| `components/common/TeamSearch.tsx` | 팀 검색 combobox(별칭·여러 후보·일치 없음), ×·전체 삭제 시 선택 해제, 05: `season`(선택 시즌 후보), 라벨 '팀 일정 검색'·`description` 보조 문구 묶음을 메인·지난 경기가 함께 씀(05 개선에서 `placeholder` 옵션 삭제) | 메인·지난 경기(07 팀 탐색은 목록 거르기라 쓰지 않고 별칭 매칭 `match_teams()`만 공유) | 완료 |
+| `components/common/SeasonSelect.tsx` | 시즌 드롭다운(Figma 93:3198·65:1616, 트리거·옵션 '2025-26 시즌' 표기, listbox 팝오버·키보드·포커스 복귀, 미지원 시즌은 '시즌 선택') | 지난 경기·리그 순위 | 완료(05, 2026-11-16 표기 개선) |
 | `components/common/NewsCard.tsx` | 뉴스 카드(분류·제목·설명·도메인·상대 시각·원문 보기), `NEWS_BADGE_LABELS` | `MainNews`(08 재사용) | 완료(02가 북마크 버튼 추가) |
 | `components/layout/SiteHeader.tsx` | 고정 헤더(본문 건너뛰기 링크, 로고, 메뉴, 인증 영역, 모바일 메뉴) + TOP 5 띠, 경로를 읽는 부분은 `<Suspense>`(04) | `layout.tsx` | 완료 |
 | `components/layout/MainNav.tsx` | 데스크톱 메뉴 4개, 현재 페이지 밑줄, `MainNavFallback`(04, 경로 확인 전 같은 메뉴) | `nav.ts` | 완료 |
@@ -272,7 +274,7 @@
 | `match/icons.tsx` | 04 개선: 인라인 벡터 아이콘 `EventIcon`(골·실축·교체·경고·퇴장·골 취소·VAR·기타), `ThumbIcon`, `NoticeIcon` | 경기 상세 | 완료(04) |
 | `match/model.ts` | 이벤트 종류 `eventKind`·문구 `eventText`('골'·'골 취소' 등), 통계 한국어 표기·막대 비율, 포지션, 승무패 뱃지, 상태별 영역 `areasOf`(`reviewsBeside`), 최근 경기 미리보기 `formPreview` | 위 컴포넌트 | 완료(04, 개선 반영) |
 | `match/queries.ts` | `matchInfoQuery`(진행 중 60초), `matchRecordsQuery`(자체 타이머·포커스 재조회 없음 — `MatchRecords`가 경기 정보 갱신에 맞춰 재조회, 킥오프 전 조회 없음), `headToHeadQuery`, `reviewsQuery` | `apiFetch` | 완료(04) |
-| `results/ResultsSection.tsx` | 지난 경기: 시즌·대회·팀 검색·관심 팀 버튼, 선택 팀 상세 링크/미제공 표시, 날짜별 경기 카드·페이지 분할, 후보 없음·결과 없음·조회 실패·미수집·일부 미적재·미지원 시즌·잘못된 URL 조건·페이지 초과 구분, 하이드레이션 대기 | `useResultsParams`·`queries`·공통 컴포넌트 | 완료(05) |
+| `results/ResultsSection.tsx` | 지난 경기(05 개선: 메인과 같은 검색 묶음 + 보조 문구 '선택한 시즌의 지난 경기를 팀 이름으로 검색합니다.', 공통 `FavoriteTeamButtons`, 시즌 버튼 모바일 175px·sm 220px, 초기화 76px): 시즌·대회·팀 검색·관심 팀 버튼, 선택 팀 상세 링크/미제공 표시, 날짜별 경기 카드·페이지 분할, 후보 없음·결과 없음·조회 실패·미수집·일부 미적재·미지원 시즌·잘못된 URL 조건·페이지 초과 구분, 하이드레이션 대기 | `useResultsParams`·`queries`·공통 컴포넌트 | 완료(05) |
 | `results/useResultsParams.ts` | URL 조건(`season`·`competitions`·`team`·`page`), 생략과 잘못된 값 구분(`seasonInvalid`·`invalid`), 조건 변경 시 첫 페이지·push, 시즌 유지 초기화 | `ResultsSection` | 완료(05) |
 | `results/queries.ts` | `seasonsQuery`(`GET /seasons`, 06 재사용), `resultsQuery` | `apiFetch` | 완료(05) |
 | `standings/StandingsSection.tsx` | 리그 순위: 시즌 드롭다운·리그 탭·팀 표·선수 순위(리그·시즌별 다시 마운트 → 더 보기 초기화), 미지원 리그·시즌 안내, 하이드레이션 대기 | `useStandingsParams`·`StandingsTable`·`PlayerRankings` | 완료(06) |
@@ -292,7 +294,7 @@
 | `team-detail/TeamNews.tsx` | 팀 뉴스(`NewsCard`, 6개씩 더 보기, 갱신 실패+빈 목록 함께 안내·'다시 확인') | `teamNewsQuery` | 완료(08) |
 | `team-detail/model.ts` | 탭·시즌 선택, 포지션 표기·정렬(`sortPlayers`·`nextSort`), 누락 표시(`statText`·`ratingText`), 시즌 기록 행, 이적 유형 문구·시작 전 안내, 경기장 표기 | — | 완료(08) |
 | `team-detail/queries.ts` | `teamOverviewQuery`(404·503 재시도 없음)·`teamFixturesQuery`(진행 경기 폴링)·`teamSquadQuery`·`teamSeasonStatsQuery`·`teamTransfersQuery`·`teamNewsQuery`(무한 조회) | `apiFetch` | 완료(08) |
-| `schedule/ScheduleSection.tsx` | 메인 일정(05: 하이드레이션 전 `SectionSkeleton`): 날짜 보기와 팀 21일 날짜별 보기(기본 6개·한 번에 전체 보기), 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 | 아래 파일, `MatchCard` | 완료 |
+| `schedule/ScheduleSection.tsx` | 메인 일정(05: 하이드레이션 전 `SectionSkeleton`, 05 개선: 관심 팀 버튼 줄을 공통 `FavoriteTeamButtons`로): 날짜 보기와 팀 21일 날짜별 보기(기본 6개·한 번에 전체 보기), 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 | 아래 파일, `MatchCard` | 완료 |
 | `schedule/useScheduleParams.ts` | URL 조건(`date`·`competitions`·`team`·`from`), `selectTeam`·`clearTeam`(새 팀은 전체 대회, 첫 팀 직전 날짜·대회 보존·해제 시 복원 — `withTeam`·`withoutTeam`), `nearestMatchDate`(대회 적용 시 미확인 날짜를 건너뛴 가장 가까운 확인된 경기일), push/replace 규칙, `useKstToday()`(KST 자정 전환) | `ScheduleSection` | 완료 |
 | `schedule/queries.ts` | `competitionsQuery`, `fixturesByDateQuery`, `favoriteScheduleQuery`, `teamScheduleQuery`, `liveRefetchInterval`(진행 60초·임박 진입 시 시작·숨김 탭 정지, 04 경기 상세도 사용) | `apiFetch` | 완료 |
 | `schedule/DateBar.tsx` | 21일 날짜 막대(어제·오늘부터 시작)(데스크톱 화살표·모바일 터치 스크롤) | `ScheduleSection` | 완료 |
@@ -300,6 +302,7 @@
 | `favorites/store.ts`·`useFavorites.ts` | 비회원 관심 팀 localStorage(`kt-fav-guest`, 최대 5개, 저장 불가 처리, 다른 탭 반영, 07: 등록·해제 직전 더 새 목록을 발견하면 모든 구독자에 알림 `latest()`) | 관심 팀 UI | 완료(02가 회원 DB 동기화) |
 | `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시 — 누른 직후 목록에 묶이고 목록이 바뀌면 지움, 07: 5개가 차면 다른 팀 비활성 '최대 5개까지 등록할 수 있어요') | 07 사용, 08 사용 예정 | 완료(07) |
 | `favorites/FavoriteSchedule.tsx` | 메인 관심 팀 패널(Figma Guest Favorites 306:6220): n/5·팀 추가(`TeamSearch`, 등록 가능 팀만)·빈 상태·등록 목록 해제·5팀 제한·저장 실패 재시도, 팀별 진행 중·가장 가까운 예정 1경기 요약, 일부 실패·재조회 실패 안내 | `favoriteScheduleQuery`, `useFavorites` | 완료 |
+| `favorites/FavoriteTeamButtons.tsx` | 팀 검색 아래 '★ 관심 팀' + 파란 글자 버튼(44px), 다시 누르면 해제, 선택돼도 같은 모양·`aria-pressed`, 팀이 없으면 표시 안 함(Figma 49:57·61:883) | 메인 일정·지난 경기 | 완료(05 개선) |
 | `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) | `MatchCard` | 완료 |
 | `news/MainNews.tsx` | 주요 뉴스(분류 칩, 6개씩 더 보기, 추가 조회·재조회 실패 시 기존 기사 유지, 출처 안내) | `NewsCard` | 완료 |
 | `news/OriginalRedirect.tsx` | 원문 확인 후 이동, 404·410만 접근 불가 안내 | `/news/{id}/link` | 완료 |

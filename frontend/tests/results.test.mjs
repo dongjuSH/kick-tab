@@ -107,14 +107,39 @@ test("pagination: three numbers, first/last reachable, ends disabled", () => {
   assert.deepEqual(labels(render(5, 9)), [1, 4, 5, 6, 9]);
 });
 
-test("season select names current and previous seasons and never shows a replacement", () => {
-  const { SeasonSelect } = loader()("@/components/common/SeasonSelect");
+test("season select shows '2025-26 시즌' on the trigger and options, never a replacement", () => {
   const seasons = [
     { season: 2026, label: "2026-27", current: true },
     { season: 2025, label: "2025-26", current: false },
   ];
+  const { SeasonSelect } = loader()("@/components/common/SeasonSelect");
   const html = (value) => renderToStaticMarkup(React.createElement(SeasonSelect, { seasons, value, onChange: () => {} }));
-  assert.match(html(2025), /2025-26 시즌/);
+  assert.match(html(2025), />2025-26 시즌</);
   assert.match(html(null), /시즌 선택/);
   assert.doesNotMatch(html(null), /2026-27 시즌/);
+
+  // Opened list (the `open` state forced on): every option reads "YYYY-YY 시즌" only.
+  const opened = loader({
+    react: { ...React, useState: (initial) => [initial === false ? true : initial, () => {}], useEffect: () => {} },
+  })("@/components/common/SeasonSelect").SeasonSelect;
+  const list = renderToStaticMarkup(React.createElement(opened, { seasons, value: 2026, onChange: () => {} }));
+  const options = [...list.matchAll(/role="option"[^>]*>([^<]*)</g)].map((m) => m[1]);
+  assert.deepEqual(options, ["2026-27 시즌", "2025-26 시즌"]);
+  assert.doesNotMatch(list, /현재 시즌|이전 시즌/);
+});
+
+test("favourite team buttons: one row for the schedule and past results", () => {
+  const { FavoriteTeamButtons } = loader()("@/features/favorites/FavoriteTeamButtons");
+  const teams = [
+    { id: 50, nameKo: "맨체스터 시티", nameEn: "Manchester City", crestUrl: null, detailAvailable: true },
+    { id: 48, nameKo: null, nameEn: "West Ham", crestUrl: null, detailAvailable: false },
+  ];
+  const render = (activeId) =>
+    renderToStaticMarkup(React.createElement(FavoriteTeamButtons, { teams, activeId, onSelect: () => {}, label: "관심 팀 지난 경기" }));
+  const html = render(48);
+  assert.match(html, /role="group" aria-label="관심 팀 지난 경기"/);
+  assert.match(html, /★<\/span>관심 팀/);
+  assert.match(html, /aria-pressed="false"[^>]*>맨체스터 시티</);
+  assert.match(html, /aria-pressed="true"[^>]*>West Ham</);
+  assert.equal(renderToStaticMarkup(React.createElement(FavoriteTeamButtons, { teams: [], activeId: null, onSelect: () => {}, label: "x" })), "");
 });

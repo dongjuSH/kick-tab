@@ -1,5 +1,19 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-16 (월) — 05 지난 경기 개선
+
+브랜치 `feat/05-results`(최신 `dev` 29b5aa7 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 통과(지적 없음). 기능 명세서 v1.10 HIST-001 규칙 4·HIST-002, PRD v1.10 13장, 유저 플로우 v1.9 UF-09, Figma `61:883`·`53:995`·`65:1616` 기준.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 상단 | `app/results/page.tsx` | 최상단 소개 문구 제거, 보이는 제목 대신 sr-only H1 — 카드가 헤더 아래 PC 32px·모바일 24px에서 시작 |
+| 시즌 표기 | `components/common/SeasonSelect.tsx`(`seasonText`, 옛 `optionLabel` 삭제) | 트리거·옵션 '2025-26 시즌'. 리그 순위 Figma(`53:1353`·`61:1653`)도 같은 형식이라 표기 옵션 없이 공통 변경(리그 순위 모바일 전체 폭 유지) |
+| 팀 검색 | `features/results/ResultsSection.tsx`, `components/common/TeamSearch.tsx`(`placeholder` 옵션 삭제) | 메인 일정과 같은 묶음(라벨·보조 문구·48px 입력·돋보기·44px X), 보조 문구만 선택 시즌 안내, 검색 범위는 선택 시즌 유지. 시즌 버튼 모바일 175px·sm 220px, 초기화 76px(Figma) |
+| 관심 팀 버튼 | `features/favorites/FavoriteTeamButtons.tsx`(새), `features/schedule/ScheduleSection.tsx` | Figma 61:883의 '★ 관심 팀' 줄을 메인과 같은 컴포넌트로(메인 출력 동일), 지난 경기의 칩 모양 줄 삭제 |
+| 테스트 | `tests/results.test.mjs` | 시즌 옵션 표기('현재/이전 시즌' 없음), 공통 관심 팀 버튼 줄 |
+
+검수: 브라우저 1920·375·320에서 Figma 좌표 대조(PC 시즌 220×44·라벨 141·입력 195/48, 모바일 시즌 175·초기화 76), 메인·지난 경기 검색 묶음 계산 스타일 동일, 2025-26 '레알'(5팀)·'Man City'·'번리'(42경기·팀 상세 미제공)·'Aberdeen', 2026-27 'Aberdeen' 일치 없음·'번리' EFL컵 2경기, 시즌 키보드 조작·전환 시 팀·대회 유지와 첫 페이지, 리그 순위 표기·전환, 초기화·URL·뒤로 가기·상세 이동·미지원 시즌, 콘솔 오류 없음. 백엔드 ruff·pytest 307(DB 포함 377)·alembic check, 프런트 tsc·lint·테스트 47·build. 외부 API 1회(과거 경기 상세 첫 열람 보충, Codex 검증 0회).
+
 ## 2026-11-11 (수) — 04 경기 상세 개선
 
 브랜치 `feat/04-match-detail`(최신 `dev` d5ee55a 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 2회(1차 수정 필요 4건(중요 2·경미 2) → 보완 후 통과). 기획 문서(PRD·기능 명세서 v1.10)의 선수명 영문 유지·평가 정책 확정 문구는 Codex가 개정.

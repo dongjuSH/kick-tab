@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { StateMessage } from "@/components/ui/DataState";
 import { Pagination } from "@/components/ui/Pagination";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { ChipLabel, chipClass } from "@/components/ui/chip";
+import { FavoriteTeamButtons } from "@/features/favorites/FavoriteTeamButtons";
 import { useFavorites } from "@/features/favorites/useFavorites";
 import { ListSkeleton, SectionSkeleton } from "@/features/schedule/ScheduleSection";
 import { ScheduleNotice, failedNames } from "@/features/schedule/ScheduleNotice";
@@ -200,8 +200,9 @@ export function ResultsSection() {
     >
       <div className="flex items-center gap-3">
         {seasons.data ? (
+          // Figma 53:995 / 61:883: 175px on mobile, 220px from sm; shrinks at 320px.
           <SeasonSelect
-            className="min-w-0 max-w-[220px]"
+            className="min-w-0 max-w-[175px] sm:max-w-[220px]"
             seasons={seasons.data}
             value={unsupported ? null : season}
             onChange={(next) => params.update({ season: next })}
@@ -214,10 +215,10 @@ export function ResultsSection() {
             </Button>
           </p>
         ) : (
-          <Skeleton className="h-11 w-full max-w-[220px]" />
+          <Skeleton className="h-11 w-full max-w-[175px] sm:max-w-[220px]" />
         )}
         <span className="flex-1" />
-        <Button variant="ghost" className="shrink-0 whitespace-nowrap" onClick={reset}>
+        <Button variant="ghost" className="min-w-[76px] shrink-0 whitespace-nowrap" onClick={reset}>
           초기화
         </Button>
       </div>
@@ -241,37 +242,24 @@ export function ResultsSection() {
           ) : (
             <Skeleton className="h-11 w-full" />
           )}
-          {/* Remounted by a reset: also clears a typed term that never selected a team. */}
-          <TeamSearch
-            key={resetKey}
-            selected={selectedTeam}
-            onSelect={selectTeam}
-            season={season}
-            placeholder="팀 검색 · 맨시티, Man City"
-          />
-          {favoriteTeams.length > 0 && (
-            <div
-              className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]"
-              role="group"
-              aria-label="관심 팀 지난 경기"
-            >
-              <span className="w-[54px] shrink-0 text-small text-fg-muted">관심 팀</span>
-              {favoriteTeams.map((team) => {
-                const active = params.team === team.id;
-                return (
-                  <button
-                    key={team.id}
-                    type="button"
-                    aria-pressed={active}
-                    className={chipClass(active)}
-                    onClick={() => selectTeam(active ? null : team)}
-                  >
-                    <ChipLabel>{teamName(team)}</ChipLabel>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          {/* The main schedule's search group (Figma 61:883 '공통 팀 검색 · 지난 경기'): label,
+              help, field and the favourite buttons 6px apart; the help names the season scope.
+              Remounted by a reset: also clears a typed term that never selected a team. */}
+          <div className="flex flex-col gap-1.5">
+            <TeamSearch
+              key={resetKey}
+              selected={selectedTeam}
+              onSelect={selectTeam}
+              season={season}
+              description="선택한 시즌의 지난 경기를 팀 이름으로 검색합니다."
+            />
+            <FavoriteTeamButtons
+              teams={favoriteTeams}
+              activeId={params.team}
+              onSelect={selectTeam}
+              label="관심 팀 지난 경기"
+            />
+          </div>
           {selectedTeam && <TeamLine team={selectedTeam} />}
         </div>
       )}
