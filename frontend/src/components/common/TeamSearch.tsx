@@ -35,14 +35,12 @@ export function TeamSearch({
   onSelect,
   description,
   season = null,
-  placeholder = "예: 맨시티, 레알 마드리드, Bayern Munich",
   candidates,
 }: {
   selected: TeamRef | null;
   onSelect: (team: TeamRef | null) => void;
   description?: string;
   season?: number | null;
-  placeholder?: string;
   /** Narrows the candidates (main favourites: teams that can be registered and are not yet). */
   candidates?: (team: TeamRef) => boolean;
 }) {
@@ -114,7 +112,7 @@ export function TeamSearch({
             aria-describedby={description ? `${listId}-help` : undefined}
             aria-activedescendant={showList && results.length ? optionId(active) : undefined}
             autoComplete="off"
-            placeholder={placeholder}
+            placeholder="예: 맨시티, 레알 마드리드, Bayern Munich"
             maxLength={40}
             value={text}
             onChange={(event) => {

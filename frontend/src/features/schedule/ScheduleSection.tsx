@@ -8,6 +8,7 @@ import { TeamSearch } from "@/components/common/TeamSearch";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cx } from "@/components/ui/cx";
+import { FavoriteTeamButtons } from "@/features/favorites/FavoriteTeamButtons";
 import { useFavorites } from "@/features/favorites/useFavorites";
 import { isApiError } from "@/lib/api/errors";
 import { useHydrated } from "@/lib/hooks/useHydrated";
@@ -335,29 +336,7 @@ export function ScheduleSection() {
         <TeamSearch key={resetKey} selected={selectedTeam} onSelect={selectTeam}
           description="선택한 팀의 지난 3일~향후 17일 경기를 모아 봅니다."
         />
-        {favoriteTeams.length > 0 && (
-          // Figma 49:57: "★ 관심 팀" then the team names as blue text buttons (44px targets).
-          <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]" role="group" aria-label="관심 팀 일정">
-            <span className="flex shrink-0 items-center gap-1 text-small text-fg-secondary">
-              <span aria-hidden className="text-action">★</span>관심 팀
-            </span>
-            {favoriteTeams.map((team) => {
-              const active = params.team === team.id;
-              return (
-                <button
-                  key={team.id}
-                  type="button"
-                  aria-pressed={active}
-                  // Same look selected or not (Figma 225:1768); the team's view shows the choice.
-                  className="inline-flex min-h-11 shrink-0 items-center rounded-control px-1.5 text-small text-action hover:underline"
-                  onClick={() => selectTeam(active ? null : team)}
-                >
-                  {teamName(team)}
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <FavoriteTeamButtons teams={favoriteTeams} activeId={params.team} onSelect={selectTeam} label="관심 팀 일정" />
         </div>
       </div>
 
