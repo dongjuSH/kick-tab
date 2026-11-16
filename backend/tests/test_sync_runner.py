@@ -177,3 +177,35 @@ def test_scheduler_starts_only_when_enabled(monkeypatch, temp_job):
 
     news = scheduler.build_scheduler(news_only=True).get_jobs()
     assert [(job.id, str(job.trigger)) for job in news] == [("news", "cron[minute='0']")]
+
+
+def test_startup_catch_up_moves_only_overdue_collection_jobs(temp_job):
+    from datetime import UTC, datetime, timedelta
+
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+    now = datetime(2026, 11, 16, 2, 30, tzinfo=UTC)  # Mon 11:30 KST
+    built = BackgroundScheduler(timezone="UTC")
+    for job_id, trigger in {
+        "stale-interval": {"trigger": "interval", "minutes": 30},
+        "fresh-interval": {"trigger": "interval", "minutes": 30},
+        "stale-cron": {"trigger": "cron", "minute": 0},
+        "fresh-cron": {"trigger": "cron", "minute": 0},
+        "never-ran": {"trigger": "cron", "hour": 19, "minute": 0},
+        "short-poll": {"trigger": "interval", "seconds": 60},
+        "top5_weekly": {"trigger": "cron", "day_of_week": "mon", "hour": 15, "minute": 0},
+    }.items():
+        built.add_job(lambda: None, id=job_id, **trigger)
+    last = {
+        "stale-interval": now - timedelta(days=5),
+        "fresh-interval": now - timedelta(minutes=10),
+        "stale-cron": now - timedelta(hours=2),
+        "fresh-cron": now - timedelta(minutes=20),  # 02:10 UTC, next is 03:00
+        "short-poll": now - timedelta(days=5),
+        "top5_weekly": now - timedelta(days=7),
+    }
+    moved = scheduler.catch_up_overdue(built, last, now)
+    assert moved == ["stale-interval", "stale-cron", "never-ran"]
+    times = [built.get_job(job_id).next_run_time for job_id in moved]
+    assert times == [now, now + scheduler.CATCH_UP_STAGGER, now + 2 * scheduler.CATCH_UP_STAGGER]
+    # Not moved: fresh jobs, short polls and the fixed TOP 5 slots (see the list above).
