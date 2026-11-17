@@ -109,7 +109,7 @@ export function PlayerRankings({
   return (
     <section
       aria-labelledby="player-ranking-title"
-      className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
+      className="flex min-w-0 flex-col gap-4"
     >
       <h2 id="player-ranking-title" className="text-subtitle font-bold">
         선수 순위
@@ -128,7 +128,7 @@ export function PlayerRankings({
         <p className="text-small text-fg-muted">
           {type === "saves"
             ? "리그 전체 선수 기록으로 집계한 골키퍼 선방 순위입니다."
-            : "리그별 제공 상위 20명 · 전체 선수 순위가 아닙니다."}
+            : "리그별 제공 상위 20명"}
           {type === "red" && " 직접 퇴장만 집계하며 경고 누적 퇴장은 합산하지 않습니다."}
         </p>
         {body}

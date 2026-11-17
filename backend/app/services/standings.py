@@ -32,7 +32,7 @@ from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.config import settings
 from app.core.kst import kst_today
@@ -50,7 +50,7 @@ from app.models.standings import (
     PlayerSeasonStat,
     Standing,
 )
-from app.seed.competitions import LEAGUE_IDS
+from app.seed.competitions import LEAGUE_IDS, UEFA_IDS
 from app.services.reference import crest, upsert_teams
 
 # Provider endpoint and the statistics value of each top list.
@@ -65,6 +65,18 @@ GOALKEEPER = "Goalkeeper"
 PLAYER_PAGE_SIZE = 20
 # A league team has 34-38 fixtures a season; a relegation play-off opponent has 2.
 REGULAR_TEAM_MATCHES = 3
+# Tables collected by the `standings` job (06 개선 2026-11-17): the five leagues and the
+# league phase of the three UEFA competitions (one group of 36 teams each).
+STANDINGS_IDS = (*LEAGUE_IDS, *UEFA_IDS)
+# Provider round names of the UEFA league phase ("League Stage - 1" .. "- 8"). Qualifying
+# rounds ("Play-offs", "Playoff round") and knockouts are not part of the table.
+LEAGUE_PHASE_PREFIX = "League Stage"
+# The UEFA league phase is one table of 36 teams; each team plays 8 matches (Conference
+# League 6). The table's full match count is fixed by these, not by what happens to be stored.
+UEFA_TABLE_SIZE = 36
+UEFA_PHASE_MATCHES = {2: 8, 3: 8, 848: 6}
+# Fixture states after which a match will not change the table any more.
+OPEN_STATUSES = ("scheduled", "live", "postponed", "abandoned", "unknown")
 # Player lines of a season only grow; a small drop (provider merging duplicate players) is
 # accepted, a larger one is a cut answer.
 PLAYER_SHRINK_TOLERANCE = 0.1
@@ -411,14 +423,21 @@ def check_standings(session: Session, league: int, season: int, parsed: ParsedSt
         raise IncompleteData(f"standings: {len(teams - participants)} teams outside the season")
     if not parsed.rows:
         return  # nothing stored yet and nothing given: a table not published yet
+    if league in UEFA_IDS:
+        # Checked on its own: a first load has no stored rows or fixtures to compare with.
+        # One group of 36 different teams ranked 1..36 (the parser checks distinct teams and
+        # ranks 1..n per group); two groups of 18 would repeat ranks 1..18 and hide 25-36.
+        groups = {r["group_name"] for r in parsed.rows}
+        if len(groups) != 1 or len(parsed.rows) != UEFA_TABLE_SIZE:
+            raise IncompleteData(
+                f"standings: {len(groups)} groups, {len(parsed.rows)} of {UEFA_TABLE_SIZE}"
+                " league-phase teams"
+            )
+    scope = table_fixtures(league, season)
     side = (
         select(Fixture.home_team_id.label("team_id"))
-        .where(Fixture.competition_id == league, Fixture.season == season)
-        .union_all(
-            select(Fixture.away_team_id).where(
-                Fixture.competition_id == league, Fixture.season == season
-            )
-        )
+        .where(*scope)
+        .union_all(select(Fixture.away_team_id).where(*scope))
         .subquery()
     )
     regular = set(
@@ -505,14 +524,23 @@ HOURLY = timedelta(minutes=55)
 DAILY = timedelta(hours=23)
 
 
+def table_fixtures(league: int, season: int) -> list[Any]:
+    """Fixtures that make up a table: a league's whole season, a UEFA competition's league
+    phase only (qualifiers and knockouts never move the 36-team table)."""
+    where: list[Any] = [Fixture.competition_id == league, Fixture.season == season]
+    if league in UEFA_IDS:
+        where.append(Fixture.round.startswith(LEAGUE_PHASE_PREFIX))
+    return where
+
+
 def is_matchday(session: Session, league: int, season: int, now: datetime) -> bool:
-    """The league plays today (KST calendar date) or a match kicked off in the last 4 hours
-    (a late match ending after midnight)."""
+    """The table's matches are played today (KST calendar date) or one kicked off in the last
+    4 hours (a late match ending after midnight). UEFA counts league-phase matches only, so
+    knockout days do not refresh a finished league phase every hour."""
     return bool(
         session.scalar(
             select(func.count()).select_from(Fixture).where(
-                Fixture.competition_id == league,
-                Fixture.season == season,
+                *table_fixtures(league, season),
                 or_(
                     Fixture.kickoff_date_kst == kst_today(now),
                     Fixture.kickoff_at.between(now - timedelta(hours=4), now),
@@ -523,7 +551,13 @@ def is_matchday(session: Session, league: int, season: int, now: datetime) -> bo
 
 
 def due_leagues(
-    session: Session, season: int, kind: str, now: datetime, *, matchday_hourly: bool
+    session: Session,
+    season: int,
+    kind: str,
+    now: datetime,
+    *,
+    matchday_hourly: bool,
+    leagues: Sequence[int] = LEAGUE_IDS,
 ) -> list[int]:
     """Leagues whose `kind` should be collected now.
 
@@ -531,7 +565,7 @@ def due_leagues(
     kept, not re-collected: only when it was never stored. A recent failure waits for the
     next slot, so a broken provider is not asked every minute."""
     due = []
-    for league in LEAGUE_IDS:
+    for league in leagues:
         state = session.get(LeagueSync, (league, season, kind))
         synced = state.synced_at if state else None
         failed = state.failed_at if state else None
@@ -579,13 +613,91 @@ def league_available(session: Session, league: int, season: int) -> bool:
     return row is not None and row.availability == "available"
 
 
-def relegation_zone(description: str | None) -> str | None:
-    """The season's own wording: "Relegation…" with play-off → playoff, otherwise relegated.
-    Other descriptions (European places, "Play-offs" without relegation) are not zones."""
-    text = (description or "").strip().lower()
-    if not text.startswith("relegation"):
-        return None
-    return "relegation_playoff" if "play" in text else "relegation"
+def table_complete(session: Session, league: int, season: int) -> bool:
+    """Every match of the table is stored and over (a league's season, a UEFA league phase):
+    the screen then shows final results ("강등", "16강 직행") instead of current positions
+    ("강등권"). Counted by pairing, not by rows (Codex 3차 지적 1), among the teams of the
+    stored table only, so neither a relegation play-off against a second-division team nor a
+    cancelled row kept beside its replayed match nor a row naming one team on both sides
+    (Codex 4차 지적) can stand in for a missing match:
+    - a league: each of its n teams has played every other at home and away, n*(n-1)
+      distinct (home, away) pairs with a finished match;
+    - a UEFA league phase: 36 teams x 8 matches (Conference League 6) / 2 distinct pairs
+      with a finished match, every team in exactly 8 (6) of them.
+    No match between table teams may still be open (scheduled, live, postponed, abandoned,
+    unknown)."""
+    teams = set(
+        session.scalars(
+            select(Standing.team_id).where(
+                Standing.competition_id == league, Standing.season == season
+            )
+        )
+    )
+    if len(teams) < 2:
+        return False
+    finished: set[tuple[int, int]] = set()
+    for home, away, status in session.execute(
+        select(Fixture.home_team_id, Fixture.away_team_id, Fixture.status).where(
+            *table_fixtures(league, season)
+        )
+    ):
+        if home not in teams or away not in teams or home == away:
+            continue  # another competition's team, or a broken row (a team against itself)
+        if status in OPEN_STATUSES:
+            return False
+        if status == "finished":
+            finished.add((home, away))
+    if league not in UEFA_IDS:
+        return len(finished) == len(teams) * (len(teams) - 1)
+    each = UEFA_PHASE_MATCHES[league]
+    pairs = {frozenset(pair) for pair in finished}
+    played: dict[int, int] = defaultdict(int)
+    for pair in pairs:
+        for team in pair:
+            played[team] += 1
+    return (
+        len(teams) == UEFA_TABLE_SIZE
+        and len(pairs) == UEFA_TABLE_SIZE * each // 2
+        and all(played[team] == each for team in teams)
+    )
+
+
+@dataclass(frozen=True)
+class RecentMatch:
+    fixture: Fixture
+    home: Team
+    away: Team
+    result: str  # W / D / L for the team whose row it is
+
+
+RECENT_MATCHES = 5
+
+
+def recent_matches(session: Session, league: int, season: int) -> dict[int, list[RecentMatch]]:
+    """Each team's last RECENT_MATCHES finished matches of this table (stored fixtures only —
+    opening a preview never asks the provider), oldest first. A match without a score is
+    skipped rather than shown as a result."""
+    home, away = aliased(Team), aliased(Team)
+    rows = session.execute(
+        select(Fixture, home, away)
+        .join(home, home.id == Fixture.home_team_id)
+        .join(away, away.id == Fixture.away_team_id)
+        .where(
+            *table_fixtures(league, season),
+            Fixture.status == "finished",
+            Fixture.goals_home.is_not(None),
+            Fixture.goals_away.is_not(None),
+        )
+        .order_by(Fixture.kickoff_at, Fixture.id)
+    ).all()
+    by_team: dict[int, list[RecentMatch]] = defaultdict(list)
+    for fixture, h, a in rows:
+        diff = fixture.goals_home - fixture.goals_away
+        home_result = "W" if diff > 0 else "L" if diff < 0 else "D"
+        away_result = {"W": "L", "L": "W", "D": "D"}[home_result]
+        by_team[h.id].append(RecentMatch(fixture, h, a, home_result))
+        by_team[a.id].append(RecentMatch(fixture, h, a, away_result))
+    return {team: matches[-RECENT_MATCHES:] for team, matches in by_team.items()}
 
 
 @dataclass

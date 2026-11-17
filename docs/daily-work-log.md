@@ -1,5 +1,24 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-17 (화) — 06 리그 순위 개선
+
+브랜치 `feat/06-standings`(최신 `dev` 5b28189 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 5회(1차 사용자 결정 반영 후 요청 → 2차 차단 1·결함 3·개선 2 → 3차 결함 3 → 4차 결함 1 → 최종 통과, 최종 단계의 경기 상세 기록 보존 결함은 Codex가 보완·검증). 기획 문서 v1.11 LEAG-002·Figma '01 · 디자인' 기준, 마이그레이션 없음.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 화면 구조 | `app/standings/page.tsx`, `features/standings/StandingsSection.tsx`, `ChipRow.tsx`(새), `PlayerRankings.tsx` | 보이는 제목·소개 삭제(sr-only H1), 시즌 선택·대회 칩(5대 리그, UEFA 3개)·단계 칩·본문을 흰색 영역 하나로. 5대 리그는 팀 순위(PC 좌)·선수 순위(우, 모바일 세로). 칩 줄 가로 스크롤·선택 칩 자동 표시 |
+| URL 상태 | `useStandingsParams.ts`, `model.ts`(`UEFA`·`STAGES`·`competitionLabel`) | 대회·시즌·단계 복원과 뒤로 가기, UEFA는 리그 페이즈 기본, 대회 변경 시 단계 삭제 |
+| 팀 순위 표 | `StandingsTable.tsx`(격자 표·`TeamCell`), `model.ts`(`leagueZone`), 삭제 `formResults`·`zoneLabel`·백엔드 `relegation_zone` | 강등권·승강 PO권을 description 문구 대신 순위 위치로 판단(EPL·라리가·세리에 A 18~20, 분데스리가·리그1 17·18 강등권·16 승강 PO권), 시즌 종료 후 결과 표기 |
+| 최근 5경기 | 백엔드 `services/standings.py`(`recent_matches`), 프런트 `RecentForm.tsx`(새) | 저장된 그 대회·시즌 종료 경기 최근 5개(오래된 순·'최신'), 날짜·홈 스코어 원정 미리보기(공급사 호출 없음), 고정 헤더·표 가로 스크롤 밖에서 닫힘, 미리보기 위 호버 유지 |
+| UEFA 리그 페이즈 | 백엔드 `STANDINGS_IDS`·`table_fixtures`·`check_standings`(그룹 1개·36팀·1~36위)·`sync/standings.py`, 프런트 `LeaguePhaseTable.tsx`(새, `phaseBands`) | UEFA 3개 대회 × 2시즌 순위 수집(실제 API 6회), 1~8 직행·9~24 플레이오프·25~36 탈락 구간, '현재 순위 기준'/확정 결과, 최근 5경기는 리그 페이즈만 |
+| 완료 판정 | `services/standings.py`(`table_complete`) | 순위표 팀끼리 서로 다른 대진으로 판정(리그 n×(n−1), UEFA 144/108·팀별 8/6) — 뒤 라운드 미적재·승강 PO·취소 중복·같은 팀 행이 빠진 경기를 메우지 못하게 |
+| 토너먼트 | 백엔드 `services/knockouts.py`(새)·`GET /knockouts`, 프런트 `KnockoutStage.tsx`(새, `legRows`) | 플레이오프~결승 대진을 저장 경기로 구성(합산·승부차기·진출/우승), 'A–B전 승자'·'상대 미정'은 저장 경기로 확정될 때만, 추첨 경로 추정 없음, 한 경기만 저장되면 차전 단정 안 함 |
+| 경기 적재 보완 | `services/fixtures.py`(`upsert_fixture_items`), `services/match_detail.py`(`store_fixture_records`), `sync/fixtures.py` | 홈·원정이 같은 팀인 경기 응답 거부, 받아들인 경기만 이벤트·상세 기록 저장, 라이브 거부 경기 ID 재조회·최종 기록 보존(Codex 보완) |
+| API 타입 | `lib/api/schema.d.ts`(재생성)·`types.ts`·`query-keys.ts`, `features/standings/queries.ts` | `TableRow`·`RecentMatch`·`Knockout*`, `knockoutsQuery` |
+| 테스트 | `tests/test_standings.py`, `test_standings_db.py`, `test_schedule_db.py`, `frontend/tests/standings.test.mjs` | UEFA 범위·36팀·그룹, 완료 판정 재현(롤백), 토너먼트·차전, 경기 거부·기록 보존, URL·구간·차전 표기 |
+
+검수: ruff 통과, pytest 303 통과·85 건너뜀, DB 포함 388 통과, Alembic 변경 없음, `git diff --check` 통과, 프런트 lint·tsc·테스트 51 통과, build 2회차 exit 0(1회차는 Next.js 16.4.3 보안 공지 SecurityFatalError — 보안 패치 업그레이드는 별도 결정 필요). 브라우저 1920·375·320에서 5대 리그·UEFA 리그 페이즈·토너먼트, 메인 간소 순위·팀 상세·지난 경기 회귀 확인. 실제 데이터 8개 표 2025 완료·2026 진행 중. 실제 API 호출 6회(UEFA 순위 첫 적재), 이후 보완·검증은 0회.
+
 ## 2026-11-16 (월) — 05 지난 경기 개선
 
 브랜치 `feat/05-results`(최신 `dev` 29b5aa7 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 통과(지적 없음). 기능 명세서 v1.10 HIST-001 규칙 4·HIST-002, PRD v1.10 13장, 유저 플로우 v1.9 UF-09, Figma `61:883`·`53:995`·`65:1616` 기준.

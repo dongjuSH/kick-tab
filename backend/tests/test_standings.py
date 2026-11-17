@@ -12,8 +12,9 @@ from app.services.standings import (
     parse_player_pages,
     parse_standings,
     parse_top_list,
-    relegation_zone,
+    table_fixtures,
 )
+from app.sync.registry import JobPartialFailure
 
 
 def standings_answer(league=61, season=2025, rows=None):
@@ -49,19 +50,23 @@ def test_standings_of_another_league_or_season_are_refused():
         parse_standings(standings_answer(rows=[{"rank": 1, "team": {}}]), 61, 2025)
 
 
-@pytest.mark.parametrize(
-    ("description", "zone"),
-    [
-        ("Relegation - Championship", "relegation"),
-        ("Relegation", "relegation"),
-        ("Relegation Playoffs", "relegation_playoff"),
-        ("Play-offs", None),
-        ("Promotion - Champions League (League phase)", None),
-        (None, None),
-    ],
-)
-def test_relegation_zone_follows_the_season_description(description, zone):
-    assert relegation_zone(description) == zone
+def test_uefa_tables_count_league_phase_matches_only():
+    """Qualifiers ("Play-offs", "Playoff round") and knockouts never move the 36-team table."""
+    league = [str(c) for c in table_fixtures(39, 2025)]
+    uefa = [str(c) for c in table_fixtures(2, 2025)]
+    assert len(league) == 2 and len(uefa) == 3
+    assert "fixtures.round LIKE" in uefa[2]
+
+
+def test_standings_job_covers_uefa_but_player_jobs_do_not():
+    from app.sync.standings import _targets
+
+    forced = {"force": "1", "season": "2025"}
+    tables = _targets(_Session({}), forced, "standings", hourly=True)
+    assert tables == [39, 140, 135, 78, 61, 2, 3, 848]
+    assert _targets(_Session({}), forced, "goals", hourly=False) == [39, 140, 135, 78, 61]
+    with pytest.raises(JobPartialFailure):
+        _targets(_Session({}), {**forced, "league": "2"}, "player_stats", hourly=False)
 
 
 def top_entry(pid, team, red, yellowred, league=61):

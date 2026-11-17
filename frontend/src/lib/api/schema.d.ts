@@ -269,10 +269,13 @@ export interface paths {
         };
         /**
          * Read League Standings
-         * @description LEAG-002: the whole table of one league season as the provider gave it (groups kept).
+         * @description LEAG-002: the whole table of one league season or UEFA league phase as the provider
+         *     gave it (groups and order kept), each row with its last 5 finished matches of that table
+         *     from stored fixtures (UEFA: league-phase matches only).
          *
          *     Never collected → 503 (not shown as "no table"); a later failed refresh keeps the stored
-         *     table with `refreshFailed`. Team links follow the current-season allow set.
+         *     table with `refreshFailed`. Team links follow the current-season allow set. Zones are
+         *     drawn by position on screen; `complete` tells current positions from final results.
          */
         get: operations["read_league_standings_api_v1_standings_get"];
         put?: never;
@@ -319,6 +322,29 @@ export interface paths {
          *     rank.
          */
         get: operations["read_player_rankings_api_v1_player_rankings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knockouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Knockouts
+         * @description LEAG-002 rule 7: the ties of one UEFA knockout stage built from stored fixtures — legs,
+         *     aggregate, shoot-out and winner; "A–B전 승자" only for a path stored matches fix; the rest
+         *     "예정 · 대진 미정". The season list never loaded → 503; a later failed refresh keeps the
+         *     stored ties with `refreshFailed`.
+         */
+        get: operations["read_knockouts_api_v1_knockouts_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -790,12 +816,88 @@ export interface components {
             /** Total */
             total: number | null;
         };
+        /** KnockoutLeg */
+        KnockoutLeg: {
+            /** Fixtureid */
+            fixtureId: number;
+            /** Leg */
+            leg: number | null;
+            /**
+             * Kickoffat
+             * Format: date-time
+             */
+            kickoffAt: string;
+            /** Timeconfirmed */
+            timeConfirmed: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "scheduled" | "live" | "finished" | "postponed" | "cancelled" | "abandoned" | "unknown";
+            /** Finishtype */
+            finishType: ("normal" | "aet" | "pen" | "awarded" | "walkover") | null;
+            home: components["schemas"]["TeamRef"];
+            away: components["schemas"]["TeamRef"];
+            score: components["schemas"]["MatchScore"];
+        };
+        /** KnockoutRound */
+        KnockoutRound: {
+            league: components["schemas"]["CompetitionRef"];
+            season: components["schemas"]["SeasonItem"];
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "playoff" | "r16" | "qf" | "sf" | "final";
+            /** Ties */
+            ties: components["schemas"]["KnockoutTie"][];
+        };
+        /**
+         * KnockoutTeamSlot
+         * @description A known team, or the winner of an undecided previous tie (`winnerOf`: its two teams).
+         *     Both null = no team yet ("상대 미정" when the other side is known).
+         */
+        KnockoutTeamSlot: {
+            team: components["schemas"]["TeamRef"] | null;
+            /** Winnerof */
+            winnerOf: components["schemas"]["TeamRef"][] | null;
+        };
+        /** KnockoutTie */
+        KnockoutTie: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "finished" | "live" | "scheduled" | "undecided";
+            home: components["schemas"]["KnockoutTeamSlot"];
+            away: components["schemas"]["KnockoutTeamSlot"];
+            /** Legs */
+            legs: components["schemas"]["KnockoutLeg"][];
+            /** Legsneeded */
+            legsNeeded: number;
+            /** Aggregatehome */
+            aggregateHome: number | null;
+            /** Aggregateaway */
+            aggregateAway: number | null;
+            /** Penaltyhome */
+            penaltyHome: number | null;
+            /** Penaltyaway */
+            penaltyAway: number | null;
+            winner: components["schemas"]["TeamRef"] | null;
+        };
+        /** KnockoutsResponse */
+        KnockoutsResponse: {
+            data: components["schemas"]["KnockoutRound"];
+            meta: components["schemas"]["StandingsMeta"];
+        };
         /** LeagueStandings */
         LeagueStandings: {
             league: components["schemas"]["CompetitionRef"];
             season: components["schemas"]["SeasonItem"];
             /** Groups */
             groups: components["schemas"]["StandingGroup"][];
+            /** Complete */
+            complete: boolean;
         };
         /** LineupPlayer */
         LineupPlayer: {
@@ -1086,6 +1188,36 @@ export interface components {
             /** Data */
             data: components["schemas"]["PlayerRating"][] | null;
         };
+        /**
+         * RecentMatch
+         * @description One finished match of the table (stored fixtures): the preview shows its date and
+         *     "home – score – away" without asking the provider.
+         */
+        RecentMatch: {
+            /** Fixtureid */
+            fixtureId: number;
+            /**
+             * Kickoffat
+             * Format: date-time
+             */
+            kickoffAt: string;
+            /**
+             * Kickoffdatekst
+             * Format: date
+             */
+            kickoffDateKst: string;
+            home: components["schemas"]["TeamName"];
+            away: components["schemas"]["TeamName"];
+            /** Goalshome */
+            goalsHome: number;
+            /** Goalsaway */
+            goalsAway: number;
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "W" | "D" | "L";
+        };
         /** ResultsMeta */
         ResultsMeta: {
             /** Page */
@@ -1244,7 +1376,7 @@ export interface components {
             /** Name */
             name: string;
             /** Rows */
-            rows: components["schemas"]["StandingRow"][];
+            rows: components["schemas"]["TableRow"][];
         };
         /** StandingRow */
         StandingRow: {
@@ -1267,12 +1399,6 @@ export interface components {
             goalsDiff: number | null;
             /** Points */
             points: number | null;
-            /** Form */
-            form: string | null;
-            /** Description */
-            description: string | null;
-            /** Zone */
-            zone: ("relegation" | "relegation_playoff") | null;
         };
         /** StandingsMeta */
         StandingsMeta: {
@@ -1336,6 +1462,30 @@ export interface components {
             /** Data */
             data: components["schemas"]["StatRow"][] | null;
         };
+        /** TableRow */
+        TableRow: {
+            /** Rank */
+            rank: number;
+            team: components["schemas"]["TeamRef"];
+            /** Played */
+            played: number | null;
+            /** Win */
+            win: number | null;
+            /** Draw */
+            draw: number | null;
+            /** Lose */
+            lose: number | null;
+            /** Goalsfor */
+            goalsFor: number | null;
+            /** Goalsagainst */
+            goalsAgainst: number | null;
+            /** Goalsdiff */
+            goalsDiff: number | null;
+            /** Points */
+            points: number | null;
+            /** Recent */
+            recent: components["schemas"]["RecentMatch"][];
+        };
         /** TeamFixtures */
         TeamFixtures: {
             /** Upcoming */
@@ -1370,6 +1520,15 @@ export interface components {
             startXi: components["schemas"]["LineupPlayer"][];
             /** Substitutes */
             substitutes: components["schemas"]["LineupPlayer"][];
+        };
+        /** TeamName */
+        TeamName: {
+            /** Id */
+            id: number;
+            /** Nameko */
+            nameKo: string | null;
+            /** Nameen */
+            nameEn: string;
         };
         /** TeamOverview */
         TeamOverview: {
@@ -2205,7 +2364,7 @@ export interface operations {
     read_league_standings_api_v1_standings_get: {
         parameters: {
             query: {
-                /** @description League id (five leagues only) */
+                /** @description Five leagues, or UEFA 2·3·848 (league phase table) */
                 league: number;
                 /** @description API season; default current */
                 season?: number | null;
@@ -2306,6 +2465,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlayerRankingsResponse"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_knockouts_api_v1_knockouts_get: {
+        parameters: {
+            query: {
+                /** @description UEFA competition id (2, 3, 848) */
+                league: number;
+                /** @description Knockout stage */
+                stage: "playoff" | "r16" | "qf" | "sf" | "final";
+                /** @description API season; default current */
+                season?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnockoutsResponse"];
                 };
             };
             /** @description Client error */

@@ -1,9 +1,11 @@
 """Standings and player data of the five leagues (chat 06, guide §6.5).
 
-- standings (hourly check): one /standings?league=&season= per due league. Current season:
-  hourly on a matchday (the league plays that KST day or kicked off in the last 4 hours),
-  otherwise once a day. The hourly precheck reads only the DB, so idle hours leave no
-  sync_runs row. Past seasons are kept: collected only when never stored or with force=1.
+- standings (hourly check): one /standings?league=&season= per due table — the five leagues
+  and, since 2026-11-17, the UEFA league phases (2, 3, 848; one 36-team group each). Current
+  season: hourly on a matchday (the table's matches are played that KST day or kicked off in
+  the last 4 hours; UEFA counts league-phase matches only), otherwise once a day. The hourly
+  precheck reads only the DB, so idle hours leave no sync_runs row. Past seasons are kept:
+  collected only when never stored or with force=1.
 - player_rankings (daily 14:00 KST): the four provider top lists per league
   (/players/topscorers, topassists, topyellowcards, topredcards) = 20 requests a season.
 - player_stats (daily 14:20 KST): every /players?league=&season=&page= page of each league
@@ -28,6 +30,7 @@ from app.providers.api_football import ApiFootballClient, ApiFootballError
 from app.seed.competitions import LEAGUE_IDS
 from app.services.reference import managed_seasons
 from app.services.standings import (
+    STANDINGS_IDS,
     TOP_LISTS,
     IncompleteData,
     due_leagues,
@@ -53,17 +56,24 @@ def _season(params: Mapping[str, Any]) -> int:
 
 
 def _targets(session: Session, params: Mapping[str, Any], kind: str, *, hourly: bool) -> list[int]:
+    """Tables cover the five leagues and the UEFA league phases; player lists and records
+    the five leagues only (LEAG-004)."""
     season = _season(params)
+    scope = STANDINGS_IDS if kind == "standings" else LEAGUE_IDS
     if params.get("league") is not None:
         league = int(params["league"])
-        if league not in LEAGUE_IDS:
-            raise JobPartialFailure(f"League {league} has no standings")
+        if league not in scope:
+            raise JobPartialFailure(f"League {league} has no {kind}")
         leagues = [league]
     else:
-        leagues = list(LEAGUE_IDS)
+        leagues = list(scope)
     if str(params.get("force", "")).lower() in ("1", "true", "yes"):
         return leagues
-    due = set(due_leagues(session, season, kind, datetime.now(UTC), matchday_hourly=hourly))
+    due = set(
+        due_leagues(
+            session, season, kind, datetime.now(UTC), matchday_hourly=hourly, leagues=scope
+        )
+    )
     return [league for league in leagues if league in due]
 
 
@@ -117,7 +127,7 @@ def _standings_precheck(session: Session, params: Mapping[str, Any]) -> bool:
 
 @register_job(
     "standings",
-    description="League tables of the five leagues (1 request per due league)",
+    description="Tables of the five leagues and UEFA league phases (1 request per due one)",
     # Checked hourly; the precheck lets only matchday-hourly / daily-due leagues through.
     schedule={"trigger": "cron", "minute": 10},
     precheck=_standings_precheck,
