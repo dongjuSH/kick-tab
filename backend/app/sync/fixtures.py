@@ -37,7 +37,7 @@ from app.services.match_detail import (
     final_record_targets,
     mark_record_failures,
     needs_final_records,
-    save_provider_items,
+    store_fixture_records,
 )
 from app.services.reference import managed_seasons
 from app.sync.reference import FATAL
@@ -206,22 +206,20 @@ def sync_live(ctx: JobContext) -> None:
     result = client.get(
         "/fixtures", {"live": "-".join(map(str, league_ids)), "timezone": "UTC"}
     )
-    items = result.response or []
-    upsert_fixtures(session, items, now)
-    save_provider_items(session, items, now)
+    seen = store_fixture_records(session, result.response or [], now)
     session.commit()
 
-    # Tracked matches absent from the live answer may have finished or not started yet:
-    # read them by id instead of assuming a result (LIVE-003).
-    seen = {(item.get("fixture") or {}).get("id") for item in items}
+    # Recheck tracked fixtures the live response did not update (LIVE-003).
     missing = sorted(tracked - seen)
+    failed: list[int] = []
     for i in range(0, len(missing), IDS_PER_REQUEST):
         chunk = missing[i : i + IDS_PER_REQUEST]
         result = client.get("/fixtures", {"ids": "-".join(map(str, chunk)), "timezone": "UTC"})
-        fetched_at = datetime.now(UTC)
-        upsert_fixtures(session, result.response or [], fetched_at)
-        save_provider_items(session, result.response or [], fetched_at)
+        seen = store_fixture_records(session, result.response or [], datetime.now(UTC))
+        failed.extend(sorted(set(chunk) - seen))
         session.commit()
+    if failed:
+        raise JobPartialFailure(f"Failed live fixtures: {', '.join(map(str, failed))}")
 
 
 def _final_records_precheck(session: Session, params: Mapping[str, Any]) -> bool:
@@ -252,9 +250,10 @@ def sync_final_records(ctx: JobContext) -> None:
             if isinstance(exc, FATAL):
                 break
             continue
-        items = result.response or []
-        upsert_fixtures(session, items, now)
-        save_provider_items(session, items, now)
+        seen = store_fixture_records(session, result.response or [], now)
+        missing = sorted(set(chunk) - seen)
+        mark_record_failures(session, missing, now)
+        failed.extend(missing)
         session.commit()
     if failed:
         raise JobPartialFailure(f"Failed fixtures: {', '.join(map(str, failed))}")

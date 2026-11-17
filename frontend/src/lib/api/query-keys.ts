@@ -32,6 +32,10 @@ export const queryKeys = {
     table: (league: number, season: number | null) => ["standings", "table", { league, season }] as const,
     summary: () => ["standings", "summary"] as const,
   },
+  knockouts: {
+    stage: (league: number, season: number | null, stage: string) =>
+      ["knockouts", "stage", { league, season, stage }] as const,
+  },
   playerRankings: {
     list: (league: number, season: number | null, type: string) =>
       ["player-rankings", "list", { league, season, type }] as const,

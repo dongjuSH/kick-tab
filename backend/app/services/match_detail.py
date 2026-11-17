@@ -38,7 +38,7 @@ from app.schemas.match_detail import (
     StatRow,
     TeamLineup,
 )
-from app.services.fixtures import upsert_fixtures
+from app.services.fixtures import upsert_fixture_items
 from app.services.match_status import map_status
 from app.services.reference import crest
 
@@ -116,17 +116,17 @@ def save_events(session: Session, fixture_id: int, events: Iterable[dict[str, An
         session.execute(insert(FixtureEvent), rows)
 
 
-def save_provider_items(session: Session, items: Iterable[dict[str, Any]], now: datetime) -> int:
-    """Store the detail parts present in fixture answers (call after `upsert_fixtures`).
+def store_fixture_records(
+    session: Session, items: Iterable[dict[str, Any]], now: datetime
+) -> set[int]:
+    """Store fixture rows and detail blocks from the same accepted provider items.
 
     A live answer carries events only; `/fixtures?id(s)=` answers carry all four blocks.
-    Only fixtures already stored are touched. Returns the number of full records saved.
+    Return the fixture IDs actually accepted so jobs can recheck or report missing records.
     """
-    full = 0
-    for item in items:
-        fixture_id = (item.get("fixture") or {}).get("id")
-        if not fixture_id or session.get(Fixture, fixture_id) is None:
-            continue
+    accepted = upsert_fixture_items(session, items, now)
+    for item in accepted:
+        fixture_id = item["fixture"]["id"]
         if "events" in item:
             save_events(session, fixture_id, item.get("events") or [])
         if not all(key in item for key in ("lineups", "statistics", "players")):
@@ -140,8 +140,7 @@ def save_provider_items(session: Session, items: Iterable[dict[str, Any]], now: 
         row.fetched_status = status.status
         row.last_failed_at = None
         session.add(row)
-        full += 1
-    return full
+    return {item["fixture"]["id"] for item in accepted}
 
 
 # ---- final record after the finish (fixture_details job) -------------------------------
@@ -233,8 +232,8 @@ def ensure_records(
                 "Detail fetch for fixture %s: %d request(s)", fixture.id, client.request_count
             )
             client.close()
-        upsert_fixtures(session, items, now)
-        save_provider_items(session, items, now)
+        if fixture.id not in store_fixture_records(session, items, now):
+            mark_record_failures(session, [fixture.id], now)
     session.expire_all()
 
 

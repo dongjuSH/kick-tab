@@ -1,17 +1,16 @@
 """League standings and player ranking responses (chat 06, guide §6.4)."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import Field
 
 from app.schemas.common import ApiModel
-from app.schemas.match import CompetitionRef, TeamRef
+from app.schemas.match import CompetitionRef, FinishType, MatchScore, MatchStatus, TeamRef
 from app.schemas.schedule import SeasonItem
 
 RankingType = Literal["goals", "assists", "yellow", "red", "saves"]
-# Relegation wording of the season itself (description), shown for past seasons.
-RelegationZone = Literal["relegation", "relegation_playoff"]
+KnockoutStage = Literal["playoff", "r16", "qf", "sf", "final"]
 
 
 class StandingRow(ApiModel):
@@ -25,16 +24,37 @@ class StandingRow(ApiModel):
     goals_against: int | None
     goals_diff: int | None
     points: int | None
-    # Provider letters (W/D/L) in provider order; null = not provided.
-    form: str | None
-    # Provider description as stored for that season ("Relegation - Championship").
-    description: str | None
-    zone: RelegationZone | None
+
+
+class TeamName(ApiModel):
+    id: int
+    name_ko: str | None
+    name_en: str
+
+
+class RecentMatch(ApiModel):
+    """One finished match of the table (stored fixtures): the preview shows its date and
+    "home – score – away" without asking the provider."""
+
+    fixture_id: int
+    kickoff_at: datetime
+    kickoff_date_kst: date
+    home: TeamName
+    away: TeamName
+    goals_home: int
+    goals_away: int
+    # The row team's result.
+    result: Literal["W", "D", "L"]
+
+
+class TableRow(StandingRow):
+    # Up to 5 finished matches of this table, oldest first (the last one is the latest).
+    recent: list[RecentMatch]
 
 
 class StandingGroup(ApiModel):
     name: str
-    rows: list[StandingRow]
+    rows: list[TableRow]
 
 
 class LeagueStandings(ApiModel):
@@ -42,6 +62,9 @@ class LeagueStandings(ApiModel):
     season: SeasonItem
     # Empty = collected but the provider has no table yet (not a failure).
     groups: list[StandingGroup]
+    # Every match of the table is over (league season / UEFA league phase): zones are final
+    # results ("강등", "16강 직행") instead of current positions ("강등권", "16강 직행권").
+    complete: bool
 
 
 class StandingsMeta(ApiModel):
@@ -104,4 +127,56 @@ class PlayerRankings(ApiModel):
 
 class PlayerRankingsResponse(ApiModel):
     data: PlayerRankings
+    meta: StandingsMeta
+
+
+class KnockoutTeamSlot(ApiModel):
+    """A known team, or the winner of an undecided previous tie (`winnerOf`: its two teams).
+    Both null = no team yet ("상대 미정" when the other side is known)."""
+
+    team: TeamRef | None
+    winner_of: list[TeamRef] | None
+
+
+class KnockoutLeg(ApiModel):
+    fixture_id: int
+    # 1 / 2 only when every leg of the tie is stored; null when a leg is missing, because a
+    # single stored match cannot tell whether it is the first or the second leg.
+    leg: int | None
+    kickoff_at: datetime
+    time_confirmed: bool
+    status: MatchStatus
+    finish_type: FinishType | None
+    home: TeamRef
+    away: TeamRef
+    score: MatchScore
+
+
+class KnockoutTie(ApiModel):
+    # finished: winner known · live: a leg in play · scheduled: teams or paths known ·
+    # undecided: "예정 · 대진 미정".
+    state: Literal["finished", "live", "scheduled", "undecided"]
+    home: KnockoutTeamSlot
+    away: KnockoutTeamSlot
+    # Stored legs in kick-off order; fewer than `legsNeeded` means the rest is not stored yet
+    # (shown as "일시 미정" without saying which leg is missing).
+    legs: list[KnockoutLeg]
+    legs_needed: int
+    # Totals over the legs for `home` / `away` (finished ties only) and the deciding shoot-out.
+    aggregate_home: int | None
+    aggregate_away: int | None
+    penalty_home: int | None
+    penalty_away: int | None
+    winner: TeamRef | None
+
+
+class KnockoutRound(ApiModel):
+    league: CompetitionRef
+    season: SeasonItem
+    stage: KnockoutStage
+    ties: list[KnockoutTie]
+
+
+class KnockoutsResponse(ApiModel):
+    data: KnockoutRound
     meta: StandingsMeta

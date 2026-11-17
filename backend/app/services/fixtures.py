@@ -53,13 +53,22 @@ def _parse_kickoff(item: dict[str, Any]) -> datetime | None:
 
 
 def upsert_fixtures(session: Session, items: Iterable[dict[str, Any]], now: datetime) -> int:
-    """Save provider fixtures of supported competitions. Returns the number saved; callers
-    compare it with the items they passed to notice a partly stored answer.
+    """Save fixtures and return the count for collection coverage checks."""
+    return len(upsert_fixture_items(session, items, now))
+
+
+def upsert_fixture_items(
+    session: Session, items: Iterable[dict[str, Any]], now: datetime
+) -> list[dict[str, Any]]:
+    """Save provider fixtures and return the exact items accepted for record storage.
 
     Only rows the provider returned are touched; a missing fixture is never deleted or
     marked finished (LIVE-003). A postponed match keeps its id and moves to the new date.
+    A fixture naming the same team on both sides is a broken answer: it is skipped and the
+    stored row stays as it was (06 개선, Codex 4차 지적).
     """
     rows: dict[int, dict[str, Any]] = {}
+    accepted: dict[int, dict[str, Any]] = {}
     teams: list[dict[str, Any]] = []
     participation: list[tuple[int, int, int]] = []
     for item in items:
@@ -76,11 +85,15 @@ def upsert_fixtures(session: Session, items: Iterable[dict[str, Any]], now: date
             or kickoff is None
         ):
             continue
+        if home["id"] == away["id"]:
+            logger.warning("fixture %s skipped: team %s on both sides", fixture["id"], home["id"])
+            continue
         status = fixture.get("status") or {}
         short = (status.get("short") or "").strip()
         mapped = map_status(short)
         goals = item.get("goals") or {}
         venue = fixture.get("venue") or {}
+        accepted[fixture["id"]] = item
         rows[fixture["id"]] = (
             {
                 "id": fixture["id"],
@@ -128,7 +141,7 @@ def upsert_fixtures(session: Session, items: Iterable[dict[str, Any]], now: date
             )
 
     if not rows:
-        return 0
+        return []
     upsert_teams(session, teams, now)
     add_participation(session, participation)
     values = list(rows.values())
@@ -139,7 +152,7 @@ def upsert_fixtures(session: Session, items: Iterable[dict[str, Any]], now: date
             set_={c: getattr(stmt.excluded, c) for c in values[0] if c != "id"},
         )
     )
-    return len(rows)
+    return [accepted[fixture_id] for fixture_id in rows]
 
 
 def live_targets(session: Session, now: datetime) -> list[int]:

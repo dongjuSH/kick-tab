@@ -15,10 +15,13 @@ from sqlalchemy.orm import Session
 
 from app.core.kst import kst_today
 from app.models.fixture import Fixture
+from app.models.match_detail import FixtureDetail, FixtureEvent
 from app.models.reference import CompetitionSeason
 from app.providers.api_football import ApiFootballClient, DailyBudget, MinuteRateLimiter
 from app.services.fixtures import fixtures_on, next_for_teams, upsert_fixtures
+from app.services.match_detail import detail_fetch_due, ensure_records, store_fixture_records
 from app.services.team_search import search_teams
+from app.sync import fixtures as fixture_jobs
 from app.sync.fixtures import sync_fixtures
 from app.sync.registry import JobContext, JobPartialFailure
 
@@ -159,6 +162,116 @@ def test_fixtures_job_keeps_data_and_marks_failed_competition(session, monkeypat
     after = session.execute(text("SELECT count(*) FROM fixtures WHERE competition_id = 39"))
     assert after.scalar() == count_before  # a failure never deletes stored matches
     assert ctx.api_requests == 14
+
+
+@pytest.fixture
+def record_answers(session):
+    now = datetime.now(UTC)
+    kickoff = now - timedelta(hours=1)
+    stored = item(101, kickoff, "2H")
+    stored.update(
+        events=[{"type": "Goal", "time": {"elapsed": 44}}],
+        statistics=[{"team": {"id": CITY}}],
+        lineups=[],
+        players=[],
+    )
+    store_fixture_records(session, [stored], now - timedelta(minutes=15))
+    upsert_fixtures(session, [item(101, kickoff, "FT")], now)
+    broken = item(101, kickoff, "FT", away=CITY)
+    broken.update(events=[], statistics=[], lineups=[], players=[])
+    good = item(102, kickoff, "FT", goals=(2, 1))
+    good.update(events=[{"type": "Goal", "time": {"elapsed": 55}}],
+                statistics=[], lineups=[], players=[])
+    return now, stored, broken, good
+
+
+def _records_client(respond):
+    return ApiFootballClient(
+        SecretStr("test"),
+        transport=httpx.MockTransport(respond),
+        limiter=MinuteRateLimiter(1000),
+        budget=DailyBudget(1000),
+    )
+
+
+def _event_minutes(session, fixture_id):
+    return list(session.scalars(
+        select(FixtureEvent.elapsed)
+        .where(FixtureEvent.fixture_id == fixture_id)
+        .order_by(FixtureEvent.seq)
+    ))
+
+
+@pytest.mark.parametrize("recovers", [True, False])
+def test_live_sync_rechecks_rejected_fixture_by_id(session, monkeypatch, record_answers, recovers):
+    _, stored, broken, good = record_answers
+    bad_id, good_id = BASE_ID + 101, BASE_ID + 102
+    calls = []
+
+    def respond(request):
+        assert request.url.path == "/fixtures"
+        by_id = request.url.params.get("ids")
+        calls.append(by_id)
+        if by_id is None:
+            # An invalid later copy of the good fixture must not wipe its valid detail either.
+            bad_copy = {**good, "teams": broken["teams"], "events": []}
+            response = [broken, good, bad_copy]
+        else:
+            response = [{**stored, "fixture": {
+                **stored["fixture"], "status": {"short": "FT"},
+            }}] if recovers else [broken]
+        return httpx.Response(200, json={"errors": [], "response": response})
+
+    monkeypatch.setattr(fixture_jobs, "live_targets", lambda *_: [bad_id, good_id])
+    with _records_client(respond) as client:
+        monkeypatch.setattr(JobContext, "api_football", lambda *args: client)
+        ctx = JobContext(session=session, params={})
+        if recovers:
+            fixture_jobs.sync_live(ctx)
+        else:
+            with pytest.raises(JobPartialFailure, match=str(bad_id)):
+                fixture_jobs.sync_live(ctx)
+
+    assert calls == [None, str(bad_id)]
+    assert _event_minutes(session, bad_id) == [44]
+    assert _event_minutes(session, good_id) == [55]
+    assert session.get(Fixture, bad_id).away_team_id == ARSENAL
+    assert session.get(FixtureDetail, bad_id).fetched_status == ("finished" if recovers else "live")
+
+
+@pytest.mark.parametrize("source", ["final_job", "on_demand"])
+def test_rejected_fixture_keeps_records_and_remains_retryable(
+    session, monkeypatch, record_answers, source
+):
+    now, stored, broken, good = record_answers
+    bad_id, good_id = BASE_ID + 101, BASE_ID + 102
+    lookup_key = "ids" if source == "final_job" else "id"
+    lookup = f"{bad_id}-{good_id}" if source == "final_job" else str(bad_id)
+
+    def respond(request):
+        assert request.url.path == "/fixtures"
+        assert request.url.params[lookup_key] == lookup
+        response = [broken, good] if source == "final_job" else [broken]
+        return httpx.Response(200, json={"errors": [], "response": response})
+
+    if source == "final_job":
+        monkeypatch.setattr(fixture_jobs, "final_record_targets", lambda *_: [bad_id, good_id])
+        with _records_client(respond) as client:
+            monkeypatch.setattr(JobContext, "api_football", lambda *args: client)
+            with pytest.raises(JobPartialFailure, match=f"Failed fixtures: {bad_id}$"):
+                fixture_jobs.sync_final_records(JobContext(session=session, params={}))
+        assert _event_minutes(session, good_id) == [55]
+        assert session.get(FixtureDetail, good_id).fetched_status == "finished"
+    else:
+        ensure_records(session, session.get(Fixture, bad_id), now, lambda: _records_client(respond))
+
+    row = session.get(FixtureDetail, bad_id)
+    assert row.statistics == stored["statistics"]
+    assert row.fetched_status == "live"
+    assert row.fetched_at == now - timedelta(minutes=15)
+    assert row.last_failed_at is not None
+    assert _event_minutes(session, bad_id) == [44]
+    assert detail_fetch_due(session.get(Fixture, bad_id), row, now + timedelta(minutes=11))
 
 
 def test_team_schedule_covers_the_same_three_weeks_as_date_view(session):
