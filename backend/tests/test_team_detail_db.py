@@ -101,17 +101,35 @@ def test_area_endpoints_answer_codes(client):
 
 
 def test_squad_rows_are_one_per_player_with_this_teams_line(client):
-    players = client.get(f"/api/v1/teams/{LAZIO}/squad").json()["data"]["players"]
+    data = client.get(f"/api/v1/teams/{CITY}/squad").json()["data"]
+    players = data["players"]
     ids = [p["player"]["id"] for p in players]
     assert len(ids) == len(set(ids))
+    record = {39, 140, 135, 78, 61, 2, 3, 848}
     for player in players:
-        rating = (player["stats"] or {}).get("rating")
-        assert rating is None or float(rating) > 0  # the provider's "0" is not a rating
+        lines = player["competitions"]
+        assert {line["competition"]["id"] for line in lines} <= record
+        for line in lines:
+            assert line["rating"] is None or float(line["rating"]) > 0  # "0" is not a rating
+        totals = player["totals"]
+        if totals is not None:  # the totals are the sum of the lines shown under them
+            for key in ("appearances", "goals", "assists"):
+                assert totals[key] == sum(line[key] for line in lines)
+
+
+def test_recent_matches_come_from_stored_fixtures_oldest_first(client):
+    recent = client.get(f"/api/v1/teams/{CITY}").json()["data"]["recent"]
+    assert 0 < len(recent) <= 5
+    days = [m["kickoffAt"] for m in recent]
+    assert days == sorted(days)
+    for match in recent:
+        assert CITY in (match["home"]["id"], match["away"]["id"])
+        assert match["result"] in ("W", "D", "L")
 
 
 def test_promoted_team_has_no_last_season_record(client):
     body = client.get(f"/api/v1/teams/{IPSWICH}/season-stats?season=2025").json()["data"]
-    assert (body["status"], body["record"]) == ("not_provided", None)
+    assert (body["status"], body["record"]) == ("not_participated", None)
     city = client.get(f"/api/v1/teams/{CITY}/season-stats?season=2025").json()["data"]
     record = city["record"]
     assert city["status"] == "available" and sum(
@@ -126,8 +144,14 @@ def test_transfer_halves_and_the_not_started_second_half(client):
     assert (second["label"], second["period"]) == ("26-27 후반기", "2027년 1~5월")
     if date.today() < date(2027, 1, 1):
         assert second["state"] == "not_started" and not second["arrivals"]
-    for item in first["arrivals"] + first["departures"]:
+    moves = [*first["arrivals"], *first["departures"], *first["otherArrivals"],
+             *first["otherDepartures"]]
+    for item in moves:
         assert "2026-06-01" <= item["transferDate"] <= "2026-12-31"
+    # One entry per move (D-08-6): Stones once, Akanji and Echeverri shown first.
+    assert [m["playerName"] for m in moves].count("J. Stones") == 1
+    shown = {m["playerName"] for m in [*first["arrivals"], *first["departures"]]}
+    assert {"M. Akanji", "C. Echeverri", "Rodri", "Bernardo Silva", "E. Anderson"} <= shown
     last = client.get(f"/api/v1/teams/{CITY}/transfers?season=2025").json()["data"]
     assert [h["state"] for h in last["halves"]] == ["open", "open"]
     assert (last["halves"][1]["label"], last["halves"][1]["period"]) == (
@@ -337,3 +361,95 @@ def test_team_news_lists_linked_articles_only(session, client):
     main = [a["title"] for a in client.get("/api/v1/news?size=24").json()["data"]]
     assert "Team only" not in main  # the main page still needs a badge
     assert client.get("/api/v1/news?team=999999999").status_code == 404
+
+
+def test_team_news_is_capped_at_24(session, client):
+    now = datetime.now(UTC)
+    articles = [
+        NewsArticle(
+            url_hash=f"{i:064x}", url=f"https://example.com/cap-{i}", source_domain="example.com",
+            title=f"Cap {i}", published_at=now + timedelta(minutes=10 + i), fetched_at=now,
+            expires_at=now + timedelta(hours=1), badge=None,
+        )
+        for i in range(30)
+    ]
+    session.add_all(articles)
+    session.flush()
+    session.add_all([NewsArticleTeam(article_id=a.id, team_id=CITY) for a in articles])
+    session.flush()
+    body = client.get(f"/api/v1/news?team={CITY}&size=24").json()
+    assert len(body["data"]) == 24 and body["data"][0]["title"] == "Cap 29"
+    assert body["meta"]["total"] == 24 and body["meta"]["nextCursor"] is None
+
+
+def test_shifted_player_pages_keep_the_stored_lines(session, monkeypatch):
+    """Codex 1차 지적 1: page 2 repeats page 1's last player instead of another one. The job
+    fails for the team; the stored lines and the success time stay."""
+    from app.models.team_detail import TeamPlayerStat
+    from app.sync import team_detail as job
+
+    def listing(pid):
+        return {"player": {"id": pid, "name": f"P{pid}"}, "statistics": [{
+            "team": {"id": CITY}, "league": {"id": 39, "season": 2026},
+            "games": {"appearences": 1, "rating": None}, "goals": {"total": 0, "assists": 0},
+        }]}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        people = range(1, 21) if page == 1 else [20, 21]  # 20 listed again, 22 left out
+        return httpx.Response(200, json={
+            "errors": [], "paging": {"current": page, "total": 2},
+            "response": [listing(990_000_000 + p) for p in people],
+        })
+
+    def fake_client(self, **_):
+        client = ApiFootballClient(
+            SecretStr("test"), transport=httpx.MockTransport(handler),
+            limiter=MinuteRateLimiter(1000), budget=DailyBudget(1000),
+        )
+        self._clients.append(client)
+        return client
+
+    where = (TeamPlayerStat.team_id == CITY, TeamPlayerStat.season == 2026)
+    stored = _count(session, TeamPlayerStat, *where)
+    synced = session.get(TeamSync, (CITY, 2026, "player_stats")).synced_at
+    monkeypatch.setattr(JobContext, "api_football", fake_client)
+    ctx = JobContext(session=session, params={"team": CITY, "force": "1"})
+    with pytest.raises(JobPartialFailure):
+        job.sync_team_player_stats(ctx)
+    session.expire_all()
+    assert _count(session, TeamPlayerStat, *where) == stored
+    row = session.get(TeamSync, (CITY, 2026, "player_stats"))
+    assert row.synced_at == synced and row.failed_at is not None
+    meta = detail.sync_meta(session, CITY, 2026, "player_stats")
+    assert meta[1] is True  # shown as "refresh failed" on the squad
+
+
+def test_player_record_units_current_daily_and_past_until_stored(session):
+    """team_player_stats: the current season once a KST day; the past season only until it
+    has been stored once (then fixed)."""
+    from app.sync import team_detail as job
+
+    session.execute(
+        TeamSync.__table__.delete().where(
+            TeamSync.team_id == CITY, TeamSync.kind == "player_stats"
+        )
+    )
+    now = datetime(2026, 11, 18, 7, tzinfo=UTC)  # 16:00 KST
+    labels = [u[3] for u in job._player_units(session, {"team": CITY}, now)]
+    assert labels == [f"player_stats:{CITY}", f"player_stats:{CITY}:2025"]
+    detail.mark_success(session, CITY, 2026, "player_stats", now, 1)
+    detail.mark_success(session, CITY, 2025, "player_stats", now, 1)
+    assert job._player_units(session, {"team": CITY}, now) == []
+    tomorrow = now + timedelta(days=1)
+    labels = [u[3] for u in job._player_units(session, {"team": CITY}, tomorrow)]
+    assert labels == [f"player_stats:{CITY}"]  # the stored past season is not asked again
+    # A failed past season is retried the next day until it succeeds once.
+    session.execute(
+        TeamSync.__table__.delete().where(
+            TeamSync.team_id == CITY, TeamSync.season == 2025, TeamSync.kind == "player_stats"
+        )
+    )
+    detail.mark_failure(session, CITY, 2025, "player_stats", now, "IncompleteData")
+    labels = [u[3] for u in job._player_units(session, {"team": CITY}, tomorrow)]
+    assert f"player_stats:{CITY}:2025" in labels

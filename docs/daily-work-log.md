@@ -1,5 +1,25 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-18 (수) — 08 팀 상세 수정 반영
+
+브랜치 `feat/08-team-detail`(최신 `dev` e72a3ee 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.12, 기능 명세서 v1.12(TEAM-002·004·005·006, NEWS-003), 유저 플로우 v1.11(UF-11·UF-15), Figma 52:1254·52:1866·472:18198·478:6886·469:6642·470:6667·471:6856. 사용자 결정: 이적료·원화 환산 제외(D-08-10), 선수 기록은 8개 대회만. Codex 교차 검증 2회(1차 차단 1·경미 5 → 보완 후 2차 통과).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 선수 기록 수집 | `migrations/versions/20261118_0016_team_player_stats.py`(새: `team_player_stats`·RLS, `team_syncs.kind`에 `player_stats`), `models/team_detail.py`(`TeamPlayerStat`), `services/team_detail.py`(`parse_team_players`·`save_team_player_stats`·`_add_record_players`), `sync/team_detail.py`(`team_player_stats` 15:30 KST·`_player_units`) | 06 `player_season_stats`는 리그 줄만이라 UEFA를 못 담음 — 팀별 `/players?team=&season=` 전체 페이지, 8개 대회 줄만, 06과 행 소유 분리 |
+| 선수단 응답 | `api/routes/teams.py`(`read_team_squad`·`_totals`), `services/team_detail.py`(`read_squad`·`missing_record_competitions`·`flag_url`), `seed/countries.json`(새, `/countries` 1회) | 합계·대회별 줄·국기·부분 집계, 누락은 null(0으로 채우지 않음) |
+| 최근 5경기 | `services/team_detail.py`(`recent_results`·`match_result`), `routes/teams.py`(`recent`), 삭제 `ensure_form` 호출·`form_block` | 저장된 공식 경기에서 오래된 순, 요청 시 외부 호출 없음 |
+| 이적 | `services/team_detail.py`(`parse_transfers` 원본 저장, `merge_transfers` (가)(나), `transfer_context`·`shown_first`·`YOUTH_SIDE`), `routes/teams.py`(반기별 `other*`) | 중복 정리는 응답 때, 표시 기준 B와 '기타 이동' |
+| 기타 API | `services/news.py`(`TEAM_NEWS_LIMIT` 24), 시즌 기록 `not_participated`, 응답 필드 삭제(`TransferHalf.start/end`, `CoachInfo.photoUrl`, `TransferCounterpart.crestUrl`, `SquadSeasonStats`) | 팀 뉴스 24개, 승격 팀 문구, 작업 원칙 5 |
+| 화면 | `features/team-detail/TeamDetail.tsx`(PC 2열·헤더 472:18198·URL `half`·pushState), `SquadTable.tsx`(합계·국기·대회별 기록 Dialog·부분 집계), `SeasonRecords.tsx`(시즌 버튼·빈 상태 문구·반기 탭·기타 이동), `TeamNews.tsx`(24개), `TeamMatches.tsx`, `model.ts`(`seasonText`·`currentHalf`·`pickHalf`·유형 번역), `components/ui/Tabs.tsx`(`disabled`·`trailing`), `components/ui/DataState.tsx`(`retryLabel`), `lib/api/schema.d.ts` | Figma 기준 배치·문구, '다시 시도' |
+| Codex 1차 보완 | `parse_team_players`(같은 선수 반복 → 응답 전체 거부), `SquadTable`(Dialog 유지 → 포커스 복귀), `TeamNews`(빈 상태 설명 삭제), `TeamHeader`(16·12·56px), 응답 필드 삭제, `guide.md`(§6.4·§3.1·D-08-5·§2) | 차단 1(기존 기록 삭제 후 성공 처리)·경미 5 |
+| 테스트 | `tests/test_team_detail.py`(`merge_transfers`·기준 B·`parse_team_players`·반복 거부·`match_result`), `tests/test_team_detail_db.py`(합계 = 줄 합, 최근 경기, not_participated, 이적 정리·표시, 뉴스 24, 반복 페이지 기록 유지, 작업 단위), `frontend/tests/team-detail.test.mjs`(유형 문구·반기 선택) | 새 규칙 회귀 |
+| 문서 | `docs/guide.md`(첫 단락·§2·§3 08·§3.1·§6.3~§6.5·D-08-5~8·§11), `docs/file-feature-map.md`, 이 문서 | 사용자 요청으로 세 문서 최신화 |
+
+실제 수집: team=50 5회 → 전체 96팀×2시즌 434회(실패 0, 8,299줄 — 2025 4,478·2026 3,821), `/countries` 1회, 맨시티 원본 비교 2회(PL 29줄 145경기·UCL 26줄 62경기 일치, League Cup·Community Shield 제외), 반복 거부 강화 후 전체 현재 시즌 재수집 192회+맨시티 2회 모두 성공. 하루 전체 호출(`sync_runs`) 11/16 1,025·11/17 1,068·11/18 1,273회. 이적 정리 2025-26 7,159→5,960·2026-27 4,559→4,355, 기준 B 팀 평균 45.4→28.3(맨시티 2026 57건 중 표시 35·기타 22). 사고: 0016 첫 적용 실패 직후 `alembic downgrade -1`이 04의 `0015`를 되돌렸다가 재적용(리뷰 0건·보호 조건으로 손실 없음 확인, Codex 판단 유지).
+
+검수: 백엔드 ruff·pytest 313(DB 포함 403)·alembic check(head 0016), 프런트 lint·`tsc --noEmit`·npm test 53·Turbopack 빌드, `git diff --check`. 브라우저 1920·1440·375·320에서 맨시티·레알 마드리드·입스위치(승격)·토트넘(뉴스 24)·노팅엄(뉴스 없음): 최근 5경기 팝업, 선수단 10→27명·합계 = 대회별 합·국기/'—'·표 내부 가로 스크롤, Dialog 포커스 복귀, 뉴스 6→24, Stones 1건·PSV 1건·Rodri/Bernardo 방출·Anderson 영입·아칸지/에체베리 표시·기타 이동 22, 후반기 비활성·'후반기는 1월부터'·URL·뒤로 가기, 빈 상태 3종·오류 '다시 시도', 비회원 링크 흐름, 콘솔 오류 0.
+
 ## 2026-11-18 (수) — 07 팀 탐색 개선
 
 브랜치 `feat/07-team-browse`(최신 `dev` 4bc6693 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.12 Fix, 기능 명세서 v1.12 Fix LEAG-003, 유저 플로우 v1.11 Fix UF-10, Figma 52:624·52:949·57:766·57:836. Codex 교차 검증 2회(1차 중요 1·경미 1 → 보완 후 2차 통과). 외부 API 호출 0회, 마이그레이션 없음.

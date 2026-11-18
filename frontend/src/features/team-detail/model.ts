@@ -6,10 +6,10 @@ import { MISSING } from "@/lib/format/kst";
  * A missing value is always "—" (never 0 or a value from somewhere else).
  */
 
-/** Mobile tabs below the overview (PRD 16장: 경기·선수·기록·뉴스; 기록 = 시즌 기록 + 이적). */
+/** Mobile tabs below the overview (Figma 52:1866: 경기·선수단·기록·뉴스; 기록 = 시즌 기록 + 이적). */
 export const TEAM_TABS = [
   { value: "matches", label: "경기" },
-  { value: "players", label: "선수" },
+  { value: "players", label: "선수단" },
   { value: "records", label: "기록" },
   { value: "news", label: "뉴스" },
 ] as const;
@@ -25,6 +25,11 @@ export const SEASON_TABS = [
   { value: "this", label: "이번 시즌" },
   { value: "last", label: "지난 시즌" },
 ] as const;
+
+/** "2026–27" (Figma) from the API's "2026-27". */
+export function seasonText(label: string): string {
+  return label.replace("-", "–");
+}
 
 export function seasonOf(choice: SeasonChoice, current: number): number {
   return choice === "last" ? current - 1 : current;
@@ -49,15 +54,7 @@ function positionOrder(position: string | null): number | null {
   return POSITIONS[position]?.order ?? 4;
 }
 
-export type SortKey =
-  | "number"
-  | "name"
-  | "position"
-  | "nationality"
-  | "appearances"
-  | "goals"
-  | "assists"
-  | "rating";
+export type SortKey = "number" | "name" | "position" | "nationality" | "appearances" | "goals" | "assists";
 export interface SortState {
   key: SortKey;
   dir: "asc" | "desc";
@@ -67,7 +64,7 @@ export interface SortState {
 export const DEFAULT_SORT: SortState = { key: "position", dir: "asc" };
 export const PLAYERS_SHOWN = 10;
 
-const STAT_KEYS: readonly SortKey[] = ["appearances", "goals", "assists", "rating"];
+const STAT_KEYS: readonly SortKey[] = ["appearances", "goals", "assists"];
 
 /** A new column starts with its natural order (records: most first); the same column flips. */
 export function nextSort(current: SortState, key: SortKey): SortState {
@@ -85,10 +82,8 @@ function value(player: SquadPlayer, key: SortKey): number | string | null {
       return positionOrder(player.position);
     case "nationality":
       return player.nationality;
-    case "rating":
-      return player.stats?.rating == null ? null : Number(player.stats.rating);
     default:
-      return player.stats?.[key] ?? null;
+      return player.totals?.[key] ?? null;
   }
 }
 
@@ -169,9 +164,13 @@ export function standingText(standing: { rank: number; points: number | null } |
 
 // ---------------------------------------------------------------- transfers (TEAM-006)
 
-/** Provider transfer types in Korean; amounts and unknown words are shown as given. */
+/**
+ * Provider transfer types in Korean (2026-11-18: the type only, no amounts — D-08-10). A fee
+ * written in the type ("€ 12M") is a permanent transfer; an unknown word is shown as given.
+ */
 const TRANSFER_TYPES: Record<string, string> = {
   transfer: "완전 이적",
+  raise: "유스 승격",
   loan: "임대",
   "return from loan": "임대 복귀",
   "back from loan": "임대 복귀",
@@ -183,13 +182,44 @@ const TRANSFER_TYPES: Record<string, string> = {
 
 export function transferTypeText(type: string | null): string {
   if (!type) return MISSING;
-  return TRANSFER_TYPES[type.trim().toLowerCase()] ?? type;
+  const known = TRANSFER_TYPES[type.trim().toLowerCase()];
+  if (known) return known;
+  return /[€$£]|\d/.test(type) ? TRANSFER_TYPES.transfer : type;
 }
 
-/** "2027년 1월부터 집계됩니다" for a half that has not begun (TEAM-006 rule 5). */
-export function notStartedText(start: string): string {
-  const [year, month] = start.split("-").map(Number);
-  return `${year}년 ${month}월부터 집계됩니다.`;
+/** "2026.07.01" from "2026-07-01". */
+export function dotDate(iso: string): string {
+  return iso.replaceAll("-", ".");
+}
+
+/** Transfer half chosen in the URL (`half=first|second`, Figma 471:6856 underline tabs). */
+export type HalfChoice = "first" | "second";
+export const HALF_TABS = [
+  { value: "first", label: "전반기" },
+  { value: "second", label: "후반기" },
+] as const;
+
+export function isHalf(value: string | null): value is HalfChoice {
+  return value === "first" || value === "second";
+}
+
+/** June–December is the first half, January–May the second (the API's split). */
+export function currentHalf(todayIso: string): HalfChoice {
+  return Number(todayIso.slice(5, 7)) >= 6 ? "first" : "second";
+}
+
+/**
+ * The half shown: the one asked for (URL) or the fallback; a half that has not begun is never
+ * shown (its tab is disabled), so the open one is used instead.
+ */
+export function pickHalf(
+  asked: HalfChoice | null,
+  halves: readonly { half: HalfChoice; state: "open" | "not_started" }[],
+  fallback: HalfChoice,
+): HalfChoice {
+  const wanted = asked ?? fallback;
+  if (halves.some((h) => h.half === wanted && h.state === "open")) return wanted;
+  return halves.find((h) => h.state === "open")?.half ?? wanted;
 }
 
 // ---------------------------------------------------------------- overview (TEAM-001)

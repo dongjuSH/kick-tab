@@ -9,8 +9,13 @@ Collection (pure parsing + replace-on-success, like chat 06):
   played that league that season (a promoted team has no record to ask for).
 - profiles: /players/profiles?player= — once per squad player whose nationality is missing
   (TEAM-002 "한 번 보완"); a still missing value stays NULL (never the birth country).
-- transfers: /transfers?team= — entries involving the team, classified by date: season S is
-  S-06-01 .. (S+1)-05-31, first half June-December, second half January-May. Future-dated
+- team player records (2026-11-18): /players?team=&season= — every page, one listing per
+  player, this team's lines in the record competitions (five leagues + three UEFA) only, in
+  `team_player_stats` (08's own table; chat 06's league-wide `player_season_stats` has its
+  own writer). The current season daily, the past season until stored once.
+- transfers: /transfers?team= — entries involving the team, stored as given and classified by
+  date: season S is S-06-01 .. (S+1)-05-31, first half June-December, second half
+  January-May. Repeated entries are merged when answering (`merge_transfers`). Future-dated
   entries are left out until their date. A season is refreshed through the (S+1)-07-01 00:00
   run (records added up to June 30) and fixed afterwards; one never stored is still stored
   once (first collection). Every unit runs at most once per KST day.
@@ -22,9 +27,14 @@ cannot be confirmed MEMBERSHIP_UNKNOWN (never "relegated").
 """
 
 import html
+import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
+from functools import cache
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, func, or_, select
@@ -34,20 +44,19 @@ from sqlalchemy.orm import Session, aliased
 from app.config import settings
 from app.core.kst import kst_date
 from app.models.fixture import Fixture
-from app.models.match_detail import TeamForm
 from app.models.reference import Competition, CompetitionSeason, Team, TeamCompetitionSeason
-from app.models.standings import LeagueSync, Player, PlayerSeasonStat, Standing
-from app.models.team_detail import SquadMember, TeamCoach, TeamSeasonStat, TeamSync, Transfer
-from app.schemas.match import MatchSummary
-from app.schemas.match_detail import FormBlock, FormMatch
-from app.seed.competitions import LEAGUE_IDS
-from app.services.fixtures import LIVE_LAG, to_summary
-from app.services.head_to_head import (
-    competition_names,
-    recent_form,
-    result_for,
-    team_names,
+from app.models.standings import LeagueSync, Player, Standing
+from app.models.team_detail import (
+    SquadMember,
+    TeamCoach,
+    TeamPlayerStat,
+    TeamSeasonStat,
+    TeamSync,
+    Transfer,
 )
+from app.schemas.match import MatchSummary
+from app.seed.competitions import LEAGUE_IDS, UEFA_IDS
+from app.services.fixtures import LIVE_LAG, to_summary
 from app.services.reference import managed_seasons, team_detail_lookup
 from app.services.standings import IncompleteData
 
@@ -78,6 +87,26 @@ def _date(value: Any) -> date | None:
         return date.fromisoformat(str(value)[:10]) if value else None
     except ValueError:
         return None
+
+
+COUNTRIES_PATH = Path(__file__).resolve().parents[1] / "seed" / "countries.json"
+
+
+def _country_key(name: str) -> str:
+    return re.sub(r"[\s\-_]+", " ", name).strip().casefold()
+
+
+@cache
+def _flags() -> dict[str, str]:
+    """Country name -> flag image from API-Football /countries (one request, 2026-11-18,
+    stored as a seed). Names are compared without case, spaces or hyphens."""
+    data = json.loads(COUNTRIES_PATH.read_text(encoding="utf-8"))
+    return {_country_key(name): url for name, url in data.items()}
+
+
+def flag_url(nationality: str | None) -> str | None:
+    """The flag of a player's nationality; None when unknown (the name is shown alone)."""
+    return _flags().get(_country_key(nationality)) if nationality else None
 
 
 def display_text(value: str | None) -> str | None:
@@ -282,36 +311,48 @@ def parse_transfers(response: Any, team_id: int, today: date) -> list[dict[str, 
                 "season": season,
                 "half": half,
             }
-    # The provider often lists one move twice, the second a day later (same player, club,
-    # direction and type: e.g. 08-10 and 08-11). Such a pair is one move: the first date is
-    # kept, so the move is shown once (and the pair never splits across two halves). It is
-    # merged only when nothing else happened to the player on those two days: a move the
-    # other way on either day (loan out 08-10, back 08-11, out again 08-11) makes them two
-    # real moves, and both are kept (Codex 1차 지적 8).
-    days = {(r["player_id"], r["transfer_date"], r["direction"]) for r in rows.values()}
+    # Stored as given (2026-11-18): the provider's repeated entries are merged when the
+    # response is built (`merge_transfers`), never at collection.
+    return list(rows.values())
+
+
+def merge_transfers(rows: Sequence[Transfer]) -> list[Transfer]:
+    """One entry per move (D-08-6, 2026-11-18), applied to stored rows when answering.
+
+    (가) Same player, date and direction: when one entry names the other club by id, the
+        entries without an id (the provider's name-only copy: "PSV" / "PSV Eindhoven",
+        "Hull" / "Hull City", "Stones John") are dropped.
+    (나) Same player, direction, club id and season: entries re-registered on later dates
+        (1-46 days apart, the old one-day rule included) are one move shown on the earliest
+        date — unless a move the other way (any club) falls between them, which makes them
+        separate moves. Entries without a club id are never merged by (나).
+    The result is in date order."""
+    with_id = {(r.player_id, r.transfer_date, r.direction) for r in rows if r.counterpart_id}
+    kept = [
+        r for r in rows
+        if r.counterpart_id or (r.player_id, r.transfer_date, r.direction) not in with_id
+    ]
+    other_way: dict[tuple[int, str], list[date]] = {}
+    for r in kept:
+        other_way.setdefault((r.player_id, r.direction), []).append(r.transfer_date)
     opposite = {"in": "out", "out": "in"}
-    kept: list[dict[str, Any]] = []
-    last: dict[tuple[Any, ...], date] = {}
-    for row in sorted(rows.values(), key=lambda r: (r["transfer_date"], r["player_id"])):
-        if row["counterpart_id"] is None:
-            # The other club cannot be identified (name only, 933 such rows on 2026-11-07):
-            # never merged, so two different moves are not taken for one (Codex 2차 지적 N2).
-            kept.append(row)
+    merged: list[Transfer] = []
+    first_of: dict[tuple[Any, ...], date] = {}
+    for r in sorted(kept, key=lambda r: (r.transfer_date, r.id or 0)):
+        if r.counterpart_id is None:
+            merged.append(r)
             continue
-        same = (row["player_id"], row["direction"], row["counterpart_id"], row["type_raw"])
-        previous = last.get(same)
-        last[same] = row["transfer_date"]
-        if (
-            previous is not None
-            and row["transfer_date"] - previous == timedelta(days=1)
-            and not any(
-                (row["player_id"], day, opposite[row["direction"]]) in days
-                for day in (previous, row["transfer_date"])
-            )
-        ):
-            continue
-        kept.append(row)
-    return kept
+        key = (r.player_id, r.direction, r.counterpart_id, r.season)
+        previous = first_of.get(key)
+        between = previous is not None and any(
+            previous <= day <= r.transfer_date
+            for day in other_way.get((r.player_id, opposite[r.direction]), [])
+        )
+        if previous is not None and not between:
+            continue  # the same move registered again later
+        first_of[key] = r.transfer_date
+        merged.append(r)
+    return merged
 
 
 def parse_profile_nationality(response: Any, player_id: int) -> str | None:
@@ -483,6 +524,155 @@ def save_nationality(
     player.profile_checked_at = now
 
 
+# ------------------------------------------------- team player records (2026-11-18)
+
+# The competitions a player's season total counts: the five leagues and the three UEFA
+# competitions. Domestic cups, the Club World Cup, friendlies and super cups are left out
+# until the overall review decides on them (D-08-7).
+RECORD_COMPETITIONS = (*LEAGUE_IDS, *UEFA_IDS)
+TEAM_PAGE_SIZE = 20
+TEAM_LINES_SHRINK_TOLERANCE = 0.1
+
+
+@dataclass
+class ParsedTeamPlayers:
+    lines: list[dict[str, Any]]
+    players: list[dict[str, Any]]
+
+
+def parse_team_players(
+    pages: Sequence[Mapping[str, Any]], team_id: int, season: int
+) -> ParsedTeamPlayers:
+    """Every page of /players?team=&season= (each page's `response` and `paging`).
+
+    The set must be complete: pages 1..total with one total, TEAM_PAGE_SIZE entries on every
+    page but the last (1..TEAM_PAGE_SIZE there). The provider lists each player once, so a
+    player listed again (pages shifted: someone else is missing) refuses the set. Only this
+    team's lines in the record competitions of this season are kept; other clubs' lines and
+    other competitions (domestic cups, Club World Cup, friendlies) are dropped. Missing values
+    stay None."""
+    if not pages:
+        raise IncompleteData("team players: no page")
+    total = _int((pages[0].get("paging") or {}).get("total"))
+    if total == 0 and len(pages) == 1 and not pages[0].get("response"):
+        return ParsedTeamPlayers([], [])
+    currents = [_int((p.get("paging") or {}).get("current")) for p in pages]
+    if (
+        total is None
+        or total < 1
+        or len(pages) != total
+        or sorted(c or 0 for c in currents) != list(range(1, total + 1))
+        or any(_int((p.get("paging") or {}).get("total")) != total for p in pages)
+    ):
+        raise IncompleteData(f"team players: pages {len(pages)} of {total}")
+    for page, current in zip(pages, currents, strict=True):
+        size = len(page.get("response") or [])
+        low = 1 if current == total else TEAM_PAGE_SIZE
+        if not low <= size <= TEAM_PAGE_SIZE:
+            raise IncompleteData(f"team players: page {current} of {total} has {size} entries")
+
+    lines: dict[tuple[int, int], dict[str, Any]] = {}
+    players: dict[int, dict[str, Any]] = {}
+    for page in pages:
+        for entry in page.get("response") or []:
+            player = (entry or {}).get("player") or {}
+            if not player.get("id") or not player.get("name"):
+                raise IncompleteData("team players: entry without player")
+            if player["id"] in players:
+                # The provider lists a player once; a repeat means the pages shifted and
+                # another player was left out (Codex 1차 지적 1): the whole answer is refused.
+                raise IncompleteData(f"team players: player {player['id']} listed twice")
+            players[player["id"]] = {
+                "id": player["id"],
+                "name": player["name"],
+                "photo_url": player.get("photo") or None,
+                "nationality": player.get("nationality") or None,
+            }
+            for stats in entry.get("statistics") or []:
+                league = stats.get("league") or {}
+                if (stats.get("team") or {}).get("id") != team_id:
+                    continue
+                if league.get("id") not in RECORD_COMPETITIONS:
+                    continue
+                if league.get("season") not in (season, None):
+                    raise IncompleteData(f"team players: season {league.get('season')}")
+                games = stats.get("games") or {}
+                goals = stats.get("goals") or {}
+                line = {
+                    "player_id": player["id"],
+                    "competition_id": league["id"],
+                    "appearances": _int(games.get("appearences")),
+                    "goals": _int(goals.get("total")),
+                    "assists": _int(goals.get("assists")),
+                    "rating": _rating(games.get("rating")),
+                }
+                key = (player["id"], league["id"])
+                if key in lines and lines[key] != line:
+                    raise IncompleteData(
+                        f"team players: player {player['id']} has two lines in {league['id']}"
+                    )
+                lines[key] = line
+    return ParsedTeamPlayers(list(lines.values()), list(players.values()))
+
+
+def _rating(value: Any) -> Decimal | None:
+    """The provider's per-competition rating; "0" is its placeholder for "not rated"."""
+    try:
+        rating = Decimal(str(value)) if value not in (None, "") else None
+    except InvalidOperation:
+        return None
+    return rating if rating else None
+
+
+def save_team_player_stats(
+    session: Session, team_id: int, season: int, parsed: ParsedTeamPlayers, now: datetime
+) -> None:
+    """Replace the team's lines of one season. A season's lines only grow: an empty answer or
+    a drop of more than TEAM_LINES_SHRINK_TOLERANCE keeps the stored lines (a cut answer)."""
+    stored = session.scalar(
+        select(func.count()).select_from(TeamPlayerStat).where(
+            TeamPlayerStat.team_id == team_id, TeamPlayerStat.season == season
+        )
+    ) or 0
+    if stored and len(parsed.lines) < stored * (1 - TEAM_LINES_SHRINK_TOLERANCE):
+        raise IncompleteData(f"team players: {len(parsed.lines)} lines would replace {stored}")
+    listed = {line["player_id"] for line in parsed.lines}
+    _add_record_players(session, [p for p in parsed.players if p["id"] in listed], now)
+    session.execute(
+        delete(TeamPlayerStat).where(
+            TeamPlayerStat.team_id == team_id, TeamPlayerStat.season == season
+        )
+    )
+    if parsed.lines:
+        session.execute(
+            insert(TeamPlayerStat).values(
+                [{**line, "team_id": team_id, "season": season, "synced_at": now}
+                 for line in parsed.lines]
+            )
+        )
+    mark_success(session, team_id, season, "player_stats", now, len(parsed.lines))
+
+
+def _add_record_players(
+    session: Session, players: Sequence[dict[str, Any]], now: datetime
+) -> None:
+    """Players of the record lines: new ones get their provider identity; stored ones keep
+    their values and only gain a missing photo or nationality (never set back to NULL)."""
+    ordered = sorted(players, key=lambda p: p["id"])
+    for start in range(0, len(ordered), 500):
+        chunk = [{**p, "updated_at": now} for p in ordered[start : start + 500]]
+        stmt = insert(Player).values(chunk)
+        session.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[Player.id],
+                set_={
+                    "photo_url": func.coalesce(Player.photo_url, stmt.excluded.photo_url),
+                    "nationality": func.coalesce(Player.nationality, stmt.excluded.nationality),
+                },
+            )
+        )
+
+
 # ---------------------------------------------------------------------------- schedule
 
 
@@ -647,30 +837,51 @@ def standings_collected(session: Session, league: int, season: int) -> bool:
     return row is not None and row.synced_at is not None
 
 
-def form_block(session: Session, team_id: int) -> FormBlock:
-    row = session.get(TeamForm, team_id)
-    if row is None or row.fetched_at is None:
-        return FormBlock(status="unavailable", data=None)
-    rows = recent_form(row.payload or [], team_id)
-    if not rows:
-        return FormBlock(status="not_provided", data=None)
-    names, teams = competition_names(session), team_names(session, [row.payload or []])
-    data = []
-    for r in rows:
-        home = r["homeId"] == team_id
-        other = "away" if home else "home"
-        data.append(
-            FormMatch(
-                kickoff_date_kst=kst_date(datetime.fromisoformat(r["kickoffAt"])),
-                competition=names.get(r.get("leagueId")) or r.get("leagueName") or "—",
-                opponent_name=teams.get(r[f"{other}Id"]) or r[f"{other}Name"] or "—",
-                venue="home" if home else "away",
-                goals_for=r["goalsHome"] if home else r["goalsAway"],
-                goals_against=r["goalsAway"] if home else r["goalsHome"],
-                result=result_for(r, team_id),
-            )
+@dataclass(frozen=True)
+class RecentResult:
+    fixture: Fixture
+    home: Team
+    away: Team
+    result: str  # W / D / L for this team
+
+
+def match_result(fixture: Fixture, team_id: int) -> str:
+    """W / D / L for the team: goals (extra time included); a shoot-out decides a level match."""
+    mine, theirs = (
+        (fixture.goals_home, fixture.goals_away)
+        if fixture.home_team_id == team_id
+        else (fixture.goals_away, fixture.goals_home)
+    )
+    if mine == theirs and fixture.finish_type == "pen":
+        penalty = (fixture.score or {}).get("penalty") or {}
+        home, away = penalty.get("home"), penalty.get("away")
+        if isinstance(home, int) and isinstance(away, int) and home != away:
+            won = home > away if fixture.home_team_id == team_id else away > home
+            return "W" if won else "L"
+    return "W" if mine > theirs else "L" if mine < theirs else "D"
+
+
+def recent_results(session: Session, team_id: int) -> list[RecentResult]:
+    """The team's last RECENT finished matches in the supported competitions (stored match
+    list: leagues, domestic cups and UEFA), oldest first — the last one is the latest. A
+    match without a score is skipped. Read from the DB only: no provider request."""
+    home, away = aliased(Team), aliased(Team)
+    rows = session.execute(
+        select(Fixture, home, away)
+        .join(Competition, Competition.id == Fixture.competition_id)
+        .join(home, home.id == Fixture.home_team_id)
+        .join(away, away.id == Fixture.away_team_id)
+        .where(
+            Competition.active,
+            Fixture.status == "finished",
+            Fixture.goals_home.is_not(None),
+            Fixture.goals_away.is_not(None),
+            or_(Fixture.home_team_id == team_id, Fixture.away_team_id == team_id),
         )
-    return FormBlock(status="available", data=data)
+        .order_by(Fixture.kickoff_at.desc(), Fixture.id.desc())
+        .limit(RECENT)
+    ).all()
+    return [RecentResult(f, h, a, match_result(f, team_id)) for f, h, a in reversed(rows)]
 
 
 def team_fixtures(
@@ -753,27 +964,115 @@ def season_fixture_failures(session: Session, team_id: int) -> list[int]:
 class SquadRow:
     member: SquadMember
     player: Player
-    line: PlayerSeasonStat | None
+    # This team's lines of the current season in the record competitions (one per competition).
+    lines: list[tuple[TeamPlayerStat, Competition]]
 
 
-def read_squad(session: Session, team_id: int, league: int) -> list[SquadRow]:
-    """Current squad joined with this team's league line of the current season. A player's
-    lines at other clubs stay apart (never added), so each player appears once."""
+def read_squad(session: Session, team_id: int) -> list[SquadRow]:
+    """Current squad with each player's lines for this team this season in the record
+    competitions. Other clubs' lines and other competitions are never added."""
     season = settings.current_season
-    rows = session.execute(
-        select(SquadMember, Player, PlayerSeasonStat)
+    members = session.execute(
+        select(SquadMember, Player)
         .join(Player, Player.id == SquadMember.player_id)
-        .outerjoin(
-            PlayerSeasonStat,
-            (PlayerSeasonStat.player_id == SquadMember.player_id)
-            & (PlayerSeasonStat.team_id == team_id)
-            & (PlayerSeasonStat.competition_id == league)
-            & (PlayerSeasonStat.season == season),
-        )
         .where(SquadMember.team_id == team_id)
         .order_by(SquadMember.player_id)
     ).all()
-    return [SquadRow(m, p, s) for m, p, s in rows]
+    lines: dict[int, list[tuple[TeamPlayerStat, Competition]]] = {}
+    for line, competition in session.execute(
+        select(TeamPlayerStat, Competition)
+        .join(Competition, Competition.id == TeamPlayerStat.competition_id)
+        .where(TeamPlayerStat.team_id == team_id, TeamPlayerStat.season == season)
+        .order_by(Competition.sort_order)
+    ):
+        lines.setdefault(line.player_id, []).append((line, competition))
+    return [SquadRow(m, p, lines.get(p.id, [])) for m, p in members]
+
+
+def missing_record_competitions(session: Session, team_id: int) -> list[int]:
+    """Record competitions the team played this season (a finished stored match) without any
+    collected player line: the season totals are partial ("부분 집계")."""
+    season = settings.current_season
+    played = set(
+        session.scalars(
+            select(Fixture.competition_id)
+            .where(
+                Fixture.season == season,
+                Fixture.status == "finished",
+                Fixture.competition_id.in_(RECORD_COMPETITIONS),
+                or_(Fixture.home_team_id == team_id, Fixture.away_team_id == team_id),
+            )
+            .distinct()
+        )
+    )
+    covered = set(
+        session.scalars(
+            select(TeamPlayerStat.competition_id)
+            .where(TeamPlayerStat.team_id == team_id, TeamPlayerStat.season == season)
+            .distinct()
+        )
+    )
+    return sorted(played - covered)
+
+
+# ------------------------------------------------- transfers shown first (표시 기준 B)
+
+GROUP_TYPES = frozenset({"transfer", "free agent", "free transfer", "free"})
+# Second / youth / reserve sides: a signing from one is not a first-team signing.
+YOUTH_SIDE = re.compile(
+    r"\bU-?\d{2}\b|\bII\b|\bB\b$|youth|reserve|academy|primavera|juvenil|jong\s|"
+    r"castilla|\bamateur|\bsub-?\d{2}",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class TransferContext:
+    """What decides whether a move is shown first (2026-11-18 표시 기준 B)."""
+
+    players: frozenset[int]  # squad now, or played for the team in the record competitions
+    clubs: frozenset[int]  # five-league / UEFA participants of this or last season
+
+
+def transfer_context(session: Session, team_id: int) -> TransferContext:
+    seasons = (settings.current_season, settings.current_season - 1)
+    squad = set(
+        session.scalars(select(SquadMember.player_id).where(SquadMember.team_id == team_id))
+    )
+    played = set(
+        session.scalars(
+            select(TeamPlayerStat.player_id).where(
+                TeamPlayerStat.team_id == team_id,
+                TeamPlayerStat.season.in_(seasons),
+                TeamPlayerStat.appearances > 0,
+            )
+        )
+    )
+    clubs = set(
+        session.scalars(
+            select(TeamCompetitionSeason.team_id).where(
+                TeamCompetitionSeason.season.in_(seasons),
+                TeamCompetitionSeason.competition_id.in_(RECORD_COMPETITIONS),
+            )
+        )
+    )
+    return TransferContext(frozenset(squad | played), frozenset(clubs))
+
+
+def shown_first(row: Transfer, context: TransferContext) -> bool:
+    """① a player of this squad or one who played for the team (this or last season, record
+    competitions) ② a first-team signing (in, permanent/free type, not from a youth/reserve
+    side) ③ the other club plays the five leagues or UEFA (this or last season). Every other
+    move goes under "기타 이동" — never removed."""
+    if row.player_id in context.players:
+        return True
+    if (
+        row.direction == "in"
+        and (row.type_raw or "").strip().lower() in GROUP_TYPES
+        and not YOUTH_SIDE.search(row.counterpart_name or "")
+    ):
+        return True
+    return row.counterpart_id is not None and row.counterpart_id in context.clubs
 
 
 def read_season_stat(

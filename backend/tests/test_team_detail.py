@@ -1,25 +1,32 @@
 """Team detail rules without a database (chat 08, TEAM-001·002·005·006)."""
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 
 import pytest
 
 from app.core.kst import KST
-from app.models.team_detail import TeamSync
+from app.models.fixture import Fixture
+from app.models.team_detail import TeamSync, Transfer
 from app.services.standings import IncompleteData
 from app.services.team_detail import (
     NO_COACH,
+    TransferContext,
     check_squad,
     check_transfers,
     half_range,
     is_due,
     last_refresh_day,
+    match_result,
+    merge_transfers,
     parse_profile_nationality,
     parse_squad,
     parse_statistics,
+    parse_team_players,
     parse_transfers,
     pick_coach,
     season_of,
+    shown_first,
 )
 
 TEAM = 77
@@ -206,25 +213,54 @@ def test_transfers_keep_only_moves_of_the_team_and_never_future_ones():
     assert (arrival["counterpart_id"], arrival["counterpart_name"]) == (10, "T10")
 
 
-def test_a_move_listed_again_the_next_day_is_shown_once():
+def stored(response, today=date(2027, 2, 1)):
+    """parse_transfers rows as stored Transfer rows (ids in listing order)."""
+    rows = parse_transfers(response, TEAM, today)
+    return [Transfer(id=i, team_id=TEAM, **r) for i, r in enumerate(rows, start=1)]
+
+
+def shown(rows):
+    return sorted(
+        (r.player_id, r.transfer_date.isoformat(), r.direction, r.counterpart_name)
+        for r in merge_transfers(rows)
+    )
+
+
+def test_entries_are_stored_as_given_and_merged_only_when_answering():
+    response = [{"player": {"id": 1, "name": "Rulli"}, "transfers": [
+        move("2026-08-11", TEAM, 81), move("2026-08-10", TEAM, 81),
+    ]}]
+    rows = stored(response)
+    assert len(rows) == 2  # raw: both entries kept
+    assert shown(rows) == [(1, "2026-08-10", "in", "T81")]
+
+
+def test_a_name_only_copy_of_a_move_is_dropped():
+    # (가): "PSV" without id next to "PSV Eindhoven" with id, same player/date/direction.
+    def named(team):
+        return {"date": "2026-07-01", "type": "Transfer", "teams": {
+            "in": team, "out": {"id": TEAM, "name": "Us"}}}
+
+    response = [{"player": {"id": 4, "name": "P"}, "transfers": [
+        named({"id": 197, "name": "PSV Eindhoven"}), named({"id": None, "name": "PSV"}),
+    ]}]
+    assert shown(stored(response)) == [(4, "2026-07-01", "out", "PSV Eindhoven")]
+
+
+def test_a_move_registered_again_in_the_same_season_is_one_move():
+    # (나): same player/direction/club/season, weeks apart → earliest date; 12-31 and 01-01
+    # belong to the same season; another club stays a separate move.
     response = [
-        {"player": {"id": 1, "name": "Rulli"}, "transfers": [
-            move("2026-08-11", TEAM, 81), move("2026-08-10", TEAM, 81),
-        ]},
         {"player": {"id": 2, "name": "Year end"}, "transfers": [
             move("2026-12-31", TEAM, 5, "Loan"), move("2027-01-01", TEAM, 5, "Loan"),
         ]},
-        # Two days apart or another club: two moves.
-        {"player": {"id": 3, "name": "Back"}, "transfers": [
-            move("2026-07-01", TEAM, 9), move("2026-07-03", TEAM, 9), move("2026-07-02", TEAM, 8),
+        {"player": {"id": 3, "name": "Weeks"}, "transfers": [
+            move("2026-07-01", TEAM, 9), move("2026-08-15", TEAM, 9), move("2026-07-02", TEAM, 8),
         ]},
     ]
-    rows = parse_transfers(response, TEAM, date(2027, 2, 1))
-    kept = sorted((r["player_id"], r["transfer_date"].isoformat(), r["half"]) for r in rows)
-    assert kept == [
-        (1, "2026-08-10", 1),
-        (2, "2026-12-31", 1),
-        (3, "2026-07-01", 1), (3, "2026-07-02", 1), (3, "2026-07-03", 1),
+    assert shown(stored(response)) == [
+        (2, "2026-12-31", "in", "T5"),
+        (3, "2026-07-01", "in", "T9"), (3, "2026-07-02", "in", "T8"),
     ]
 
 
@@ -235,8 +271,7 @@ def test_a_move_the_other_way_in_between_keeps_both_moves():
         move("2026-08-11", TEAM, 40, "Return from loan"),
         move("2026-08-11", 40, TEAM, "Loan"),
     ]}]
-    rows = parse_transfers(response, TEAM, date(2026, 11, 7))
-    kept = sorted((r["transfer_date"].isoformat(), r["direction"]) for r in rows)
+    kept = sorted((day, way) for _, day, way, _ in shown(stored(response, date(2026, 11, 7))))
     assert kept == [("2026-08-10", "out"), ("2026-08-11", "in"), ("2026-08-11", "out")]
 
 
@@ -250,8 +285,7 @@ def test_moves_to_clubs_without_an_id_are_never_merged():
     response = [{"player": {"id": 7, "name": "Loanee"}, "transfers": [
         unnamed("2026-08-10", "Club A"), unnamed("2026-08-11", "Club B"),
     ]}]
-    rows = parse_transfers(response, TEAM, date(2026, 11, 7))
-    assert sorted(r["counterpart_name"] for r in rows) == ["Club A", "Club B"]
+    assert [name for *_, name in shown(stored(response))] == ["Club A", "Club B"]
 
 
 def test_same_day_moves_to_two_unnamed_id_clubs_are_two_rows():
@@ -263,10 +297,93 @@ def test_same_day_moves_to_two_unnamed_id_clubs_are_two_rows():
     response = [{"player": {"id": 8, "name": "Loanee"}, "transfers": [
         loan(a, us, "Loan"), loan(us, a, "Back from Loan"), loan(b, us, "Loan"),
     ]}]
-    rows = parse_transfers(response, TEAM, date(2026, 11, 7))
-    assert sorted((r["direction"], r["counterpart_name"]) for r in rows) == [
+    assert sorted((way, name) for *_, way, name in shown(stored(response))) == [
         ("in", "A"), ("out", "A"), ("out", "B"),
     ]
+
+
+def test_moves_shown_first_follow_rule_b():
+    context = TransferContext(players=frozenset({1}), clubs=frozenset({500}))
+
+    def row(player, direction, kind, club_id, club_name):
+        return Transfer(player_id=player, direction=direction, type_raw=kind,
+                        counterpart_id=club_id, counterpart_name=club_name)
+
+    assert shown_first(row(1, "out", "Loan", 900, "Lower"), context)  # ① squad player
+    assert shown_first(row(2, "in", "Free agent", 900, "Lower"), context)  # ② signing
+    assert not shown_first(row(2, "in", "Transfer", 901, "Tottenham Hotspur U21"), context)
+    assert not shown_first(row(2, "in", "Return from loan", 900, "Lower"), context)
+    assert shown_first(row(3, "out", "Loan", 500, "Benfica"), context)  # ③ league/UEFA club
+    assert not shown_first(row(3, "out", "Loan", 900, "Watford"), context)
+
+
+def players_page(current, total, entries):
+    return {"paging": {"current": current, "total": total}, "response": entries}
+
+
+def entry(pid, *lines):
+    return {"player": {"id": pid, "name": f"P{pid}", "nationality": "England"},
+            "statistics": list(lines)}
+
+
+def line(team, league, apps, goals=0, rating="7.1"):
+    return {"team": {"id": team}, "league": {"id": league, "season": 2026},
+            "games": {"appearences": apps, "rating": rating},
+            "goals": {"total": goals, "assists": None}}
+
+
+def test_team_player_lines_keep_only_this_team_in_record_competitions():
+    page = players_page(1, 1, [
+        entry(1, line(TEAM, 39, 10, 9), line(TEAM, 2, 3, 5, None), line(TEAM, 45, 2, 1),
+              line(TEAM, 15, 3), line(TEAM, 667, 4), line(600, 39, 5)),
+        entry(2, line(TEAM, 848, 1, 0, "0")),
+    ])
+    parsed = parse_team_players([page], TEAM, 2026)
+    kept = sorted((x["player_id"], x["competition_id"], x["appearances"], x["goals"],
+                   x["assists"], x["rating"]) for x in parsed.lines)
+    assert kept == [
+        (1, 2, 3, 5, None, None), (1, 39, 10, 9, None, Decimal("7.1")),
+        (2, 848, 1, 0, None, None),
+    ]
+    assert len(parsed.players) == 2
+
+
+def test_a_missing_or_short_page_is_refused():
+    full = [entry(i, line(TEAM, 39, 1)) for i in range(1, 21)]
+    with pytest.raises(IncompleteData):
+        parse_team_players([players_page(1, 2, full)], TEAM, 2026)
+    with pytest.raises(IncompleteData):
+        parse_team_players(
+            [players_page(1, 2, full[:19]), players_page(2, 2, [entry(30)])], TEAM, 2026
+        )
+
+
+def test_a_player_listed_twice_refuses_the_whole_set():
+    # Codex 1차 지적 1: page 2 repeats page 1's last player in place of another one (shifted
+    # pages) — the first collection, a later one and a conflicting repeat are all refused.
+    full = [entry(i, line(TEAM, 39, 1)) for i in range(1, 21)]
+    shifted = [players_page(1, 2, full), players_page(2, 2, [entry(20, line(TEAM, 39, 1))])]
+    with pytest.raises(IncompleteData, match="listed twice"):
+        parse_team_players(shifted, TEAM, 2026)
+    conflicting = [players_page(1, 2, full), players_page(2, 2, [entry(20, line(TEAM, 39, 5))])]
+    with pytest.raises(IncompleteData, match="listed twice"):
+        parse_team_players(conflicting, TEAM, 2026)
+    same_page = [players_page(1, 1, [entry(1, line(TEAM, 39, 1)), entry(1, line(TEAM, 2, 1))])]
+    with pytest.raises(IncompleteData, match="listed twice"):
+        parse_team_players(same_page, TEAM, 2026)
+
+
+def fixture(home, away, gh, ga, finish=None, pen=None):
+    return Fixture(home_team_id=home, away_team_id=away, goals_home=gh, goals_away=ga,
+                   finish_type=finish, score={"penalty": pen} if pen else None)
+
+
+def test_match_result_uses_the_shoot_out_for_level_matches():
+    assert match_result(fixture(TEAM, 1, 2, 1), TEAM) == "W"
+    assert match_result(fixture(1, TEAM, 2, 1), TEAM) == "L"
+    assert match_result(fixture(1, TEAM, 1, 1), TEAM) == "D"
+    level = fixture(1, TEAM, 1, 1, "pen", {"home": 3, "away": 4})
+    assert match_result(level, TEAM) == "W"
 
 
 def test_profile_nationality_stays_missing_when_the_profile_has_none():

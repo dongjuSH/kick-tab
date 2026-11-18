@@ -386,8 +386,9 @@ export interface paths {
         };
         /**
          * Read Team
-         * @description TEAM-001: identity, league standing, coach, venue and the last five official results.
-         *     A missing part is marked on its own and never hides the rest of the page.
+         * @description TEAM-001: identity, league standing, coach, venue and the last five finished matches
+         *     (stored match list: no provider request). A missing part is marked on its own and never
+         *     hides the rest of the page.
          */
         get: operations["read_team_api_v1_teams__team_id__get"];
         put?: never;
@@ -428,8 +429,10 @@ export interface paths {
         };
         /**
          * Read Team Squad
-         * @description TEAM-002: the current squad with this team's league line of the current season, one
-         *     row per player. Missing values are null (shown as '—'), never 0.
+         * @description TEAM-002 (2026-11-18): the current squad, one row per player, with the sum of the
+         *     player's lines for this team this season in the record competitions (five leagues + three
+         *     UEFA) and each line on its own. Missing values are null (shown as '—'), never 0; a played
+         *     record competition without collected lines makes the totals partial.
          */
         get: operations["read_team_squad_api_v1_teams__team_id__squad_get"];
         put?: never;
@@ -450,7 +453,8 @@ export interface paths {
         /**
          * Read Team Season Stats
          * @description TEAM-005: the team's league record of one season. A season the team did not play in
-         *     this league (promoted team) is `not_provided`, never filled from another season.
+         *     this league (promoted team) is `not_participated`; a season without a record is
+         *     `not_provided` — never filled from another season.
          */
         get: operations["read_team_season_stats_api_v1_teams__team_id__season_stats_get"];
         put?: never;
@@ -471,7 +475,9 @@ export interface paths {
         /**
          * Read Team Transfers
          * @description TEAM-006: arrivals and departures of one season in its two halves (by transfer date).
-         *     A half that has not begun says so; a begun half without moves is an empty list.
+         *     The provider's repeated entries are merged into one move (`merge_transfers`, D-08-6); the
+         *     moves that matter to this team are shown first (표시 기준 B) and every other move is kept
+         *     in the "other" lists. A half that has not begun is `not_started`.
          */
         get: operations["read_team_transfers_api_v1_teams__team_id__transfers_get"];
         put?: never;
@@ -598,8 +604,6 @@ export interface components {
         CoachInfo: {
             /** Name */
             name: string;
-            /** Photourl */
-            photoUrl: string | null;
         };
         /** CompetitionItem */
         CompetitionItem: {
@@ -1327,6 +1331,18 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SquadCompetitionLine */
+        SquadCompetitionLine: {
+            competition: components["schemas"]["CompetitionRef"];
+            /** Appearances */
+            appearances: number | null;
+            /** Goals */
+            goals: number | null;
+            /** Assists */
+            assists: number | null;
+            /** Rating */
+            rating: string | null;
+        };
         /** SquadPlayer */
         SquadPlayer: {
             player: components["schemas"]["SquadPlayerRef"];
@@ -1336,7 +1352,11 @@ export interface components {
             position: string | null;
             /** Nationality */
             nationality: string | null;
-            stats: components["schemas"]["SquadSeasonStats"] | null;
+            /** Flagurl */
+            flagUrl: string | null;
+            totals: components["schemas"]["SquadTotals"] | null;
+            /** Competitions */
+            competitions: components["schemas"]["SquadCompetitionLine"][];
         };
         /** SquadPlayerRef */
         SquadPlayerRef: {
@@ -1348,20 +1368,18 @@ export interface components {
             photoUrl: string | null;
         };
         /**
-         * SquadSeasonStats
-         * @description This team's league line of the current season (another club's line is never added).
+         * SquadTotals
+         * @description Sum of the player's lines for this team this season in the record competitions
+         *     (five leagues + three UEFA). null when a line lacks the value (never 0); no combined
+         *     rating exists.
          */
-        SquadSeasonStats: {
+        SquadTotals: {
             /** Appearances */
             appearances: number | null;
-            /** Minutes */
-            minutes: number | null;
             /** Goals */
             goals: number | null;
             /** Assists */
             assists: number | null;
-            /** Rating */
-            rating: string | null;
         };
         /** StandingBlock */
         StandingBlock: {
@@ -1539,7 +1557,8 @@ export interface components {
             standing: components["schemas"]["StandingBlock"];
             coach: components["schemas"]["CoachBlock"];
             venue: components["schemas"]["VenueBlock"];
-            form: components["schemas"]["FormBlock"];
+            /** Recent */
+            recent: components["schemas"]["RecentMatch"][];
         };
         /** TeamOverviewResponse */
         TeamOverviewResponse: {
@@ -1611,7 +1630,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "available" | "not_provided";
+            status: "available" | "not_provided" | "not_participated";
             record: components["schemas"]["TeamSeasonRecord"] | null;
             standing: components["schemas"]["TeamStanding"] | null;
         };
@@ -1622,10 +1641,11 @@ export interface components {
         };
         /** TeamSquad */
         TeamSquad: {
-            league: components["schemas"]["CompetitionRef"];
             season: components["schemas"]["SeasonItem"];
             /** Players */
             players: components["schemas"]["SquadPlayer"][];
+            /** Missingcompetitions */
+            missingCompetitions: components["schemas"]["CompetitionRef"][];
         };
         /** TeamSquadResponse */
         TeamSquadResponse: {
@@ -1756,8 +1776,6 @@ export interface components {
             id: number | null;
             /** Name */
             name: string | null;
-            /** Cresturl */
-            crestUrl: string | null;
         };
         /** TransferHalf */
         TransferHalf: {
@@ -1771,16 +1789,6 @@ export interface components {
             /** Period */
             period: string;
             /**
-             * Start
-             * Format: date
-             */
-            start: string;
-            /**
-             * End
-             * Format: date
-             */
-            end: string;
-            /**
              * State
              * @enum {string}
              */
@@ -1789,6 +1797,10 @@ export interface components {
             arrivals: components["schemas"]["TransferItem"][];
             /** Departures */
             departures: components["schemas"]["TransferItem"][];
+            /** Otherarrivals */
+            otherArrivals: components["schemas"]["TransferItem"][];
+            /** Otherdepartures */
+            otherDepartures: components["schemas"]["TransferItem"][];
         };
         /** TransferItem */
         TransferItem: {

@@ -24,6 +24,8 @@ interface DataStateProps {
   error?: unknown;
   errorTitle?: ReactNode;
   onRetry?: () => void;
+  /** Label of the retry button under the error (08 팀 상세: "다시 시도"). */
+  retryLabel?: string;
   /** Shown above the data when some fields/blocks were not provided. */
   partialNotice?: ReactNode;
   /** Optional control next to the partial notice (e.g. '다시 확인' for an unconfirmed part). */
@@ -74,7 +76,8 @@ export function DataState({
   error,
   errorTitle = "정보를 불러오지 못했습니다",
   onRetry,
-  partialNotice = "일부 정보는 제공되지 않습니다.",
+  retryLabel = "다시 확인",
+  partialNotice ="일부 정보는 제공되지 않습니다.",
   partialAction,
   deniedTitle = "로그인이 필요합니다",
   deniedDescription,
@@ -101,7 +104,7 @@ export function DataState({
         className={className}
         title={errorTitle}
         description={isApiError(error) ? error.message : DEFAULT_ERROR}
-        action={onRetry && <Button onClick={onRetry}>다시 확인</Button>}
+        action={onRetry && <Button onClick={onRetry}>{retryLabel}</Button>}
       />
     );
   }

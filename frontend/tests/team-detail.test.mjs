@@ -31,10 +31,10 @@ const model = load("@/features/team-detail/model");
 // Values from the vm context have their own prototypes: compare plain copies.
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-function player(id, name, position, number, stats, nationality = "France") {
-  return { player: { id, name, photoUrl: null }, position, number, nationality, stats };
+function player(id, name, position, number, totals, nationality = "France") {
+  return { player: { id, name, photoUrl: null }, position, number, nationality, flagUrl: null, totals, competitions: [] };
 }
-const stats = (goals, rating = "7.0") => ({ appearances: 3, minutes: 200, goals, assists: 0, rating });
+const stats = (goals) => ({ appearances: 3, goals, assists: 0 });
 const squad = [
   player(1, "Striker", "Attacker", 9, stats(5)),
   player(2, "Keeper", "Goalkeeper", 1, stats(0)),
@@ -85,13 +85,27 @@ test("season rows keep missing parts as a dash", () => {
   assert.equal(model.standingText({ rank: 2, points: 21 }), "2위 · 21점");
 });
 
-test("transfer wording: known provider types in Korean, others as given", () => {
+test("transfer wording: the type in Korean, never an amount", () => {
   assert.equal(model.transferTypeText("Loan"), "임대");
   assert.equal(model.transferTypeText("Return from loan"), "임대 복귀");
-  assert.equal(model.transferTypeText("€ 10M"), "€ 10M");
+  assert.equal(model.transferTypeText("€ 10M"), "완전 이적");
+  assert.equal(model.transferTypeText("Swap"), "Swap");
   assert.equal(model.transferTypeText(null), "—");
-  assert.equal(model.notStartedText("2027-01-01"), "2027년 1월부터 집계됩니다.");
+  assert.equal(model.dotDate("2026-07-01"), "2026.07.01");
   assert.equal(model.seasonOf("last", 2026), 2025);
+});
+
+test("transfer half: today's half by default, a half not begun is never shown", () => {
+  assert.equal(model.currentHalf("2026-11-18"), "first");
+  assert.equal(model.currentHalf("2026-06-01"), "first");
+  assert.equal(model.currentHalf("2027-01-05"), "second");
+  const now = [{ half: "first", state: "open" }, { half: "second", state: "not_started" }];
+  assert.equal(model.pickHalf(null, now, "first"), "first");
+  assert.equal(model.pickHalf("second", now, "first"), "first");
+  const past = [{ half: "first", state: "open" }, { half: "second", state: "open" }];
+  assert.equal(model.pickHalf("second", past, "first"), "second");
+  assert.equal(model.isHalf("second"), true);
+  assert.equal(model.isHalf("third"), false);
 });
 
 test("venue shows name and capacity, missing as 미제공", () => {
