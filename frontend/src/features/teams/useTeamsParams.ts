@@ -5,19 +5,20 @@ import { useCallback } from "react";
 import { LEAGUES } from "@/features/standings/model";
 
 /** URL conditions that were given but cannot be used (never replaced by "all" or page 1). */
-export type InvalidCondition = "league" | "q" | "page";
+export type InvalidCondition = "league" | "q" | "team" | "page";
 
 export const SEARCH_MAX = 40;
+const TEAM_ID_MAX = 2_147_483_647;
 
 export interface TeamsParams {
   /** Five-league id; null = every league (also when the URL names an unreadable one). */
   league: number | null;
-  /** Trimmed search text; null = no search. */
+  /** Trimmed search text (Enter in the search without a candidate); null = no search. */
   q: string | null;
+  /** The team picked from the search candidates; null = none. */
+  team: number | null;
   page: number;
   invalid: InvalidCondition[];
-  /** The whole query string, to notice any URL change (the search field's typing session). */
-  urlKey: string;
 }
 
 /** A positive integer, null when the parameter is absent or empty, NaN when unreadable. */
@@ -26,14 +27,14 @@ function positive(value: string | null): number | null {
   return /^[1-9]\d{0,9}$/.test(value) ? Number(value) : Number.NaN;
 }
 
-type Change = Partial<{ league: number | null; q: string | null; page: number }>;
+type Change = Partial<{ league: number | null; q: string | null; team: number | null; page: number }>;
 
 /**
- * Team browse state lives in the URL (LEAG-003, guide §6.6): `/teams?league=39&q=맨시&page=2`.
- * Every change is a history step unless `replace` is asked (later keystrokes of one search),
- * so Back returns to the previous league, search or page. A league or search change starts on
- * the first page and keeps the other condition. A league outside the five, an unreadable page
- * or an over-long search is reported, never swapped for "all" or page 1.
+ * Team browse state lives in the URL (LEAG-003, guide §6.6): `/teams?league=39&q=맨시&page=2`
+ * or `/teams?team=50` (a picked search candidate). Every change is one history step, so Back
+ * returns to the previous league, search or page, and any change other than the page starts
+ * on the first page. A league outside the five, an unreadable team or page or an over-long
+ * search is reported, never swapped for "all" or page 1.
  */
 export function useTeamsParams() {
   const params = useSearchParams();
@@ -42,32 +43,36 @@ export function useTeamsParams() {
 
   const league = positive(params.get("league"));
   const q = (params.get("q") ?? "").trim();
+  // Team ids are 32-bit like the API's limit: a larger number is an unreadable condition,
+  // reported without a request (Codex 지적 2).
+  const rawTeam = positive(params.get("team"));
+  const team = rawTeam !== null && rawTeam > TEAM_ID_MAX ? Number.NaN : rawTeam;
   const page = positive(params.get("page"));
   const invalid: InvalidCondition[] = [];
   const knownLeague = league !== null && LEAGUES.some((l) => l.id === league);
   if (league !== null && !knownLeague) invalid.push("league");
   if (q.length > SEARCH_MAX) invalid.push("q");
+  if (Number.isNaN(team)) invalid.push("team");
   if (Number.isNaN(page)) invalid.push("page");
   const state: TeamsParams = {
     league: knownLeague ? league : null,
     q: q && q.length <= SEARCH_MAX ? q : null,
+    team: team === null || Number.isNaN(team) ? null : team,
     page: page === null || Number.isNaN(page) ? 1 : page,
     invalid,
-    urlKey: params.toString(),
   };
 
   const update = useCallback(
-    (change: Change, options: { replace?: boolean } = {}) => {
+    (change: Change) => {
       const next = new URLSearchParams(params.toString());
       const set = (key: string, value: string | null) => (value ? next.set(key, value) : next.delete(key));
       if ("league" in change) set("league", change.league ? String(change.league) : null);
       if ("q" in change) set("q", change.q?.trim() || null);
+      if ("team" in change) set("team", change.team ? String(change.team) : null);
       // A new league or search always starts on the first page.
       set("page", "page" in change && change.page && change.page > 1 ? String(change.page) : null);
       const qs = next.toString();
-      const url = qs ? `${pathname}?${qs}` : pathname;
-      if (options.replace) router.replace(url, { scroll: false });
-      else router.push(url, { scroll: false });
+      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [params, pathname, router],
   );

@@ -365,7 +365,8 @@ export interface paths {
          * @description LEAG-003: current-season members of the five leagues, 12 per page.
          *
          *     Unknown membership (a league's team list never collected) is 503, never a short or empty
-         *     list. No match is an empty list with total 0; no other team is offered instead.
+         *     list. No match is an empty list with total 0; no other team is offered instead. `team`
+         *     keeps only that member (the search's picked candidate; `q` is then not used).
          */
         get: operations["read_teams_api_v1_teams_get"];
         put?: never;
@@ -2540,6 +2541,8 @@ export interface operations {
                 /** @description Team name or alias */
                 q?: string | null;
                 page?: number;
+                /** @description Only this team (a picked search candidate) */
+                team?: number | null;
             };
             header?: never;
             path?: never;

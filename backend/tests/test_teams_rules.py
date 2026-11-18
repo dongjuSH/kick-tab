@@ -28,7 +28,11 @@ def test_unsupported_league_is_404_without_a_list(client, league):
 
 
 @pytest.mark.parametrize(
-    "query", [{"league": "abc"}, {"page": 0}, {"page": "x"}, {"q": ""}, {"q": "x" * 41}]
+    "query",
+    [
+        {"league": "abc"}, {"page": 0}, {"page": "x"}, {"q": ""}, {"q": "x" * 41},
+        {"team": 0}, {"team": "x"}, {"team": 2_147_483_648},
+    ],
 )
 def test_unreadable_conditions_are_422(client, query):
     http, _ = client

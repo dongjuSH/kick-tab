@@ -60,8 +60,9 @@ test("a league or search change starts on page 1 and keeps the other condition",
   const { params, pushed, replaced } = paramsFor("league=39&q=맨&page=3");
   params.update({ league: 61 });
   assert.equal(decodeURIComponent(pushed.at(-1)), "/teams?league=61&q=맨");
-  params.update({ q: "파리" }, { replace: true });
-  assert.equal(decodeURIComponent(replaced.at(-1)), "/teams?league=39&q=파리");
+  params.update({ q: "파리" });
+  assert.equal(decodeURIComponent(pushed.at(-1)), "/teams?league=39&q=파리");
+  assert.equal(replaced.length, 0); // every search is one history step (Enter or a pick)
   params.update({ league: null });
   assert.equal(decodeURIComponent(pushed.at(-1)), "/teams?q=맨");
   params.update({ q: null });
@@ -79,6 +80,24 @@ test("leagues outside the five, unreadable pages and over-long searches are repo
   assert.equal(JSON.stringify(paramsFor("page=abc").params.invalid), JSON.stringify(["page"]));
   assert.equal(JSON.stringify(paramsFor(`q=${"a".repeat(41)}`).params.invalid), JSON.stringify(["q"]));
   assert.equal(paramsFor("league=").params.invalid.length, 0); // empty = not given
+  assert.equal(JSON.stringify(paramsFor("team=abc").params.invalid), JSON.stringify(["team"]));
+  // Past the API's 32-bit id: reported here, never sent and turned into a fetch error.
+  assert.equal(JSON.stringify(paramsFor("team=2147483648").params.invalid), JSON.stringify(["team"]));
+  assert.equal(JSON.stringify(paramsFor("team=9999999999").params.invalid), JSON.stringify(["team"]));
+  assert.equal(paramsFor("team=2147483647").params.invalid.length, 0);
+});
+
+test("a picked search candidate is its own condition: the league and words give way to it", () => {
+  const picked = paramsFor("team=50").params;
+  assert.deepEqual([picked.team, picked.q, picked.league], [50, null, null]);
+  const { params, pushed } = paramsFor("league=39&q=맨&page=2");
+  params.update({ team: 50, league: null, q: null });
+  assert.equal(pushed.at(-1), "/teams?team=50");
+  const back = paramsFor("team=50");
+  back.params.update({ q: "리버풀", team: null });
+  assert.equal(decodeURIComponent(back.pushed.at(-1)), "/teams?q=리버풀");
+  back.params.update({ q: null, team: null });
+  assert.equal(back.pushed.at(-1), "/teams");
 });
 
 function toggleMarkup(favorites, teamId) {

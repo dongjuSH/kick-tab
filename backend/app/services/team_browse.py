@@ -40,12 +40,19 @@ class BrowsePage:
 
 
 def browse_teams(
-    session: Session, *, league: int | None, query: str | None, page: int
+    session: Session,
+    *,
+    league: int | None,
+    query: str | None,
+    page: int,
+    team_id: int | None = None,
 ) -> BrowsePage:
     """One page of current members, filtered by league and name (both optional).
 
     Without a query: league order (Premier League → Ligue 1), then the shown name. With a
-    query: best match first (`match_teams`). A page past the end is empty with the total."""
+    query: best match first (`match_teams`). A page past the end is empty with the total.
+    `team_id` (a candidate picked in the search, 07 개선) keeps only that member; a team that
+    is not a current member of the listed leagues is an empty list, never another team."""
     season = settings.current_season
     leagues = (league,) if league is not None else LEAGUE_IDS
     synced = dict(
@@ -79,7 +86,9 @@ def browse_teams(
             league_of[team.id] = league_id
         teams[team.id] = team
 
-    if query is not None:
+    if team_id is not None:
+        ordered = [team_id] if team_id in teams else []
+    elif query is not None:
         ordered = match_teams(session, query, teams)
     else:
         ordered = sorted(

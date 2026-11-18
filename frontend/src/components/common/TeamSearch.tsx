@@ -29,22 +29,36 @@ function teamSearchQuery(q: string, season: number | null) {
  * Clearing the text (× beside the field) clears the selection.
  * `season` (past results, chat 05) searches that season's teams, including teams without a
  * current team detail; without it the current season is searched.
+ * Team browse (07 개선) also searches by the typed words: Enter without a highlighted
+ * candidate hands the text to `onSubmitText`, and `defaultText` shows that search again.
  */
 export function TeamSearch({
   selected,
   onSelect,
   description,
+  label = "팀 일정 검색",
   season = null,
   candidates,
+  defaultText,
+  onSubmitText,
 }: {
   selected: TeamRef | null;
+  /** A picked candidate, or null when the search is cleared (× or deleting the text). */
   onSelect: (team: TeamRef | null) => void;
   description?: string;
+  /** Visible label over the field (shown with `description`). */
+  label?: string;
   season?: number | null;
   /** Narrows the candidates (main favourites: teams that can be registered and are not yet). */
   candidates?: (team: TeamRef) => boolean;
+  /** The text search in effect when no team is selected (team browse URL `q`). */
+  defaultText?: string;
+  /** Enter with no highlighted candidate: search by the typed words instead. */
+  onSubmitText?: (text: string) => void;
 }) {
-  const [text, setText] = useState(selected ? teamName(selected) : "");
+  const [text, setText] = useState(selected ? teamName(selected) : (defaultText ?? ""));
+  // Something to clear: a picked team or a text search in effect.
+  const searching = selected !== null || Boolean(defaultText);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const listId = useId();
@@ -55,11 +69,11 @@ export function TeamSearch({
   const results = (search.data ?? []).filter((team) => candidates?.(team) ?? true);
 
   // Follow outside changes (reset, favourite button, URL) without fighting the user's typing.
-  const selectedKey = selected?.id ?? null;
+  const selectedKey = selected ? `team:${selected.id}` : `text:${defaultText ?? ""}`;
   const [syncedKey, setSyncedKey] = useState(selectedKey);
   if (syncedKey !== selectedKey) {
     setSyncedKey(selectedKey);
-    setText(selected ? teamName(selected) : "");
+    setText(selected ? teamName(selected) : (defaultText ?? ""));
     setOpen(false);
   }
 
@@ -81,7 +95,7 @@ export function TeamSearch({
   const clear = () => {
     setText("");
     setOpen(false);
-    if (selected) onSelect(null);
+    if (searching) onSelect(null);
     inputRef.current?.focus();
   };
 
@@ -93,7 +107,7 @@ export function TeamSearch({
       {/* Label, help and field read as one group (Figma 49:57 '팀 일정 검색'). */}
       {description && (
         <div className="mb-1.5 flex flex-col gap-1.5">
-          <label htmlFor={`${listId}-input`} className="text-body font-bold">팀 일정 검색</label>
+          <label htmlFor={`${listId}-input`} className="text-body font-bold">{label}</label>
           <p id={`${listId}-help`} className="text-small text-fg-secondary">{description}</p>
         </div>
       )}
@@ -118,7 +132,7 @@ export function TeamSearch({
             onChange={(event) => {
               setText(event.target.value);
               // Deleting the whole search term ends the team view (policy 2026-11-02).
-              if (!event.target.value.trim() && selected) onSelect(null);
+              if (!event.target.value.trim() && searching) onSelect(null);
               setActive(0);
               setOpen(true);
             }}
@@ -136,6 +150,12 @@ export function TeamSearch({
               } else if (event.key === "Enter" && showList && results[active]) {
                 event.preventDefault();
                 pick(results[active]);
+              } else if (event.key === "Enter" && onSubmitText) {
+                event.preventDefault();
+                setOpen(false);
+                // The picked team's own name is that pick, not a word search ('렌' would
+                // widen Rennes to every team whose name contains it, Codex 지적 1).
+                if (!(selected && text.trim() === teamName(selected))) onSubmitText(text.trim());
               }
             }}
             className="h-12 w-full rounded-control border border-line-strong bg-surface pl-[39px] pr-11 text-body text-fg placeholder:text-fg-muted [&::-webkit-search-cancel-button]:hidden"

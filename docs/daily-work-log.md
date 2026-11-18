@@ -1,5 +1,24 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-18 (수) — 07 팀 탐색 개선
+
+브랜치 `feat/07-team-browse`(최신 `dev` 4bc6693 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.12 Fix, 기능 명세서 v1.12 Fix LEAG-003, 유저 플로우 v1.11 Fix UF-10, Figma 52:624·52:949·57:766·57:836. Codex 교차 검증 2회(1차 중요 1·경미 1 → 보완 후 2차 통과). 외부 API 호출 0회, 마이그레이션 없음.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 상단 정리 | `app/teams/page.tsx`(sr-only H1), `TeamsSection`의 `FavoritesNotice`(5팀일 때만 '관심 팀은 최대 5팀까지 등록할 수 있습니다.') | LEAG-003 v1.12: 상단 소개와 상시 '관심 팀 n/5' 제거, 제한 초과만 간결하게 안내 |
+| 공통 검색 | `components/common/TeamSearch.tsx`(`label`·`defaultText`·`onSubmitText`), `TeamsSection`(라벨 '팀 검색'·보조 문구, 후보는 현재 5대 리그 팀만) | 기존 페이지들의 돋보기·작은 X·자동완성 구조 재사용. 후보 선택 = 그 팀 카드, 후보 없는 Enter = 단어 검색(결과 없음은 Figma 57:766) |
+| 고른 팀 조건 | `services/team_browse.py`(`team_id`), `api/routes/teams.py`(`team`), `useTeamsParams`(`team`, 32비트 상한), `queries.ts`, `lib/api`(쿼리 키·생성 타입) | 렌·바르셀로나·파리처럼 이름이 다른 팀 이름에 들어가 단어 검색으로는 고른 팀만 보일 수 없음 |
+| 리그 필터 | `TeamsSection`(06 `ChipRow` 재사용) | 모바일 한 줄 가로 스크롤, 페이지 가로 스크롤 없음 |
+| 상태 문구 | `TeamsSection` | 로딩·조회 실패·검색 결과 없음 57:766, 소속 미확인 57:836('강등으로 단정하지 않고 팀 링크를 잠시 보류합니다.') |
+| 삭제 | `TeamsSection`의 `SearchField`(0.3초 자동 반영·연속 입력 기록 처리), `useTeamsParams`의 `urlKey`·replace | 공통 검색으로 바뀌어 쓰지 않음(작업 원칙 5) |
+| 자체 검수 보완 | `TeamsSection` | 같은 조건(빈 입력 포함)의 Enter가 기록을 한 단계 더 쌓던 문제 |
+| Codex 1차 보완 | `TeamSearch`(입력이 고른 팀 이름 그대로면 단어 검색으로 바꾸지 않음), `useTeamsParams`(team 2,147,483,647 초과는 요청 없이 조회 조건 안내) | 렌 선택 후 Enter가 4팀 단어 검색으로 바뀌고 기록이 늘던 문제(중요), 범위 밖 팀 번호 URL이 조회 실패로 보이던 문제(경미) |
+| 테스트 | `tests/test_teams_db.py`(고른 팀만), `tests/test_teams_rules.py`(team 422 3건), `frontend/tests/teams.test.mjs`(고른 팀 조건·32비트 상한) | 새 조건과 경계값 |
+| 문서 | `docs/guide.md`(첫 단락·§2·§3·§6.4·D-07-6·§11), `docs/file-feature-map.md`, 이 문서 | 사용자 요청으로 세 문서 최신화 |
+
+검수: 백엔드 ruff·pytest 306(DB 실연동 팀 6·요청 규칙 13 별도 통과), 프런트 lint·`tsc --noEmit`·npm test 52·Turbopack 빌드, `git diff --check`. 브라우저 1440·375·320에서 맨시티·레알 마드리드·Bayern Munich·토트넘 자동완성과 선택, '맨체스터'·'레알'·'렌' 후보 여러 개, 결과 없는 검색어(드롭다운 안내 → Enter → 빈 상태 → 검색어 지우기), X 해제, 리그 전환·해제, 관심 팀 5팀 후 6번째 비활성·안내와 메인 반영, 키보드만으로 검색 → 후보 선택 → 카드 진입(`/teams/50`), 뒤로 가기 복원, `team=48`·`team=abc`·`team=2147483648` 처리, 메인·지난 경기의 공통 검색 라벨 유지, 콘솔 오류 0. 미실행: 실제 브라우저 설정의 저장소 차단(스크립트 모의), 실기기 터치·스크린리더(전체 검수 단계).
+
 ## 2026-11-17 (화) — 06 리그 순위 개선
 
 브랜치 `feat/06-standings`(최신 `dev` 5b28189 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증 5회(1차 사용자 결정 반영 후 요청 → 2차 차단 1·결함 3·개선 2 → 3차 결함 3 → 4차 결함 1 → 최종 통과, 최종 단계의 경기 상세 기록 보존 결함은 Codex가 보완·검증). 기획 문서 v1.11 LEAG-002·Figma '01 · 디자인' 기준, 마이그레이션 없음.

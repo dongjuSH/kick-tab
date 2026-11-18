@@ -2,38 +2,47 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { TeamCrest } from "@/components/common/TeamCrest";
-import { Button, IconButton } from "@/components/ui/Button";
+import { TeamSearch } from "@/components/common/TeamSearch";
+import { Button } from "@/components/ui/Button";
 import { DataState, StateMessage } from "@/components/ui/DataState";
 import { Pagination } from "@/components/ui/Pagination";
-import { ChipLabel, chipClass } from "@/components/ui/chip";
 import { cx } from "@/components/ui/cx";
 import { FavoriteToggle } from "@/features/favorites/FavoriteToggle";
 import { useFavorites } from "@/features/favorites/useFavorites";
 import { ListSkeleton } from "@/features/schedule/ScheduleSection";
+import { ChipRow, type ChipItem } from "@/features/standings/ChipRow";
 import { LEAGUES, dataStatus } from "@/features/standings/model";
-import type { BrowseTeam } from "@/lib/api/types";
+import { isApiError } from "@/lib/api/errors";
+import type { BrowseTeam, TeamRef } from "@/lib/api/types";
 import { teamName } from "@/lib/format/match";
 import { teamsQuery } from "./queries";
-import { SEARCH_MAX, useTeamsParams, type InvalidCondition } from "./useTeamsParams";
+import { useTeamsParams, type InvalidCondition } from "./useTeamsParams";
 
-const INVALID_LABELS: Record<InvalidCondition, string> = { league: "리그", q: "검색어", page: "페이지" };
-const SEARCH_DELAY_MS = 300;
+const INVALID_LABELS: Record<InvalidCondition, string> = { league: "리그", q: "검색어", team: "팀", page: "페이지" };
+const ALL = "all";
+const LEAGUE_CHIPS: ChipItem<string>[] = [
+  { value: ALL, label: "전체" },
+  ...LEAGUES.map((league) => ({ value: String(league.id), label: league.label })),
+];
 
 /**
  * Team browse (LEAG-003, FAV-001~003 guest part, UF-05·UF-10; Figma 52:624 / 52:949, states
- * 57:766). Current-season five-league teams with a league filter and an alias name search
- * (both combinable, both in the URL with the page), 12 per page. Each card links to the team
- * detail and registers / unregisters the team as a guest favourite, which the main page's
- * favourite schedule and buttons read from the same store.
+ * 57:766, membership error 57:836). Current-season five-league teams with a league filter and
+ * the common team search, 12 per page. The search is the same field as the other pages
+ * (label, magnifier, small ×, autocomplete): picking a candidate shows that team's card, and
+ * Enter without a candidate lists the teams matching the typed words (aliases included).
+ * Each card links to the team detail and registers / unregisters the team as a guest
+ * favourite, which the main page's favourite schedule and buttons read from the same store.
  */
 export function TeamsSection() {
   const params = useTeamsParams();
   const listTop = useRef<HTMLParagraphElement>(null);
+  const [picked, setPicked] = useState<TeamRef | null>(null);
   const readable = params.invalid.length === 0;
   const teams = useQuery({
-    ...teamsQuery({ league: params.league, q: params.q, page: params.page }),
+    ...teamsQuery({ league: params.league, q: params.q, team: params.team, page: params.page }),
     enabled: readable,
   });
 
@@ -41,13 +50,21 @@ export function TeamsSection() {
     params.update({ page });
     listTop.current?.scrollIntoView({ block: "start" });
   };
-  const clearSearch = () => params.update({ q: null });
+  const clearSearch = () => params.update({ q: null, team: null });
 
   const total = teams.data?.meta.total ?? 0;
   const size = teams.data?.meta.size ?? 12;
   const pages = Math.max(1, Math.ceil(total / size));
   const items = teams.data?.data ?? [];
   const leagueLabel = LEAGUES.find((l) => l.id === params.league)?.label ?? "5대 리그";
+  const selectedTeam =
+    params.team === null
+      ? null
+      : ((picked?.id === params.team ? picked : null) ??
+        items.find((item) => item.team.id === params.team)?.team ??
+        null);
+  const searchWords = params.team !== null ? (selectedTeam ? teamName(selectedTeam) : null) : params.q;
+  const searching = params.team !== null || params.q !== null;
 
   let body: ReactNode;
   if (!readable) {
@@ -59,17 +76,29 @@ export function TeamsSection() {
         action={<Button onClick={params.reset}>필터 초기화</Button>}
       />
     );
+  } else if (teams.data === undefined && isApiError(teams.error) && teams.error.code === "MEMBERSHIP_UNKNOWN") {
+    // Figma 57:836 membership-error: never shown as "relegated" or as an empty list.
+    body = (
+      <StateMessage
+        tone="error"
+        title="현재 소속을 확인하지 못했습니다"
+        description="강등으로 단정하지 않고 팀 링크를 잠시 보류합니다."
+        action={<Button onClick={() => teams.refetch()}>다시 확인</Button>}
+      />
+    );
   } else {
-    const emptyTitle = params.q ? "일치하는 팀이 없습니다" : "표시할 팀이 없습니다";
+    // Figma 57:766 search-none (the league's name when one is chosen).
+    const emptyTitle = searching ? "일치하는 팀이 없습니다" : "표시할 팀이 없습니다";
     const emptyDescription = `현재 시즌 ${leagueLabel} 팀만 찾을 수 있습니다.`;
-    const emptyAction = params.q ? <Button onClick={clearSearch}>검색어 지우기</Button> : undefined;
+    const emptyAction = searching ? <Button onClick={clearSearch}>검색어 지우기</Button> : undefined;
     const retry = () => teams.refetch();
     body = (
       // A failed re-check keeps the list already confirmed (partial), never an error or empty.
+      // A first failure is Figma 57:766 error: '정보를 불러오지 못했습니다 · 잠시 후 다시 시도해
+      // 주세요.' (no server wording).
       <DataState
         status={dataStatus(teams, total === 0, teams.isError)}
         loadingFallback={<ListSkeleton />}
-        error={teams.error}
         onRetry={retry}
         emptyTitle={emptyTitle}
         emptyDescription={emptyDescription}
@@ -83,7 +112,7 @@ export function TeamsSection() {
           // Past the last page: also inside the failed-refresh frame (Codex 1차 지적 3).
           <StateMessage
             title="이 페이지에는 팀이 없습니다"
-            description={`${params.q ? "검색 결과는" : "팀 목록은"} ${pages}페이지까지입니다.`}
+            description={`${searching ? "검색 결과는" : "팀 목록은"} ${pages}페이지까지입니다.`}
             action={<Button onClick={() => goToPage(pages)}>마지막 페이지로</Button>}
           />
         ) : (
@@ -105,35 +134,40 @@ export function TeamsSection() {
       aria-label="팀 목록"
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
     >
-      <div
-        role="group"
-        aria-label="리그 필터"
-        className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] lg:mx-0 lg:px-0"
-      >
-        <LeagueChip
-          label="전체"
-          selected={params.league === null && !params.invalid.includes("league")}
-          onSelect={() => params.update({ league: null })}
-        />
-        {LEAGUES.map((league) => (
-          <LeagueChip
-            key={league.id}
-            label={league.label}
-            selected={params.league === league.id}
-            onSelect={() => params.update({ league: league.id })}
-          />
-        ))}
-      </div>
-      <SearchField
-        value={params.q}
-        urlKey={params.urlKey}
-        onCommit={(q, replace) => params.update({ q }, { replace })}
+      {/* One row that scrolls sideways on a narrow screen (no wrap, no page scroll). */}
+      <ChipRow
+        label="리그 필터"
+        items={LEAGUE_CHIPS}
+        value={params.invalid.includes("league") ? null : params.league === null ? ALL : String(params.league)}
+        onChange={(value) => {
+          const league = value === ALL ? null : Number(value);
+          // A league change ends a picked team (it may play elsewhere) and keeps typed words.
+          if (league !== params.league) params.update({ league, team: null });
+        }}
+      />
+      <TeamSearch
+        label="팀 검색"
+        description="한글·영문·별칭으로 팀을 찾습니다."
+        selected={selectedTeam}
+        defaultText={params.team === null ? (params.q ?? undefined) : undefined}
+        // Only current five-league members: the teams this page lists.
+        candidates={(team) => team.detailAvailable === true}
+        onSelect={(team) => {
+          setPicked(team);
+          // A picked team is shown wherever it plays: the league filter returns to '전체'.
+          params.update(team ? { team: team.id, league: null, q: null } : { team: null, q: null });
+        }}
+        onSubmitText={(text) => {
+          // Enter on the search already shown adds no history step.
+          if ((text || null) === params.q && params.team === null) return;
+          params.update({ q: text || null, team: null });
+        }}
       />
       <FavoritesNotice />
       <p ref={listTop} className="scroll-mt-40 text-label text-fg-secondary">
         {readable && teams.data
-          ? params.q
-            ? `현재 시즌 ${leagueLabel} · '${params.q}' 검색 결과 ${total}개 팀`
+          ? searchWords
+            ? `현재 시즌 ${leagueLabel} · '${searchWords}' 검색 결과 ${total}개 팀`
             : `현재 시즌 ${leagueLabel} · ${total}개 팀`
           : `현재 시즌 ${leagueLabel}`}
       </p>
@@ -142,129 +176,10 @@ export function TeamsSection() {
   );
 }
 
-function LeagueChip({ label, selected, onSelect }: { label: string; selected: boolean; onSelect: () => void }) {
-  return (
-    <button type="button" aria-pressed={selected} className={chipClass(selected)} onClick={() => !selected && onSelect()}>
-      <ChipLabel>{label}</ChipLabel>
-    </button>
-  );
-}
-
 /**
- * Name search (Figma 52:705, 40px field inside a 44px target as in D-03-8). The URL follows
- * the text after a short pause; the first change of one typing session is a history step and
- * the following keystrokes replace it, so Back returns to the list before the search.
- * A typing session ends on blur, on Enter / ×, and on any URL change this field did not make
- * (Back, Forward, league, page, reset), so the next search is a new history step and never
- * overwrites another entry (Codex 1차 지적 1).
- * - Any URL change this field did not make wins: the field shows that URL's search and text not
- *   sent yet is dropped, so a pending search never re-applies after Back (Codex 2차 지적 1).
- * - Enter and blur (Tab) first finish the session's last text in the same history step, then
- *   end it (Codex 2차 지적 2).
+ * Shown only when it matters (LEAG-003 rule 2: no standing 'n / 5' count): five teams saved
+ * (Figma 57:766 fav-full) or no storage in this browser. Each team's button shows its state.
  */
-function SearchField({
-  value,
-  urlKey,
-  onCommit,
-}: {
-  value: string | null;
-  /** The whole query string: tells this field's own commits from other URL changes. */
-  urlKey: string;
-  onCommit: (q: string | null, replace: boolean) => void;
-}) {
-  const [text, setText] = useState(value ?? "");
-  const [synced, setSynced] = useState({ value, urlKey });
-  // Searches this field sent that the URL has not shown yet, oldest first.
-  const [sent, setSent] = useState<(string | null)[]>([]);
-  const [typing, setTyping] = useState(false);
-  // Blurred with text not sent yet: the pending send still joins the session, then ends it.
-  const [closing, setClosing] = useState(false);
-  const commit = useRef(onCommit);
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    commit.current = onCommit;
-  });
-
-  if (synced.value !== value || synced.urlKey !== urlKey) {
-    setSynced({ value, urlKey });
-    const own = sent.indexOf(value);
-    if (own >= 0) {
-      // The URL caught up with one of this field's commits: keep what is being typed.
-      setSent(sent.slice(own + 1));
-    } else {
-      setSent([]);
-      setTyping(false);
-      setClosing(false);
-      // Also when the search is the same: drops text not sent yet (and so its timer).
-      setText(value ?? "");
-    }
-  }
-
-  const lastSent = sent.length ? sent[sent.length - 1] : undefined;
-  const shown = lastSent === undefined ? value : lastSent;
-  const unsent = (text.trim() || null) !== shown;
-  useEffect(() => {
-    const next = text.trim() || null;
-    if (next === shown) return;
-    const timer = setTimeout(() => {
-      setSent((list) => [...list, next]);
-      setTyping(!closing);
-      setClosing(false);
-      commit.current(next, typing);
-    }, SEARCH_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [text, shown, typing, closing]);
-
-  /** Sends `next` now: in the current history step while a session is open, then ends it. */
-  const commitNow = (next: string | null, keepStep: boolean) => {
-    setTyping(false);
-    setClosing(false);
-    if (next === shown) return;
-    setSent((list) => [...list, next]);
-    commit.current(next, keepStep && typing);
-  };
-
-  return (
-    <form
-      role="search"
-      className="relative flex items-center"
-      onSubmit={(event) => {
-        event.preventDefault();
-        commitNow(text.trim() || null, true);
-      }}
-    >
-      <label className="flex min-h-11 min-w-0 flex-1 items-center">
-        <span className="sr-only">팀 이름 검색</span>
-        <input
-          ref={inputRef}
-          type="search"
-          autoComplete="off"
-          maxLength={SEARCH_MAX}
-          placeholder="팀 이름 검색 · 한국어, 영문, 별칭"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onFocus={() => setClosing(false)}
-          onBlur={() => (unsent ? setClosing(true) : setTyping(false))}
-          className="h-10 w-full rounded-control border border-line-strong bg-surface pl-3 pr-11 text-body text-fg placeholder:text-fg-muted [&::-webkit-search-cancel-button]:hidden"
-        />
-      </label>
-      {text && (
-        <IconButton
-          className="absolute right-0"
-          icon="x"
-          label="검색어 지우기"
-          onClick={() => {
-            setText("");
-            commitNow(null, false);
-            inputRef.current?.focus();
-          }}
-        />
-      )}
-    </form>
-  );
-}
-
-/** Figma 52:711 / 57:766: count of this browser's favourites, the full state, or no storage. */
 function FavoritesNotice() {
   const favorites = useFavorites();
   if (favorites.status === "unavailable") {
@@ -274,14 +189,10 @@ function FavoritesNotice() {
       </p>
     );
   }
-  const count = favorites.ids.length;
+  if (favorites.status !== "ready" || favorites.ids.length < favorites.max) return null;
   return (
-    <p role="status" className="min-h-[45px] rounded-control bg-subtle px-3 py-3 text-label text-fg-secondary">
-      {favorites.status === "loading"
-        ? null
-        : count >= favorites.max
-          ? `관심 팀 ${count} / ${favorites.max} · 다른 팀을 해제한 뒤 추가하세요.`
-          : `관심 팀 ${count} / ${favorites.max} · 이 브라우저에 저장`}
+    <p role="status" className="rounded-control bg-subtle px-3 py-3 text-label text-fg-secondary">
+      관심 팀은 최대 {favorites.max}팀까지 등록할 수 있습니다.
     </p>
   );
 }
