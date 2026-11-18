@@ -1,29 +1,31 @@
 """Team browse (chat 07, LEAG-003) and team detail (chat 08, TEAM-001~006).
 
-Served from stored data; the only provider request is the team's recent form, fetched once
-when missing or stale (04 `ensure_form`, guide §6.5 요청 시 보충). Each detail area has its
-own endpoint so one failing area never hides the others.
+Served from stored data only (no provider request). Each detail area has its own endpoint
+so one failing area never hides the others.
 """
 
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Path, Query
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
 from app.config import settings
 from app.core.kst import kst_today
 from app.db.session import get_db
-from app.models.team_detail import TeamCoach
-from app.providers.api_football import ApiFootballClient
+from app.models.reference import Competition, Team
+from app.models.team_detail import TeamCoach, Transfer
+from app.schemas.standings import RecentMatch, TeamName
 from app.schemas.team_detail import (
     CoachBlock,
     CoachInfo,
     HomeAway,
+    SquadCompetitionLine,
     SquadPlayer,
     SquadPlayerRef,
-    SquadSeasonStats,
+    SquadTotals,
     StandingBlock,
     TeamFixtures,
     TeamFixturesMeta,
@@ -48,10 +50,10 @@ from app.schemas.team_detail import (
 from app.schemas.teams import BrowseTeam, TeamsMeta, TeamsResponse
 from app.seed.competitions import LEAGUE_IDS
 from app.services import team_detail as detail
-from app.services.head_to_head import ensure_form
 from app.services.reference import competition_ref, crest, team_detail_lookup, team_ref
 from app.services.results import season_item
 from app.services.team_browse import PAGE_SIZE, MembershipUnknown, browse_teams
+from app.services.team_detail import flag_url
 
 router = APIRouter(tags=["teams"])
 Db = Annotated[Session, Depends(get_db)]
@@ -140,12 +142,11 @@ def _not_collected(area: str) -> ApiError:
 
 @router.get("/teams/{team_id}")
 def read_team(db: Db, team_id: TeamId) -> TeamOverviewResponse:
-    """TEAM-001: identity, league standing, coach, venue and the last five official results.
-    A missing part is marked on its own and never hides the rest of the page."""
+    """TEAM-001: identity, league standing, coach, venue and the last five finished matches
+    (stored match list: no provider request). A missing part is marked on its own and never
+    hides the rest of the page."""
     access = _access(db, team_id)
     league_id = access.league.id
-    ensure_form(db, team_id, datetime.now(UTC), ApiFootballClient)
-    access = _access(db, team_id)  # reloaded after the form lookup committed
     team, season = access.team, settings.current_season
 
     if not detail.standings_collected(db, league_id, season):
@@ -165,7 +166,7 @@ def read_team(db: Db, team_id: TeamId) -> TeamOverviewResponse:
     else:
         coach = CoachBlock(
             status="available",
-            data=CoachInfo(name=coach_row.name, photo_url=crest(coach_row.photo_url)),
+            data=CoachInfo(name=coach_row.name),
         )
 
     venue = (
@@ -184,9 +185,25 @@ def read_team(db: Db, team_id: TeamId) -> TeamOverviewResponse:
             standing=standing,
             coach=coach,
             venue=venue,
-            form=detail.form_block(db, team_id),
+            recent=[
+                RecentMatch(
+                    fixture_id=r.fixture.id,
+                    kickoff_at=r.fixture.kickoff_at,
+                    kickoff_date_kst=r.fixture.kickoff_date_kst,
+                    home=_team_name(r.home),
+                    away=_team_name(r.away),
+                    goals_home=r.fixture.goals_home,
+                    goals_away=r.fixture.goals_away,
+                    result=r.result,
+                )
+                for r in detail.recent_results(db, team_id)
+            ],
         )
     )
+
+
+def _team_name(team: Team) -> TeamName:
+    return TeamName(id=team.id, name_ko=team.name_ko, name_en=team.name_en)
 
 
 @router.get("/teams/{team_id}/fixtures")
@@ -206,44 +223,63 @@ def read_team_fixtures(db: Db, team_id: TeamId) -> TeamFixturesResponse:
 
 @router.get("/teams/{team_id}/squad")
 def read_team_squad(db: Db, team_id: TeamId) -> TeamSquadResponse:
-    """TEAM-002: the current squad with this team's league line of the current season, one
-    row per player. Missing values are null (shown as '—'), never 0."""
-    access = _access(db, team_id)
+    """TEAM-002 (2026-11-18): the current squad, one row per player, with the sum of the
+    player's lines for this team this season in the record competitions (five leagues + three
+    UEFA) and each line on its own. Missing values are null (shown as '—'), never 0; a played
+    record competition without collected lines makes the totals partial."""
+    _access(db, team_id)
     season = settings.current_season
-    synced, refresh_failed = detail.sync_meta(db, team_id, season, "squad")
+    synced, squad_failed = detail.sync_meta(db, team_id, season, "squad")
     if synced is None:
         raise _not_collected("선수단")
-    players = []
-    for row in detail.read_squad(db, team_id, access.league.id):
-        line = row.line
-        players.append(
-            SquadPlayer(
-                player=SquadPlayerRef(
-                    id=row.player.id,
-                    name=detail.display_text(row.player.name),
-                    photo_url=crest(row.player.photo_url),
-                ),
-                number=row.member.number,
-                position=row.member.position,
-                nationality=row.player.nationality,
-                stats=SquadSeasonStats(
+    _, lines_failed = detail.sync_meta(db, team_id, season, "player_stats")
+    players = [
+        SquadPlayer(
+            player=SquadPlayerRef(
+                id=row.player.id,
+                name=detail.display_text(row.player.name),
+                photo_url=crest(row.player.photo_url),
+            ),
+            number=row.member.number,
+            position=row.member.position,
+            nationality=row.player.nationality,
+            flag_url=crest(flag_url(row.player.nationality)),
+            totals=_totals([line for line, _ in row.lines]) if row.lines else None,
+            competitions=[
+                SquadCompetitionLine(
+                    competition=competition_ref(competition),
                     appearances=line.appearances,
-                    minutes=line.minutes,
                     goals=line.goals,
                     assists=line.assists,
-                    # "0" is the provider's placeholder for "not rated" (as in 04 match
-                    # ratings): shown as missing, never as a 0.0 rating.
-                    rating=line.rating if line.rating else None,
+                    rating=line.rating,
                 )
-                if line is not None
-                else None,
-            )
+                for line, competition in row.lines
+            ],
         )
+        for row in detail.read_squad(db, team_id)
+    ]
+    missing = detail.missing_record_competitions(db, team_id)
+    names = {c.id: c for c in db.scalars(select(Competition).where(Competition.id.in_(missing)))}
     return TeamSquadResponse(
         data=TeamSquad(
-            league=competition_ref(access.league), season=season_item(season), players=players
+            season=season_item(season),
+            players=players,
+            missing_competitions=[competition_ref(names[c]) for c in missing if c in names],
         ),
-        meta=TeamSyncMeta(updated_at=synced, refresh_failed=refresh_failed),
+        meta=TeamSyncMeta(updated_at=synced, refresh_failed=squad_failed or lines_failed),
+    )
+
+
+def _totals(lines: list[Any]) -> SquadTotals:
+    """Sum per value over the record competitions; a missing value in any line makes that
+    total unknown (null), never a smaller number."""
+
+    def total(key: str) -> int | None:
+        values = [getattr(line, key) for line in lines]
+        return None if any(v is None for v in values) else sum(values)
+
+    return SquadTotals(
+        appearances=total("appearances"), goals=total("goals"), assists=total("assists")
     )
 
 
@@ -282,7 +318,8 @@ def read_team_season_stats(
     db: Db, team_id: TeamId, season: SeasonParam = None
 ) -> TeamSeasonStatsResponse:
     """TEAM-005: the team's league record of one season. A season the team did not play in
-    this league (promoted team) is `not_provided`, never filled from another season."""
+    this league (promoted team) is `not_participated`; a season without a record is
+    `not_provided` — never filled from another season."""
     access = _access(db, team_id)
     season = _season(season)
     league = access.league.id
@@ -293,7 +330,7 @@ def read_team_season_stats(
     base = {"season": season_item(season), "league": competition_ref(access.league)}
     if season != settings.current_season and not detail.played_league(db, team_id, league, season):
         return TeamSeasonStatsResponse(
-            data=TeamSeasonStats(**base, status="not_provided", record=None, standing=None),
+            data=TeamSeasonStats(**base, status="not_participated", record=None, standing=None),
             meta=TeamSyncMeta(updated_at=None, refresh_failed=False),
         )
     synced, refresh_failed = detail.sync_meta(db, team_id, season, "statistics")
@@ -319,52 +356,56 @@ def read_team_transfers(
     db: Db, team_id: TeamId, season: SeasonParam = None
 ) -> TeamTransfersResponse:
     """TEAM-006: arrivals and departures of one season in its two halves (by transfer date).
-    A half that has not begun says so; a begun half without moves is an empty list."""
+    The provider's repeated entries are merged into one move (`merge_transfers`, D-08-6); the
+    moves that matter to this team are shown first (표시 기준 B) and every other move is kept
+    in the "other" lists. A half that has not begun is `not_started`."""
     _access(db, team_id)
     season = _season(season)
     synced, refresh_failed = detail.sync_meta(db, team_id, season, "transfers")
     if synced is None:
         raise _not_collected("이적")
     today = kst_today()
-    rows = detail.read_transfers(db, team_id, season)
+    rows = detail.merge_transfers(detail.read_transfers(db, team_id, season))
+    context = detail.transfer_context(db, team_id)
     known = detail.counterpart_names(db, (r.counterpart_id for r in rows))
     short = f"{season % 100:02d}-{(season + 1) % 100:02d}"
+
+    def item(r: Transfer) -> TransferItem:
+        club = known.get(r.counterpart_id) if r.counterpart_id else None
+        return TransferItem(
+            transfer_date=r.transfer_date,
+            player_id=r.player_id,
+            player_name=detail.display_text(r.player_name),
+            counterpart=TransferCounterpart(
+                id=r.counterpart_id,
+                name=(
+                    club.name_ko if club and club.name_ko
+                    else detail.display_text(r.counterpart_name)
+                ),
+            ),
+            type=r.type_raw,
+        )
+
     halves = []
     for half in (1, 2):
-        start, end = detail.half_range(season, half)
+        start, _ = detail.half_range(season, half)
         key, word, months = HALF_NAMES[half]
-        items: dict[str, list[TransferItem]] = {"in": [], "out": []}
+        groups: dict[tuple[bool, str], list[TransferItem]] = {
+            (shown, direction): [] for shown in (True, False) for direction in ("in", "out")
+        }
         for r in rows:
-            if r.half != half:
-                continue
-            club = known.get(r.counterpart_id) if r.counterpart_id else None
-            items[r.direction].append(
-                TransferItem(
-                    transfer_date=r.transfer_date,
-                    player_id=r.player_id,
-                    player_name=detail.display_text(r.player_name),
-                    counterpart=TransferCounterpart(
-                        id=r.counterpart_id,
-                        name=(
-                            club.name_ko
-                            if club and club.name_ko
-                            else detail.display_text(r.counterpart_name)
-                        ),
-                        crest_url=crest(r.counterpart_logo or (club.logo_url if club else None)),
-                    ),
-                    type=r.type_raw,
-                )
-            )
+            if r.half == half:
+                groups[(detail.shown_first(r, context), r.direction)].append(item(r))
         halves.append(
             TransferHalf(
                 half=key,
                 label=f"{short} {word}",
                 period=f"{start.year}년 {months}",
-                start=start,
-                end=end,
                 state="not_started" if today < start else "open",
-                arrivals=items["in"],
-                departures=items["out"],
+                arrivals=groups[(True, "in")],
+                departures=groups[(True, "out")],
+                other_arrivals=groups[(False, "in")],
+                other_departures=groups[(False, "out")],
             )
         )
     return TeamTransfersResponse(

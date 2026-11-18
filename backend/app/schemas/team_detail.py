@@ -14,8 +14,8 @@ from pydantic import Field
 
 from app.schemas.common import ApiModel
 from app.schemas.match import CompetitionRef, MatchSummary, TeamRef
-from app.schemas.match_detail import FormBlock
 from app.schemas.schedule import SeasonItem
+from app.schemas.standings import RecentMatch
 
 PartStatus = Literal["available", "not_provided", "unavailable"]
 
@@ -42,7 +42,6 @@ class StandingBlock(ApiModel):
 
 class CoachInfo(ApiModel):
     name: str
-    photo_url: str | None
 
 
 class CoachBlock(ApiModel):
@@ -68,8 +67,9 @@ class TeamOverview(ApiModel):
     standing: StandingBlock
     coach: CoachBlock
     venue: VenueBlock
-    # Last five official results, newest first (same rule as the match detail, MAT-005).
-    form: FormBlock
+    # Last five finished matches of the supported competitions (stored match list),
+    # oldest first: the last one is the latest. The preview reads only these values.
+    recent: list[RecentMatch]
 
 
 class TeamOverviewResponse(ApiModel):
@@ -107,13 +107,22 @@ class SquadPlayerRef(ApiModel):
     photo_url: str | None
 
 
-class SquadSeasonStats(ApiModel):
-    """This team's league line of the current season (another club's line is never added)."""
+class SquadTotals(ApiModel):
+    """Sum of the player's lines for this team this season in the record competitions
+    (five leagues + three UEFA). null when a line lacks the value (never 0); no combined
+    rating exists."""
 
     appearances: int | None
-    minutes: int | None
     goals: int | None
     assists: int | None
+
+
+class SquadCompetitionLine(ApiModel):
+    competition: CompetitionRef
+    appearances: int | None
+    goals: int | None
+    assists: int | None
+    # The provider's rating of this competition (null = not rated).
     rating: Decimal | None
 
 
@@ -124,14 +133,19 @@ class SquadPlayer(ApiModel):
     position: str | None
     # Provider nationality as given (English country name); null = not provided.
     nationality: str | None
-    # null = no league line for this team this season (not played / not listed).
-    stats: SquadSeasonStats | None
+    # The country's flag (null = no flag known or image rights not cleared: text only).
+    flag_url: str | None
+    # null = no line for this team this season in the record competitions.
+    totals: SquadTotals | None
+    competitions: list[SquadCompetitionLine]
 
 
 class TeamSquad(ApiModel):
-    league: CompetitionRef
     season: SeasonItem
     players: list[SquadPlayer]
+    # Record competitions the team played this season without collected player lines:
+    # the totals are partial ("부분 집계"). Empty = complete.
+    missing_competitions: list[CompetitionRef]
 
 
 class TeamSquadResponse(ApiModel):
@@ -162,9 +176,9 @@ class TeamSeasonRecord(ApiModel):
 class TeamSeasonStats(ApiModel):
     season: SeasonItem
     league: CompetitionRef
-    # available = record shown; not_provided = no league record that season (promoted team
-    # or the provider has none) — never filled from another season.
-    status: Literal["available", "not_provided"]
+    # available = record shown; not_participated = the team did not play this league that
+    # season (promoted team); not_provided = no record given — never filled from another season.
+    status: Literal["available", "not_provided", "not_participated"]
     record: TeamSeasonRecord | None
     # The league table position of that season (the past season's final standing).
     standing: TeamStanding | None
@@ -181,7 +195,6 @@ class TeamSeasonStatsResponse(ApiModel):
 class TransferCounterpart(ApiModel):
     id: int | None
     name: str | None
-    crest_url: str | None
 
 
 class TransferItem(ApiModel):
@@ -200,12 +213,13 @@ class TransferHalf(ApiModel):
     label: str
     # "2026년 6~12월"
     period: str
-    start: date
-    end: date
-    # not_started = the half has not begun (e.g. "2027년 1월부터 집계됩니다").
+    # not_started = the half has not begun (its tab is disabled).
     state: Literal["open", "not_started"]
+    # Shown first (표시 기준 B); every other move is in the "other" lists ("기타 이동").
     arrivals: list[TransferItem]
     departures: list[TransferItem]
+    other_arrivals: list[TransferItem]
+    other_departures: list[TransferItem]
 
 
 class TeamTransfers(ApiModel):

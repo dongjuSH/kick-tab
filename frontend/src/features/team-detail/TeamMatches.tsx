@@ -29,13 +29,14 @@ export function TeamMatches({ teamId }: { teamId: number }) {
         status={dataStatus(query, false, query.isError || failed > 0)}
         error={query.error}
         onRetry={retry}
+        retryLabel="다시 시도"
         errorTitle="경기 정보를 불러오지 못했습니다"
         partialNotice={
           query.isError
             ? "경기 정보를 다시 확인하지 못했습니다. 마지막으로 확인한 경기입니다."
             : "일부 대회의 시즌 일정을 최신으로 확인하지 못해 빠진 경기가 있을 수 있습니다."
         }
-        partialAction={query.isError ? <Button onClick={retry}>다시 확인</Button> : undefined}
+        partialAction={query.isError ? <Button onClick={retry}>다시 시도</Button> : undefined}
         loadingFallback={
           <div className="flex flex-col gap-3">
             <Skeleton className="h-16" />

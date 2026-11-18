@@ -23,6 +23,7 @@ from app.models.sync_run import SyncRun
 from app.models.team_detail import (
     SquadMember,
     TeamCoach,
+    TeamPlayerStat,
     TeamSeasonStat,
     TeamSync,
     Transfer,
@@ -53,6 +54,7 @@ __all__ = [
     "TeamCoach",
     "TeamCompetitionSeason",
     "TeamForm",
+    "TeamPlayerStat",
     "TeamSeasonStat",
     "TeamSync",
     "Top5Attempt",

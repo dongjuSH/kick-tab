@@ -13,6 +13,7 @@ Values the provider leaves empty stay NULL; a failed or cut answer never replace
 """
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
@@ -23,6 +24,7 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
+    Numeric,
     SmallInteger,
     Text,
     text,
@@ -32,7 +34,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-TEAM_SYNC_KINDS = ("coach", "squad", "statistics", "transfers")
+TEAM_SYNC_KINDS = ("coach", "squad", "statistics", "transfers", "player_stats")
 TRANSFER_DIRECTIONS = ("in", "out")
 
 
@@ -66,6 +68,34 @@ class SquadMember(Base):
     number: Mapped[int | None] = mapped_column(Integer)
     # Provider position: Goalkeeper / Defender / Midfielder / Attacker.
     position: Mapped[str | None] = mapped_column(Text)
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TeamPlayerStat(Base):
+    """One player's line for this team in one of the record competitions (the five leagues
+    and the three UEFA competitions) and season, from /players?team=&season= (2026-11-18).
+
+    Written only by the `team_player_stats` job, a whole team season at a time. Chat 06's
+    `player_season_stats` (league-wide pages, `player_stats` job) is a separate table with
+    its own writer, so the two jobs never overwrite each other's rows. Rating is per
+    competition as given; no combined rating exists."""
+
+    __tablename__ = "team_player_stats"
+
+    team_id: Mapped[int] = mapped_column(
+        ForeignKey("teams.id", ondelete="CASCADE"), primary_key=True
+    )
+    player_id: Mapped[int] = mapped_column(
+        ForeignKey("players.id", ondelete="CASCADE"), primary_key=True
+    )
+    competition_id: Mapped[int] = mapped_column(
+        ForeignKey("competitions.id", ondelete="CASCADE"), primary_key=True
+    )
+    season: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    appearances: Mapped[int | None] = mapped_column(Integer)
+    goals: Mapped[int | None] = mapped_column(Integer)
+    assists: Mapped[int | None] = mapped_column(Integer)
+    rating: Mapped[Decimal | None] = mapped_column(Numeric(5, 3))
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

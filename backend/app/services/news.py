@@ -13,6 +13,8 @@ from app.models.sync_run import SyncRun
 from app.schemas.schedule import NewsItem
 
 NEWS_LIMIT = 48
+# Team news (08, 2026-11-18): the newest 24 linked articles (main news keeps 48).
+TEAM_NEWS_LIMIT = 24
 
 
 class InvalidCursor(ValueError):
@@ -80,7 +82,7 @@ def list_news(
     team: int | None = None,
 ) -> tuple[list[NewsItem], str | None, int]:
     """Main news: the newest 48 articles with a competition badge. Team news (chat 08,
-    TEAM-004·NEWS-003): the newest 48 articles linked to the team by an unambiguous alias,
+    TEAM-004·NEWS-003): the newest 24 articles linked to the team by an unambiguous alias,
     with or without a badge (a team-only article has no badge and is not on the main page)."""
     if team is None:
         scope = select(NewsArticle.id).where(
@@ -92,8 +94,9 @@ def list_news(
             .join(NewsArticleTeam, NewsArticleTeam.article_id == NewsArticle.id)
             .where(NewsArticle.expires_at > now, NewsArticleTeam.team_id == team)
         )
+    limit = NEWS_LIMIT if team is None else TEAM_NEWS_LIMIT
     visible = (
-        scope.order_by(NewsArticle.published_at.desc(), NewsArticle.id.desc()).limit(NEWS_LIMIT)
+        scope.order_by(NewsArticle.published_at.desc(), NewsArticle.id.desc()).limit(limit)
     )
     conditions = [NewsArticle.id.in_(visible)]
     if badge:
