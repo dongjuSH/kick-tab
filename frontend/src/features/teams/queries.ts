@@ -6,6 +6,8 @@ import type { BrowseTeam, TeamsMeta } from "@/lib/api/types";
 export interface TeamsQueryParams {
   league: number | null;
   q: string | null;
+  /** A picked search candidate: only that team (then `q` is not sent). */
+  team: number | null;
   page: number;
 }
 
@@ -17,7 +19,8 @@ export function teamsQuery(params: TeamsQueryParams) {
       apiFetch<BrowseTeam[], TeamsMeta>("/teams", {
         query: {
           league: params.league ?? undefined,
-          q: params.q ?? undefined,
+          q: params.team === null ? (params.q ?? undefined) : undefined,
+          team: params.team ?? undefined,
           page: params.page > 1 ? params.page : undefined,
         },
         signal,

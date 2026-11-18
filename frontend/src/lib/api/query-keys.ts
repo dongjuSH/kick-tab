@@ -49,7 +49,8 @@ export const queryKeys = {
     /** season null = the current season (main schedule). */
     search: (q: string, season: number | null = null) => ["teams", "search", { q, season }] as const,
     /** Team browse (chat 07): league null = all five leagues, q null = no search. */
-    list: (params: { league: number | null; q: string | null; page: number }) => ["teams", "list", params] as const,
+    list: (params: { league: number | null; q: string | null; team: number | null; page: number }) =>
+      ["teams", "list", params] as const,
     /** Team detail (chat 08): one key per area so one failure never hides the others. */
     detail: (id: number) => ["teams", "detail", { id }] as const,
     fixtures: (id: number) => ["teams", "fixtures", { id }] as const,

@@ -81,15 +81,20 @@ def read_teams(
         str | None, Query(min_length=1, max_length=40, description="Team name or alias")
     ] = None,
     page: Annotated[int, Query(ge=1)] = 1,
+    team: Annotated[
+        int | None,
+        Query(gt=0, le=2_147_483_647, description="Only this team (a picked search candidate)"),
+    ] = None,
 ) -> TeamsResponse:
     """LEAG-003: current-season members of the five leagues, 12 per page.
 
     Unknown membership (a league's team list never collected) is 503, never a short or empty
-    list. No match is an empty list with total 0; no other team is offered instead."""
+    list. No match is an empty list with total 0; no other team is offered instead. `team`
+    keeps only that member (the search's picked candidate; `q` is then not used)."""
     if league is not None and league not in LEAGUE_IDS:
         raise ApiError(404, "NOT_FOUND", NOT_A_LEAGUE)
     try:
-        result = browse_teams(db, league=league, query=q, page=page)
+        result = browse_teams(db, league=league, query=q, page=page, team_id=team)
     except MembershipUnknown:
         raise ApiError(503, "MEMBERSHIP_UNKNOWN", MEMBERSHIP_UNKNOWN) from None
     lookup = team_detail_lookup(db)

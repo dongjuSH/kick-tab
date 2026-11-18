@@ -105,6 +105,16 @@ def test_search_korean_english_and_ambiguous_alias(client):
     assert body["data"] == [] and body["meta"]["total"] == 0
 
 
+def test_picked_team_lists_only_that_member(client):
+    """07 개선: a picked search candidate shows that card alone, even when its name is part of
+    other teams' names (렌 → 프렌치 팀들, 바르셀로나 → 에스파뇰), and never another team."""
+    assert [i["team"]["id"] for i in all_pages(client, team=CITY)] == [CITY]
+    assert [i["team"]["id"] for i in all_pages(client, team=CITY, q="리버풀")] == [CITY]
+    assert all_pages(client, team=CITY, league=78) == []  # not in the chosen league
+    body = client.get("/api/v1/teams", params={"team": WEST_HAM}).json()  # not a member now
+    assert body["data"] == [] and body["meta"]["total"] == 0
+
+
 def test_past_season_and_uefa_only_teams_are_not_listed(client, session):
     assert WEST_HAM not in members(session)  # relegated in 2025-26
     assert client.get("/api/v1/teams", params={"q": "웨스트햄"}).json()["meta"]["total"] == 0
