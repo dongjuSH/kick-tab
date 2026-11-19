@@ -12,6 +12,7 @@ import {
   kickoffTime,
   penaltyText,
   scoreText,
+  statusNotes,
   statusWord,
   teamName,
 } from "@/lib/format/match";
@@ -45,21 +46,9 @@ export function MatchCard({
   favorites?: boolean;
 }) {
   const row = layout === "schedule";
-  const penalty = penaltyText(match);
-  const note = match.status === "abandoned" ? "중단 시점 스코어" : match.statusReason;
   const competition = competitionName(match.competition);
   const when = `${withDate ? `${formatShortDate(match.kickoffDateKst)} ` : ""}${kickoffTime(match)}`;
-  // Kickoff has passed but the provider still says "not started": never shown as 예정.
-  const awaiting = awaitingStatus(match, useNow());
-  // Figma 308:4631: "상태 확인 중" with "—" until the provider confirms the start.
-  const score = awaiting ? MISSING : scoreText(match);
-
-  const status = (
-    <span className={cx("flex flex-col items-start gap-0.5", row && "lg:items-end")}>
-      <MatchStatusBadge match={match} awaiting={awaiting} />
-      {note && <span className="text-2xs text-warning">{note}</span>}
-    </span>
-  );
+  const { awaiting, score } = useMatchScore(match);
 
   return (
     <div
@@ -86,18 +75,61 @@ export function MatchCard({
         </span>
       )}
 
-      <span className={cx("pointer-events-none flex items-center gap-2", row && "lg:min-w-0 lg:flex-1")}>
-        <Team team={match.home} side="home" star={favorites} />
-        <span className="flex w-12 shrink-0 flex-col items-center">
-          <span className="whitespace-nowrap text-lead font-bold text-fg">{score}</span>
-          {penalty && <span className="whitespace-nowrap text-2xs text-fg-muted">{penalty}</span>}
-        </span>
-        <Team team={match.away} side="away" star={favorites} />
-      </span>
+      <MatchTeams match={match} favorites={favorites} className={cx("pointer-events-none", row && "lg:min-w-0 lg:flex-1")} />
 
       {/* Wide: a 164px status column mirrors the left one so the score sits at the card's centre. */}
-      <span className={cx("pointer-events-none", row && "lg:flex lg:w-[164px] lg:shrink-0 lg:justify-end")}>{status}</span>
+      <span className={cx("pointer-events-none", row && "lg:flex lg:w-[164px] lg:shrink-0 lg:justify-end")}>
+        <MatchStatus match={match} awaiting={awaiting} className={cx(row && "lg:items-end")} />
+      </span>
     </div>
+  );
+}
+
+/**
+ * Score shown for a match: kickoff passed but the provider still says "not started" is never
+ * shown as 예정 — "상태 확인 중" with "—" until the start is confirmed (Figma 308:4631).
+ */
+export function useMatchScore(match: MatchSummary): { awaiting: boolean; score: string } {
+  const awaiting = awaitingStatus(match, useNow());
+  return { awaiting, score: awaiting ? MISSING : scoreText(match) };
+}
+
+/** Status badge with its notes under it — abandoned score notice and provider reason (match cards, TOP 5). */
+export function MatchStatus({
+  match,
+  awaiting,
+  end = false,
+  className,
+}: {
+  match: MatchSummary;
+  awaiting: boolean;
+  /** Right-aligned at every width (TOP 5 rows). */
+  end?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={cx("flex flex-col gap-0.5", end ? "items-end text-right" : "items-start", className)}>
+      <MatchStatusBadge match={match} awaiting={awaiting} />
+      {statusNotes(match).map((note) => (
+        <span key={note} className="text-2xs text-warning">{note}</span>
+      ))}
+    </span>
+  );
+}
+
+/** Home name · crest · score (PK under it) · crest · away name (match cards, TOP 5 rows). */
+export function MatchTeams({ match, favorites = false, className }: { match: MatchSummary; favorites?: boolean; className?: string }) {
+  const { score } = useMatchScore(match);
+  const penalty = penaltyText(match);
+  return (
+    <span className={cx("flex items-center gap-2", className)}>
+      <Team team={match.home} side="home" star={favorites} />
+      <span className="flex w-12 shrink-0 flex-col items-center">
+        <span className="whitespace-nowrap text-lead font-bold text-fg">{score}</span>
+        {penalty && <span className="whitespace-nowrap text-2xs text-fg-muted">{penalty}</span>}
+      </span>
+      <Team team={match.away} side="away" star={favorites} />
+    </span>
   );
 }
 
@@ -116,7 +148,9 @@ function Team({ team, side, star }: { team: TeamRef; side: "home" | "away"; star
           <FavoriteStar teamId={team.id} teamName={name} />
         </span>
       )}
-      <span className="min-w-0 break-keep text-body font-bold text-fg">{name}</span>
+      {/* Words stay whole, but a single word longer than the column (e.g. 묀헨글라트바흐 at
+          320px) breaks inside it instead of running out of the card. */}
+      <span className="min-w-0 break-keep text-body font-bold text-fg [overflow-wrap:anywhere]">{name}</span>
       <TeamCrest src={team.crestUrl} name={name} />
     </span>
   );

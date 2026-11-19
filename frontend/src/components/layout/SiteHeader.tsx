@@ -9,7 +9,8 @@ import { MobileMenu } from "./MobileMenu";
 
 /**
  * Global header + TOP 5 strip, fixed together at the top while scrolling (COM-003).
- * Figma 49:58 (desktop, 86 + 1 + 50 + 1 = 138px) / 49:571 (mobile, 68 + 1 + 68 + 1 = 138px). Parts that read the current path
+ * Figma 128:3700 (desktop, 68 + 1 + 48 + 1 = 118px) / 128:4408 (mobile, 64 + 1 + 64 + 1 = 130px).
+ * Parts that read the current path
  * sit in Suspense so pages with a runtime param (`/matches/[id]`) keep a prerendered shell.
  */
 export function SiteHeader() {
@@ -23,7 +24,7 @@ export function SiteHeader() {
         본문으로 건너뛰기
       </a>
       <div className="border-b border-line">
-        <div className="kt-container flex items-center py-3 lg:py-5">
+        <div className="kt-container flex items-center py-2.5 lg:py-[11px]">
           <Link href="/" aria-label="KickTab 홈" className="shrink-0 rounded-control lg:mr-4">
             <span className="hidden lg:flex">
               <Logo size="header" />

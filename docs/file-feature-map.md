@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-19 · 01 비회원 전체 검수 개선(Codex 교차 검증 통과·`dev` 병합):** 프런트 `SiteHeader.tsx`(내비 위아래 여백 PC 11px·모바일 10px — 헤더+띠 118/130px)·`HeaderHeight.tsx`(주석)·`globals.css`(`--kt-header-height` 130px, 1024px 이상 118px)·`top5/Top5Strip.tsx`(띠 48/64px, 순환 28px/s, PC 패널 비모달 — `inertOutside`·Tab 순환·`FOCUSABLE` 삭제, `aria-modal` 제거, 문서 click 캡처로 링크 이동 시 닫힘)·`top5/Top5List.tsx`(행에 `MatchTeams`·`MatchStatus`, PC 팀 영역 420px, 모바일 시트 높이 420px 미만 본문 스크롤 `SHEET_BODY`·`SHEET_LIST`, 일반 클릭만 닫힘)·`top5/model.ts`(`changeText`에서 사유 제거, `isPlainClick`)·`components/common/MatchCard.tsx`(`useMatchScore`·`MatchStatus`·`MatchTeams` 분리, 긴 한 단어 팀명 `overflow-wrap:anywhere`)·`lib/format/match.ts`(`statusNotes`)·`tests/top5.test.mjs`(+2: 수정 키 판정, 중단 문구·변경 일시 사유 중복 없음).
+
 **2026-11-18 · 08 팀 상세 수정 반영(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `migrations/versions/20261118_0016_team_player_stats.py`(새), `seed/countries.json`(새), `models/team_detail.py`(`TeamPlayerStat`)·`models/__init__.py`, `services/team_detail.py`(선수 기록 파싱·저장, `recent_results`, `merge_transfers`, 표시 기준 B, `flag_url`), `sync/team_detail.py`(`team_player_stats`), `schemas/team_detail.py`, `api/routes/teams.py`, `services/news.py`(팀 24개), 테스트 2개. 프런트 `features/team-detail/`(`TeamDetail`·`SquadTable`·`SeasonRecords`·`TeamNews`·`TeamMatches`·`model.ts`), `components/ui/Tabs.tsx`·`DataState.tsx`, 생성 타입, `tests/team-detail.test.mjs`.
 
 **2026-11-18 · 07 팀 탐색 개선(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `services/team_browse.py`(`team_id` — 고른 팀 하나만)·`api/routes/teams.py`(`team` 1~2,147,483,647, 아니면 422). 프런트 `app/teams/page.tsx`(보이는 제목·소개 제거, sr-only H1), `features/teams/TeamsSection.tsx`(공통 `TeamSearch`·06 `ChipRow` 재사용, 5팀일 때만 제한 안내, Figma 57:766·57:836 상태 문구, 이전 0.3초 자동 반영 `SearchField` 삭제)·`useTeamsParams.ts`(`team`, `urlKey`·replace 삭제)·`queries.ts`, `components/common/TeamSearch.tsx`(`label`·`defaultText`·`onSubmitText`), `lib/api`(쿼리 키·생성 타입). 아래 표는 이 변경을 반영했다.
@@ -206,7 +208,7 @@
 | `tests/standings.test.mjs` | 06 URL 기본값·시즌/리그 변경 시 유형 유지·유형은 replace, 미지원 리그·시즌·유형, 표기 규칙, `dataStatus` — 0건 뒤 갱신 실패는 partial, 메인 칩 'BUN', `DataState` `partialAction` 마크업; 06 개선: UEFA 대회·단계 URL(단계 기본·대회 변경 시 단계 삭제), `leagueZone`(리그별 강등·승강 PO, 종료 후 결과), `phaseBands`, 차전 표기 `legRows` |
 | `tests/teams.test.mjs` | 07 테스트 7개(URL 기본값·리그/검색 변경 시 첫 페이지·검색마다 기록 1단계, 잘못된 리그·페이지·검색어·팀(32비트 상한), 고른 팀 조건(리그·단어 대체), `FavoriteToggle` 5개 꽉 참 마크업, 다른 탭 선저장 시 저장소 알림, `DataState` `emptyAction` 마크업) |
 | `tests/team-detail.test.mjs` | 08 테스트(포지션순 기본 정렬, 누락값 두 방향 맨 뒤·같은 선수 집합, 정렬 전환, '—' 표시, 시즌 기록 행, 이적 유형 문구(금액은 완전 이적), 반기 기본값·시작 전 반기 대체, 경기장 표기) |
-| `tests/top5.test.mjs` | 01 테스트 3개(지난주 유지 시 실제 기간·준비 상태·대진 순서, 지연·경기 없음 문구 구분, 띠 고정 제목·배지 렌더) |
+| `tests/top5.test.mjs` | 01 테스트 5개(지난주 유지 시 실제 기간·준비 상태·대진 순서, 지연·경기 없음 문구 구분, 띠 고정 제목·배지 렌더, 일반 클릭 판정 `isPlainClick`, 중단 경기 문구 `statusNotes`·변경 일시 사유 중복 없음) |
 | `tests/match-regressions.test.mjs` | 04 회귀 테스트(경기 정보 갱신 연동 기록 재조회·종료 1회, 상태별 영역, 타임라인 아이콘·문구, 최근 5경기 미리보기, 평가 건수만, 로고+팀명 링크, 선수 평점 카드, 중단 경기 타임라인만, 지연 경고 시계, TOP 5 교체 재시도 등), 실제 TS 모듈을 변환해 실행 | 완료(04, 개선 반영) |
 | `next.config.ts` | `cacheComponents`·`partialPrefetching`, `/api/*` → `BACKEND_ORIGIN` rewrites | 완료 |
 | `scripts/gen-api.mjs` | 백엔드 OpenAPI(실행 중 서버 또는 파일)로 `src/lib/api/schema.d.ts` 생성 | 완료 |
@@ -250,13 +252,13 @@
 | --- | --- | --- | --- |
 | `components/common/Logo.tsx` | 승인 `logo-header.svg`(심벌+워드마크) PC 46px·모바일 40px | 헤더 | 완료 |
 | `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지, 고정 크기 | 경기 카드·팀 검색 | 완료 |
-| `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크 | 일정·관심 팀(04·05·08 재사용) | 완료 |
+| `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크. 01(2026-11-19): 공통 부품 `useMatchScore`(상태 확인 중·—)·`MatchStatus`(배지 + `statusNotes`, `end` 오른쪽 정렬)·`MatchTeams`(이름·엠블럼·스코어·PK, 긴 한 단어는 칸 안 줄바꿈) 분리 — TOP 5 목록도 사용 | 일정·관심 팀(04·05·08 재사용), `Top5List` | 완료 |
 | `components/common/MatchStatusBadge.tsx` | 상태 뱃지(진행 중 `63′`·예정/종료 회색·변경 주황) | `MatchCard`, TOP 5 | 완료 |
 | `components/common/CompetitionFilter.tsx` | 대회 단일 버튼 + 선택창(체크 초안·적용·취소·'전체 대회 보기'·0개 적용 불가), 데스크톱 560px·모바일 시트, 05: `season`(그 시즌 데이터 없음 표기) | 메인·지난 경기 | 완료 |
 | `components/common/TeamSearch.tsx` | 팀 검색 combobox(별칭·여러 후보·일치 없음), ×·전체 삭제 시 선택 해제, 05: `season`(선택 시즌 후보), 라벨 '팀 일정 검색'·`description` 보조 문구 묶음을 메인·지난 경기가 함께 씀(05 개선에서 `placeholder` 옵션 삭제), 07 개선: `label`(팀 탐색 '팀 검색')·`defaultText`(단어 검색 표시)·`onSubmitText`(후보 없는 Enter = 단어 검색, 고른 팀 이름 그대로면 무시) | 메인·지난 경기·메인 관심 팀 '팀 추가'·팀 탐색 | 완료 |
 | `components/common/SeasonSelect.tsx` | 시즌 드롭다운(Figma 93:3198·65:1616, 트리거·옵션 '2025-26 시즌' 표기, listbox 팝오버·키보드·포커스 복귀, 미지원 시즌은 '시즌 선택') | 지난 경기·리그 순위 | 완료(05, 2026-11-16 표기 개선) |
 | `components/common/NewsCard.tsx` | 뉴스 카드(분류·제목·설명·도메인·상대 시각·원문 보기), `NEWS_BADGE_LABELS` | `MainNews`(08 재사용) | 완료(02가 북마크 버튼 추가) |
-| `components/layout/SiteHeader.tsx` | 고정 헤더(본문 건너뛰기 링크, 로고, 메뉴, 인증 영역, 모바일 메뉴) + TOP 5 띠, 경로를 읽는 부분은 `<Suspense>`(04) | `layout.tsx` | 완료 |
+| `components/layout/SiteHeader.tsx` | 고정 헤더(본문 건너뛰기 링크, 로고, 메뉴, 인증 영역, 모바일 메뉴) + TOP 5 띠, 경로를 읽는 부분은 `<Suspense>`(04). 높이 PC 118px·모바일 130px(Figma `128:3700`·`128:4408`) | `layout.tsx` | 완료 |
 | `components/layout/MainNav.tsx` | 데스크톱 메뉴 4개, 현재 페이지 밑줄, `MainNavFallback`(04, 경로 확인 전 같은 메뉴) | `nav.ts` | 완료 |
 | `components/layout/MobileMenu.tsx` | 모바일 메뉴 버튼·하단 시트, 현재 페이지 강조 | `nav.ts`, `HeaderAuth.tsx` | 완료 |
 | `components/layout/HeaderAuth.tsx` | 로그인(ghost)·회원가입(primary), 데스크톱·메뉴 배치 | 헤더·모바일 메뉴 | 골격(02가 `useAuth()`로 회원 상태 연결) |
@@ -270,9 +272,9 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `top5/queries.ts` | `currentTopMatchesQuery`(5분 신선도·30분 주기·포커스 재조회), `topMatchesVersionQuery`(30초 공개 버전 확인), `isOutdated` | `apiFetch`, `query-keys.ts` | 완료(04) |
-| `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(PC 50px 한 줄·모바일 68px 두 줄 — 첫째 줄 배지·제목·기간, 둘째 줄 준비 상태·대진·화살표, PC는 두 줄을 `contents`로 한 줄 배치. 'AI 선정' 배지·고정 제목·실제 표시 주 기간·지난주 준비 상태·화살표 고정, `Lineup` 1~5위 끊김 없는 순환), 공개 버전 변경 시 즉시 재조회(실패 시 기존 결과 유지), `Top5StripFallback`, 펼칠 때 오래된 결과 재조회, PC 패널(본문 폭 1280px·150ms 펼침/접힘·접힘 즉시 inert·딤·배경 inert·첫 포커스 닫기·Tab 순환·Escape/바깥/화살표 닫기·포커스 복귀), 모바일 시트(`kt-top5-sheet` 슬라이드·딤 포인터), `PanelHeading` | `Top5List`, `model.ts`, `Dialog` | 완료(04·01) |
-| `top5/Top5List.tsx` | 펼침 본문(PC 행: 순위·대진/대회·일시·선정 이유·상태, 모바일 행: 순위·대회·상태/일시/대진/이유, 변경 일시, 경기 없음·지연 안내 상자, 5개 미만 안내, 'AI 선정 · 순서와 이유는 해당 주 동안 유지됩니다.', 목록만 스크롤) | `model.ts`, `kst.ts` | 완료(04·01) |
-| `top5/model.ts` | 공개 UI 3종(list·none·delayed) 판정과 문구, 지난주 여부·`weekLabel`(요일 없는 기간)·`PREPARING`·선정 시각, 변경 일시(D-01-10), 띠 대진 `lineupItems` | `kst.ts`, `match.ts` | 완료(04·01) |
+| `top5/Top5Strip.tsx` | AI 선정 TOP 5 띠(PC 48px 한 줄·모바일 64px 두 줄, 순환 28px/s — 첫째 줄 배지·제목·기간, 둘째 줄 준비 상태·대진·화살표, PC는 두 줄을 `contents`로 한 줄 배치. 'AI 선정' 배지·고정 제목·실제 표시 주 기간·지난주 준비 상태·화살표 고정, `Lineup` 1~5위 끊김 없는 순환), 공개 버전 변경 시 즉시 재조회(실패 시 기존 결과 유지), `Top5StripFallback`, 펼칠 때 오래된 결과 재조회, PC 패널(비모달 `role=dialog`, 본문 폭 1280px·150ms 펼침/접힘·접힘 즉시 inert·헤더 아래 딤·첫 포커스 닫기·닫기/Escape/딤은 띠로 포커스 복귀·링크 이동(같은 페이지 메뉴 포함, 일반 클릭만) 시 닫힘), 모바일 시트(`kt-top5-sheet` 슬라이드·딤 포인터), `PanelHeading` | `Top5List`, `model.ts`, `Dialog` | 완료(04·01) |
+| `top5/Top5List.tsx` | 펼침 본문(PC 행: 순위·양 팀 엠블럼 대진(420px)/대회·일시·선정 이유·상태, 모바일 행: 순위·대회·상태/일시/대진/이유 — 대진·상태는 `MatchTeams`·`MatchStatus`, 변경 일시, 경기 없음·지연 안내 상자, 5개 미만 안내, 'AI 선정 · 순서와 이유는 해당 주 동안 유지됩니다.', 목록만 스크롤 — 모바일 높이 420px 미만은 시트 본문 스크롤, 행은 일반 클릭에만 닫힘) | `model.ts`, `kst.ts`, `MatchCard.tsx` | 완료(04·01) |
+| `top5/model.ts` | 공개 UI 3종(list·none·delayed) 판정과 문구, 지난주 여부·`weekLabel`(요일 없는 기간)·`PREPARING`·선정 시각, 변경 일시(D-01-10, 사유는 배지 아래로), 띠 대진 `lineupItems`, 일반 클릭 판정 `isPlainClick` | `kst.ts`, `match.ts` | 완료(04·01) |
 | `match/MatchDetail.tsx` | 경기 상세 조립: 상태별 영역(MAT-001), 종료 PC 기록 좌·평가 우 384px, 진행 중 평가 아래 640px, 모바일 세로, 탭·정렬 URL(`history.replaceState`), 제목 포커스, '경기 목록으로'(같은 사이트 이전 목록 복귀), 404 안내 | 아래 파일 | 완료(04, 개선 반영) |
 | `match/Scoreboard.tsx` | 대회·상태 뱃지, 팀(`detailAvailable`이면 로고+팀명 한 링크, 아니면 일반 표시), 스코어/VS/—·승부차기, 시즌·라운드·킥오프, 진행 중 스코어 지연 경고만(시계 갱신) | `MatchDetail` | 완료(04, 개선 반영) |
 | `match/StatusNotice.tsx` | 연기·취소·경기 중단·행정 종료·확인 필요 안내(제공 사유만) | `MatchDetail` | 완료(04) |
@@ -333,7 +335,7 @@
 | `api/types.ts` | 생성 타입의 이름 별칭(`MatchSummary`, `TopMatches`, `FeedbackCreate`, 03: `CompetitionItem`·`ScheduleMeta`·`FavoriteSchedule`·`TeamSchedule`·`NewsItem` 등, 04: `TopMatchesVersion`·`MatchInfo`·`MatchRecords`·`BlockStatus`·`HeadToHead`·`ReviewList`·`ReviewSort` 등, 05: `SeasonItem`·`ResultsPage`·`ResultsMeta`, 06: `LeagueStandings`·`StandingRow`·`StandingsMeta`·`StandingsSummary`·`PlayerRankings`·`PlayerRankItem`·`RankingType`, 07: `BrowseTeam`·`TeamsMeta`, 08: `TeamOverview`·`TeamFixtures`·`TeamSquad`·`SquadPlayer`·`TeamSeasonStats`·`TeamSeasonRecord`·`HomeAway`·`TeamTransfers`·`TransferHalf`·`TransferItem`·`TeamSyncMeta` 등), 06 개선: `TableRow`·`RecentMatch`·`KnockoutStage`·`KnockoutTeamSlot`·`KnockoutLeg`·`KnockoutTie`·`KnockoutRound` | 완료 |
 | `api/query-keys.ts` | query key 규칙과 `topMatches`(current·version)·`competitions`·`fixtures`(date·team(오늘 포함)·next)·`matches`(info·records·headToHead·reviews)·`teams.search`·`news`·`me` 키, 05: `seasons`·`results`·`teams.search(q, season)`, 06: `standings`(table·summary)·`playerRankings`, 07: `teams.list`, 08: `teams.detail`·`fixtures`·`squad`·`seasonStats`·`transfers`, `news.team`, 06 개선: `standings.knockouts`(대회·시즌·단계) | 완료(기능 채팅이 키 추가) |
 | `format/kst.ts` | KST 시각·날짜·주간(`10/26(월)–11/1(일)`)·`10/29(목) 03:30`·`2026-10-26 00:00` 포맷, 누락값 `—`, 03: `kstTodayIso`·`addDaysIso`·`formatRelativeKst` | 완료 |
-| `format/match.ts` | 경기 표기 공용 규칙: `teamName`·`competitionName`·`scoreText`·`penaltyText`·`kickoffTime`·`isChanged`·`statusWord` | 완료 |
+| `format/match.ts` | 경기 표기 공용 규칙: `teamName`·`competitionName`·`scoreText`·`penaltyText`·`kickoffTime`·`isChanged`·`statusWord`, 01: `statusNotes`(중단 시점 스코어 + 제공사 사유) | 완료 |
 | `hooks/useMediaQuery.ts` | 미디어 쿼리 구독, `DESKTOP_QUERY`(1024px) | 완료 |
 | `hooks/useHydrated.ts` | 하이드레이션 완료 여부(공유 캐시를 읽는 Suspense 영역의 서버·클라이언트 불일치 방지) | 완료(05) |
 | `hooks/useNow.ts` | 30초마다 갱신되는 현재 시각(서버 렌더 0) — 킥오프 후 '상태 확인 중' 판정 | 완료 |

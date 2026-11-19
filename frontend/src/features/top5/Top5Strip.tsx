@@ -14,6 +14,7 @@ import { Top5List } from "./Top5List";
 import {
   PREPARING,
   TOP5_TITLE,
+  isPlainClick,
   isPrevious,
   lineupItems,
   noticeCopy,
@@ -25,18 +26,17 @@ import { currentTopMatchesQuery, isOutdated, topMatchesVersionQuery } from "./qu
 
 const CLOSE_LABEL = "주목 경기 목록 닫기";
 const PANEL_NAME = "주목 경기 선정 목록";
-const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
-/** Lineup speed (Figma 159:923): 24px per second, linear. */
-const TICKER_SPEED = 24;
+/** Lineup speed (Figma 308:4617): 28px per second, linear. */
+const TICKER_SPEED = 28;
 
 /*
- * Strip layout (Figma 159:923). Mobile 68px: badge, title and week on the first row; the
- * lineup (after "preparing" while last week is shown) on the second, with the arrow at its
- * right end. Desktop 50px: one row of badge, title, week, preparing, the lineup in the
+ * Strip layout (Figma 159:923, 128:3700 / 128:4408). Mobile 64px: badge, title and week on
+ * the first row; the lineup (after "preparing" while last week is shown) on the second, with the arrow at its
+ * right end. Desktop 48px: one row of badge, title, week, preparing, the lineup in the
  * remaining width and the arrow; the two mobile rows become `contents`. Badge, title, week
  * and arrow never move.
  */
-const STRIP = "relative flex w-full flex-col gap-1.5 py-2 text-left lg:h-[50px] lg:flex-row lg:items-center lg:gap-5 lg:py-0";
+const STRIP = "relative flex w-full flex-col gap-1.5 py-1.5 text-left lg:h-12 lg:flex-row lg:items-center lg:gap-5 lg:py-0";
 const FIRST_ROW = "flex flex-wrap items-center gap-x-3 lg:contents";
 const SECOND_ROW = "flex h-5 items-center gap-2 pr-[46px] lg:contents";
 const BADGE = "shrink-0 rounded-badge bg-action px-2 py-1 text-small leading-[18px] font-bold text-fg-inverse";
@@ -116,26 +116,10 @@ function PanelHeading({ data }: { data: TopMatches | undefined }) {
 }
 
 /**
- * Makes everything outside `keep` inert (TOP 5 policy frame 168:348: the background is inert
- * while the desktop panel is open). Returns the undo function.
- */
-function inertOutside(keep: HTMLElement): () => void {
-  const changed: HTMLElement[] = [];
-  for (let node: HTMLElement = keep; node.parentElement && node !== document.body; node = node.parentElement) {
-    for (const sibling of node.parentElement.children) {
-      if (sibling !== node && sibling instanceof HTMLElement && !sibling.inert) {
-        sibling.inert = true;
-        changed.push(sibling);
-      }
-    }
-  }
-  return () => changed.forEach((element) => (element.inert = false));
-}
-
-/**
  * AI weekly TOP 5 strip, fixed under the header on every page (COM-003, TOP-003,
- * Figma 159:923). Desktop unfolds a panel of the content width (max 1280px) right under the
- * strip and folds it back up (159:218); below 1024px it opens a bottom sheet (159:621).
+ * Figma 159:923). Desktop unfolds a non-modal panel of the content width (max 1280px) right
+ * under the strip and folds it back up (128:3700); below 1024px it opens a modal bottom
+ * sheet (128:4408).
  */
 export function Top5Strip() {
   const { data, isPending, error, refetch, isStale } = useQuery(currentTopMatchesQuery);
@@ -147,7 +131,6 @@ export function Top5Strip() {
   const pathname = usePathname();
   const panelId = useId();
   const titleId = useId();
-  const root = useRef<HTMLDivElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLElement>(null);
 
@@ -177,40 +160,29 @@ export function Top5Strip() {
     toggle.current?.focus();
   };
 
-  // Desktop panel (168:348 '접근성'): first focus on the close button, Tab/Shift+Tab cycle
-  // inside the panel, the page behind is inert, Escape closes and returns focus to the strip.
+  // Desktop panel is non-modal (COM-003·TOP-003, Figma 308:4617): the header stays usable
+  // with mouse and keyboard while it is open, and focus is never trapped. The first focus
+  // goes to the close button; Escape returns focus to the strip like the close button and
+  // the dim. Following any link (logo, menu — even the current page — or a listed match)
+  // closes it and leaves focus with the navigation, not the strip.
   useEffect(() => {
-    const section = panel.current;
-    if (!open || !isDesktop || !root.current || !section) return;
-    const restore = inertOutside(root.current);
-    section.querySelector<HTMLElement>("[data-dialog-close]")?.focus();
+    if (!open || !isDesktop) return;
+    panel.current?.querySelector<HTMLElement>("[data-dialog-close]")?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        toggle.current?.focus();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const items = [...section.querySelectorAll<HTMLElement>(FOCUSABLE)];
-      const first = items[0];
-      const lastItem = items.at(-1);
-      const active = document.activeElement;
-      if (!first || !lastItem) return;
-      if (!section.contains(active)) {
-        event.preventDefault();
-        first.focus();
-      } else if (event.shiftKey && active === first) {
-        event.preventDefault();
-        lastItem.focus();
-      } else if (!event.shiftKey && active === lastItem) {
-        event.preventDefault();
-        first.focus();
-      }
+      // A modal opened on top (e.g. feedback) handles its own Escape.
+      if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("dialog:modal")) return;
+      setOpen(false);
+      toggle.current?.focus();
+    };
+    const onClick = (event: MouseEvent) => {
+      if (!isPlainClick(event)) return;
+      if (event.target instanceof Element && event.target.closest("a[href]")) setOpen(false);
     };
     document.addEventListener("keydown", onKey);
+    document.addEventListener("click", onClick, true);
     return () => {
       document.removeEventListener("keydown", onKey);
-      restore();
+      document.removeEventListener("click", onClick, true);
     };
   }, [open, isDesktop]);
 
@@ -227,7 +199,7 @@ export function Top5Strip() {
   const notice = data && noticeOf(data);
 
   return (
-    <div ref={root} className="border-b border-line bg-selected">
+    <div className="border-b border-line bg-selected">
       <div className="kt-container">
         <button
           ref={toggle}
@@ -279,10 +251,11 @@ export function Top5Strip() {
           )}
           {/* The container's side gutters let clicks through to the dimmed backdrop. */}
           <div className="kt-container pointer-events-none absolute inset-x-0 top-full z-10">
+            {/* Non-modal dialog (no aria-modal): the page outside is not hidden from
+                assistive technology and the header keeps working. */}
             <section
               ref={panel}
               role="dialog"
-              aria-modal="true"
               aria-labelledby={titleId}
               data-open={open ? "" : undefined}
               // Out of the tab order and the accessibility tree as soon as it starts folding.

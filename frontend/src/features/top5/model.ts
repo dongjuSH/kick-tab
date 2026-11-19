@@ -73,14 +73,14 @@ export function kickoffText(item: TopMatchItem): string {
 /**
  * "변경 일시 11/12(목) 03:00" when the kickoff moved after the selection, "변경 일시 미정"
  * while a postponed match has no new time. A postponed match keeps its id (guide §6.4 PST).
+ * The provider's reason sits under the status badge, as on every match card (`MatchStatus`).
  */
 export function changeText(item: TopMatchItem): string | null {
   const { match } = item;
-  const reason = match.statusReason ? ` · ${match.statusReason}` : "";
-  if (match.status === "postponed" && !match.timeConfirmed) return `변경 일시 미정${reason}`;
+  if (match.status === "postponed" && !match.timeConfirmed) return "변경 일시 미정";
   if (Date.parse(match.kickoffAt) !== Date.parse(item.selectedKickoffAt)) {
     const when = match.timeConfirmed ? formatKstMonthDayTime(match.kickoffAt) : "미정";
-    return `변경 일시 ${when}${reason}`;
+    return `변경 일시 ${when}`;
   }
   return null;
 }
@@ -88,4 +88,12 @@ export function changeText(item: TopMatchItem): string | null {
 /** Strip lineup in rank order: "1위 맨체스터 시티 vs 아스널". */
 export function lineupItems(data: TopMatches): string[] {
   return data.items.map(({ rank, match }) => `${rank}위 ${teamName(match.home)} vs ${teamName(match.away)}`);
+}
+
+/**
+ * A click that follows a link in the current tab (left button, no modifier). New-tab / new-window
+ * clicks (Ctrl/⌘/Shift/Alt, middle button) keep the TOP 5 panel or sheet open.
+ */
+export function isPlainClick(event: { button: number; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }

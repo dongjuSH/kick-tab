@@ -86,3 +86,25 @@ test("strip keeps the fixed title and badge and names last week while this week 
   }
   assert.ok(!html.includes("지난주 주목 경기 TOP 5"), "the title stays fixed");
 });
+
+test("only a plain left click closes the list; new-tab clicks keep it open (Codex N2)", () => {
+  const { isPlainClick } = loader()("@/features/top5/model");
+  const click = (extra) => ({ button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...extra });
+  assert.equal(isPlainClick(click()), true);
+  for (const extra of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+    assert.equal(isPlainClick(click(extra)), false, JSON.stringify(extra));
+  }
+});
+
+test("abandoned score notice and the provider reason are both kept (Codex N3)", () => {
+  // Arrays come from another vm realm, so they are compared as text.
+  const { statusNotes } = loader()("@/lib/format/match");
+  assert.equal(statusNotes({ status: "abandoned", statusReason: "기상 악화로 경기 중단" }).join("|"), ["중단 시점 스코어", "기상 악화로 경기 중단"].join("|"));
+  assert.equal(statusNotes({ status: "abandoned", statusReason: null }).join("|"), ["중단 시점 스코어"].join("|"));
+  assert.equal(statusNotes({ status: "postponed", statusReason: "기상 악화" }).join("|"), ["기상 악화"].join("|"));
+  assert.equal(statusNotes({ status: "finished", statusReason: null }).join("|"), [].join("|"));
+  // The change line no longer repeats the reason shown under the badge.
+  const { changeText } = loader()("@/features/top5/model");
+  const moved = { selectedKickoffAt: "2026-11-02T11:30:00Z", match: { status: "postponed", timeConfirmed: false, kickoffAt: "2026-11-02T11:30:00Z", statusReason: "기상 악화" } };
+  assert.equal(changeText(moved), "변경 일시 미정");
+});
