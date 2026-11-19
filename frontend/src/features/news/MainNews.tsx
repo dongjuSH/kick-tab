@@ -56,10 +56,7 @@ export function MainNews() {
       aria-labelledby="news-title"
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
     >
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-        <h2 id="news-title" className="text-subtitle font-bold">주요 뉴스</h2>
-        <p className="text-small text-fg-secondary">매시간 수집 · 전체 최신 최대 48개</p>
-      </div>
+      <h2 id="news-title" className="text-subtitle font-bold">주요 뉴스</h2>
       <div className="-mx-1 overflow-x-auto px-1 py-1 [scrollbar-width:none]" role="group" aria-label="뉴스 분류">
         <div className="flex w-max gap-2">
           {[null, ...BADGES].map((value) => (
