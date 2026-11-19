@@ -10,14 +10,17 @@ export function teamName(team: TeamRef): string {
   return team.nameKo ?? team.nameEn;
 }
 
-/** Korean competition label on schedule screens (Figma 187:591·187:1946): "챔피언스리그". */
+/** The one competition name shown everywhere (COM-003): name_ko as stored, e.g. "UEFA 챔피언스리그", "리그 1". */
 export function competitionName(competition: { nameKo: string | null; shortName: string }): string {
-  return (competition.nameKo ?? competition.shortName).replace(/^UEFA\s+/, "");
+  return competition.nameKo ?? competition.shortName;
 }
 
-/** Not played yet (scheduled, postponed) → "VS"; a missing score → "—", never 0:0. */
+/**
+ * "VS" only between the teams of a scheduled match (MatchCard rule, 2026-11-19); any other
+ * match without a score (postponed, cancelled, a missing provider score) reads "—", never 0:0.
+ */
 export function scoreText(match: MatchSummary): string {
-  if (match.status === "scheduled" || match.status === "postponed") return "VS";
+  if (match.status === "scheduled") return "VS";
   const { home, away } = match.score;
   return home === null || away === null ? MISSING : `${home} : ${away}`;
 }
@@ -28,9 +31,9 @@ export function penaltyText(match: MatchSummary): string | null {
   return penaltyHome === null || penaltyAway === null ? null : `PK ${penaltyHome}:${penaltyAway}`;
 }
 
-/** Kickoff time in KST, "미정" while the provider has not fixed it (TBD / postponed). */
+/** Kickoff time in KST as HH:mm, "시간 미정" while the provider has not fixed it (TBD / postponed). */
 export function kickoffTime(match: MatchSummary): string {
-  return match.timeConfirmed ? formatKstTime(match.kickoffAt) : "미정";
+  return match.timeConfirmed ? formatKstTime(match.kickoffAt) : "시간 미정";
 }
 
 /** Postponed / cancelled / abandoned / decided by a ruling: shown in the warning colour. */

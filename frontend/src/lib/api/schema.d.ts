@@ -163,9 +163,9 @@ export interface paths {
         };
         /**
          * Read Team Schedule
-         * @description Team view: the team's stored matches today-3 .. today+17 KST.
-         *     Competition filters are applied on screen; `failedCompetitionIds` tells which
-         *     competitions may be incomplete, so "no matches" is never claimed for them.
+         * @description Team view: the team's stored matches in the common match-day period (its first to last
+         *     date, SCH-006). Competition filters are applied on screen; `failedCompetitionIds` tells
+         *     which competitions may be incomplete, so "no matches" is never claimed for them.
          */
         get: operations["read_team_schedule_api_v1_fixtures_team_get"];
         put?: never;
@@ -617,7 +617,7 @@ export interface components {
              * Group
              * @enum {string}
              */
-            group: "EPL" | "LaLiga" | "SerieA" | "Bundesliga" | "Ligue1" | "UEFA";
+            group: "EPL" | "LaLiga" | "SerieA" | "Bundesliga" | "Ligue1" | "UEFA" | "FIFA";
             currentSeason: components["schemas"]["CompetitionSeasonInfo"] | null;
             /** Seasons */
             seasons: components["schemas"]["CompetitionSeasonInfo"][];
@@ -724,18 +724,22 @@ export interface components {
              */
             createdAt: string;
         };
-        /** FixtureAvailability */
+        /**
+         * FixtureAvailability
+         * @description The common match-day period (SCH-002·003): only dates with a stored match, the last
+         *     three before today, today when it has a match, and the next 17. `start`/`end` are the
+         *     first and last of them (null when nothing is stored yet).
+         */
         FixtureAvailability: {
             /**
-             * Start
+             * Today
              * Format: date
              */
-            start: string;
-            /**
-             * End
-             * Format: date
-             */
-            end: string;
+            today: string;
+            /** Start */
+            start: string | null;
+            /** End */
+            end: string | null;
             /** Dates */
             dates: components["schemas"]["FixtureDateAvailability"][];
         };

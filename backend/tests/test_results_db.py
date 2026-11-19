@@ -25,6 +25,7 @@ from app.services.team_search import search_teams
 from app.sync.fixtures import sync_season_fixtures
 from app.sync.reference import _save_season
 from app.sync.registry import JobContext, JobPartialFailure
+from tests.test_schedule_db import period_rows
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("KICKTAB_DB_TESTS") != "1",
@@ -185,7 +186,7 @@ def test_season_job_failure_keeps_rows_and_rerun_never_duplicates(session, monke
         ctx = JobContext(session=session, params={"season": "2025"})
         with pytest.raises(JobPartialFailure) as caught:
             sync_season_fixtures(ctx)
-        assert "39" in str(caught.value) and ctx.api_requests == 14
+        assert "39" in str(caught.value) and ctx.api_requests == _available_2025(session)
     assert count(39) == epl_before  # a failure never deletes or overwrites stored matches
     assert count(45) == cup_before + 1  # two runs, one row
     coverage = season_coverage(session, 2025)
@@ -240,6 +241,15 @@ def test_season_job_refuses_unmanaged_seasons(session):
 # ---- Codex cross-check follow-ups (2026-11-05) ----------------------------------------
 
 NEW_TEAM = 999_999_901  # not in the DB
+
+
+def _available_2025(session):
+    """Competitions with 2025 data: one whole-season request each (21 masters since 03)."""
+    return session.scalar(
+        select(func.count()).select_from(CompetitionSeason).where(
+            CompetitionSeason.season == 2025, CompetitionSeason.availability == "available"
+        )
+    )
 
 
 def _mark(session, season, values, competition_id=None):
@@ -308,7 +318,7 @@ def test_failed_refresh_keeps_results_but_never_loaded_is_503(client, session):
     _mark(session, 2025, {"season_fixtures_failed_at": later})
     every = client.get("/api/v1/results", params={"season": 2025})
     assert every.status_code == 200 and every.json()["meta"]["total"] == partial["total"]
-    assert len(every.json()["meta"]["failedCompetitionIds"]) == 14
+    assert len(every.json()["meta"]["failedCompetitionIds"]) == _available_2025(session)
 
     # Never loaded successfully: "not collected" (503) when nothing in scope was loaded.
     _mark(session, 2025, {"season_fixtures_synced_at": None}, competition_id=39)
@@ -371,7 +381,7 @@ def test_season_job_records_partial_and_save_failures_and_continues(session, mon
     with pytest.raises(JobPartialFailure) as caught:
         sync_season_fixtures(ctx)
     assert "39" in str(caught.value) and "45" in str(caught.value)
-    assert ctx.api_requests == 14  # every competition was still processed
+    assert ctx.api_requests == _available_2025(session)  # every competition was still processed
 
     epl, cup, liga = (_state(session, cid, 2025) for cid in (39, 45, 140))
     # Partly stored answer: the valid fixture is kept, the list is not reported complete.
@@ -408,7 +418,7 @@ def test_schedule_job_marks_a_partly_stored_competition(session, monkeypatch):
     ctx = JobContext(session=session, params={})
     with pytest.raises(JobPartialFailure) as caught:
         sync_fixtures(ctx)
-    assert "39" in str(caught.value) and ctx.api_requests == 14
+    assert "39" in str(caught.value) and ctx.api_requests == len(period_rows(session))
     epl = _state(session, 39, 2026)
     assert epl.fixtures_failed_at > epl.fixtures_synced_at
     assert session.get(Fixture, BASE_ID + 401) is None

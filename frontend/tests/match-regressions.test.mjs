@@ -407,3 +407,117 @@ test("applying competitions skips unconfirmed dates and moves to the nearest con
   // Before the availability arrives nothing moves.
   assert.equal(nearestMatchDate(dates, "2026-11-10", "2026-11-10", (d) => (d === "2026-11-10" ? "empty" : "pending")), undefined);
 });
+
+test("default match day: today when it has a match, else the nearest later one, else none (SCH-002, 2026-11-19)", () => {
+  const { defaultMatchDate } = loader()("@/features/schedule/useScheduleParams");
+  const dates = ["2026-11-13", "2026-11-14", "2026-11-15", "2026-11-19", "2026-11-20"];
+  assert.equal(defaultMatchDate(dates, "2026-11-19"), "2026-11-19");
+  // No match today (11/17): the next match day, never a past one.
+  assert.equal(defaultMatchDate(dates, "2026-11-17"), "2026-11-19");
+  // Nothing ahead: no default ("예정 일정 없음" with the past days still on the bar).
+  assert.equal(defaultMatchDate(dates, "2026-11-21"), null);
+  assert.equal(defaultMatchDate([], "2026-11-19"), null);
+});
+
+test("KST date turns at 15:00 UTC and the period reads as its real first and last day", () => {
+  const { kstTodayIso, formatDateRange } = loader()("@/lib/format/kst");
+  assert.equal(kstTodayIso(new Date("2026-11-18T14:59:59Z")), "2026-11-18");
+  assert.equal(kstTodayIso(new Date("2026-11-18T15:00:00Z")), "2026-11-19");
+  assert.equal(kstTodayIso(new Date("2026-12-31T15:00:00Z")), "2027-01-01");
+  assert.equal(formatDateRange("2026-11-06", "2026-12-02"), "2026.11.06–12.02");
+  assert.equal(formatDateRange("2026-12-20", "2027-01-08"), "2026.12.20–2027.01.08");
+});
+
+test("match card: HH:mm or 시간 미정, and VS only between the teams of a scheduled match (2026-11-19)", () => {
+  const { kickoffTime, scoreText } = loader()("@/lib/format/match");
+  const base = { kickoffAt: "2026-11-19T11:30:00Z", timeConfirmed: true, status: "scheduled",
+    score: { home: null, away: null } };
+  assert.equal(kickoffTime(base), "20:30");
+  assert.equal(kickoffTime({ ...base, kickoffAt: "2026-11-18T15:05:00Z" }), "00:05");
+  assert.equal(kickoffTime({ ...base, timeConfirmed: false }), "시간 미정");
+  assert.equal(scoreText(base), "VS");
+  assert.equal(scoreText({ ...base, status: "postponed" }), "—");
+  assert.equal(scoreText({ ...base, status: "live", score: { home: 1, away: 0 } }), "1 : 0");
+  assert.equal(scoreText({ ...base, status: "finished", score: { home: 2, away: 2 } }), "2 : 2");
+  assert.equal(scoreText({ ...base, status: "finished" }), "—");
+});
+
+test("a vanished date announces the new target again when Back restores different competitions (N12)", () => {
+  const values = [];
+  let cursor = 0;
+  let dirty = false;
+  let effects = [];
+  const react = {
+    ...React,
+    useState(initial) {
+      const index = cursor++;
+      if (!(index in values)) values[index] = typeof initial === "function" ? initial() : initial;
+      return [values[index], (value) => {
+        const next = typeof value === "function" ? value(values[index]) : value;
+        if (!Object.is(next, values[index])) { values[index] = next; dirty = true; }
+      }];
+    },
+    useEffect(effect) { effects.push(effect); },
+  };
+  let date = "2026-11-21";
+  let competitions = [78];
+  let period = {
+    today: "2026-11-19", start: "2026-11-21", end: "2026-11-23",
+    dates: [
+      { date: "2026-11-21", competitionIds: [39, 78], unknownCompetitionIds: [] },
+      { date: "2026-11-22", competitionIds: [39], unknownCompetitionIds: [] },
+      { date: "2026-11-23", competitionIds: [78], unknownCompetitionIds: [] },
+    ],
+  };
+  const update = (change) => { date = change.date; dirty = true; };
+  const pending = { isPending: true, isError: false };
+  const success = (data) => ({ data, isPending: false, isError: false, isSuccess: true, refetch() {} });
+  const emptyList = { data: [], meta: { failedCompetitionIds: [], updatedAt: null } };
+  const { ScheduleSection } = loader({
+    react,
+    "@tanstack/react-query": { useQuery: (options) => {
+      if (options.queryKey[0] === "availability") return success(period);
+      if (options.queryKey[0] === "date") return success(emptyList);
+      return pending;
+    } },
+    "@/lib/hooks/useHydrated": { useHydrated: () => true },
+    "@/features/favorites/useFavorites": { useFavorites: () => ({ status: "ready", ids: [] }) },
+    "@/components/common/CompetitionFilter": { CompetitionFilter: () => null },
+    "@/components/common/MatchCard": { MatchCard: () => null },
+    "@/components/common/TeamSearch": { TeamSearch: () => null },
+    "@/components/ui/Button": { Button: ({ children }) => React.createElement("button", null, children) },
+    "@/features/favorites/FavoriteTeamButtons": { FavoriteTeamButtons: () => null },
+    "./DateBar": { DateBar: () => null },
+    "./queries": {
+      competitionsQuery: { queryKey: ["competitions"] },
+      fixtureAvailabilityQuery: () => ({ queryKey: ["availability"] }),
+      fixturesByDateQuery: (day) => ({ queryKey: ["date", day] }),
+      teamScheduleQuery: () => ({ queryKey: ["team"] }),
+      favoriteScheduleQuery: () => ({ queryKey: ["favorites"] }),
+    },
+    "./useScheduleParams": {
+      defaultMatchDate: (dates, today) => dates.find((day) => day >= today) ?? null,
+      useScheduleParams: () => ({ today: period.today, date, competitions, team: null, update }),
+    },
+  })("@/features/schedule/ScheduleSection");
+  const render = () => {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      cursor = 0; dirty = false; effects = [];
+      const html = renderToStaticMarkup(React.createElement(ScheduleSection));
+      if (dirty) continue; // React discards effects of a render-phase state update.
+      effects.forEach((effect) => effect());
+      if (!dirty) return html;
+    }
+    assert.fail("the schedule did not settle after navigation");
+  };
+
+  render(); // Remember 11/21 in Bundesliga, then push EPL with the same date.
+  competitions = [39]; render();
+  period = { ...period, start: "2026-11-22", dates: period.dates.slice(1) };
+  assert.ok(render().includes("11/22(일) 경기로 이동했습니다."));
+  assert.equal(date, "2026-11-22");
+  // Back restores the same vanished date with Bundesliga: its next match is 11/23.
+  date = "2026-11-21"; competitions = [78];
+  assert.ok(render().includes("11/23(월) 경기로 이동했습니다."));
+  assert.equal(date, "2026-11-23");
+});

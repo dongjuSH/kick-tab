@@ -2,12 +2,14 @@ import { Badge } from "@/components/ui/Badge";
 import type { NewsBadge, NewsItem } from "@/lib/api/types";
 import { formatRelativeKst } from "@/lib/format/kst";
 
+// COM-003 (2026-11-19): the same Korean competition names as everywhere else; the UEFA
+// badge covers its three club competitions, so it keeps the body's abbreviation.
 export const NEWS_BADGE_LABELS: Record<NewsBadge, string> = {
-  EPL: "EPL",
-  LaLiga: "LaLiga",
-  SerieA: "Serie A",
-  Bundesliga: "Bundesliga",
-  Ligue1: "Ligue 1",
+  EPL: "프리미어리그",
+  LaLiga: "라리가",
+  SerieA: "세리에 A",
+  Bundesliga: "분데스리가",
+  Ligue1: "리그 1",
   UEFA: "UEFA",
 };
 

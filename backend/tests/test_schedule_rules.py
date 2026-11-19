@@ -1,11 +1,13 @@
 """Chat 03 pure rules: status mapping, names, news classification, URL dedupe, cursors."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
+from app.config import settings
 from app.models.fixture import Fixture
-from app.services.fixtures import SYNC_DELAY, SyncState, _score
+from app.models.reference import CompetitionSeason
+from app.services.fixtures import SYNC_DELAY, SyncState, _score, covered, overlaps
 from app.services.match_status import map_status
 from app.services.news import InvalidCursor, decode_cursor, encode_cursor
 from app.services.news_classify import (
@@ -287,3 +289,50 @@ def test_schedule_is_delayed_after_two_missed_collections():
     fresh = SyncState([], False, checked_at=now - SYNC_DELAY + timedelta(minutes=1))
     late = SyncState([], False, checked_at=now - SYNC_DELAY - timedelta(minutes=1))
     assert (fresh.delayed, late.delayed, SyncState([], True).delayed) == (False, True, False)
+
+
+def test_covered_splits_a_range_at_the_job_window_edge():
+    """A range crossing the 30-minute job's window keeps that job's failure: the part inside
+    needs the job, the part outside the season load (Codex N2, 2026-11-19)."""
+    now = datetime(2026, 11, 19, tzinfo=UTC)
+    row = CompetitionSeason(
+        competition_id=39, season=2026, availability="available",
+        fixtures_synced_at=now, fixtures_failed_at=now + timedelta(minutes=30),
+        fixtures_window_start=date(2026, 11, 13), fixtures_window_end=date(2026, 12, 7),
+        season_fixtures_synced_at=now, season_fixtures_failed_at=None,
+    )
+    assert not covered(row, date(2026, 11, 13), date(2026, 12, 7))
+    assert not covered(row, date(2026, 11, 13), date(2026, 12, 8))  # crosses the edge
+    assert covered(row, date(2026, 12, 8), date(2026, 12, 9))  # outside: season load
+    row.fixtures_failed_at = None
+    row.season_fixtures_failed_at = now + timedelta(minutes=1)
+    assert covered(row, date(2026, 11, 13), date(2026, 12, 7))
+    assert not covered(row, date(2026, 11, 13), date(2026, 12, 8))  # outside part failed
+
+
+def test_all_failed_is_judged_against_the_window_competitions():
+    """"No match and every competition failed" compares the competitions that can play in
+    the window, not the season's whole list (Codex 2차 N8, 2026-11-19)."""
+    state = SyncState(
+        failed_competition_ids=[39, 140], never_synced=False, relevant_competition_ids=(39, 140)
+    )
+    assert state.all_failed
+    assert not SyncState(
+        failed_competition_ids=[39], never_synced=False, relevant_competition_ids=(39, 140)
+    ).all_failed
+    assert not SyncState(failed_competition_ids=[], never_synced=False).all_failed
+
+
+def test_past_season_without_dates_counts_when_its_matches_are_stored_in_range():
+    """A past season with no date metadata is not dropped when it has stored matches in the
+    range (Codex 1차 D, 2026-11-19); without them it stays out."""
+    day = date(2026, 1, 8)
+    row = CompetitionSeason(
+        competition_id=556, season=settings.current_season - 1, availability="available"
+    )
+    assert not overlaps(row, day, day)
+    assert not overlaps(row, day, day, set())
+    assert overlaps(row, day, day, {(556, settings.current_season - 1)})
+    assert overlaps(
+        CompetitionSeason(competition_id=556, season=settings.current_season), day, day
+    )

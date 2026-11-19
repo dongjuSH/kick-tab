@@ -11,8 +11,8 @@ const RESERVED = 24;
 
 /**
  * PC side panel of the main page that follows the scroll inside its own band (favourites
- * beside the schedule, standings beside the news) and stops at the band's end. Below 1024px
- * it is plain flow (mobile order: schedule, favourites, news, standings).
+ * beside the schedule, standings beside the news) and stops at the band's end. Below 1280px
+ * the page is one column and this is plain flow (schedule, favourites, news, standings).
  */
 export function StickyPanel({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -21,7 +21,7 @@ export function StickyPanel({ children }: { children: ReactNode }) {
   useEffect(() => {
     const panel = ref.current;
     if (!panel) return;
-    const desktop = matchMedia("(min-width: 1024px)");
+    const desktop = matchMedia("(min-width: 1280px)");
     const check = () => {
       const header = document.querySelector("header")?.getBoundingClientRect().height ?? 0;
       const available = innerHeight - header - RESERVED;

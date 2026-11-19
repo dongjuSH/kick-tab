@@ -42,7 +42,7 @@ export const queryKeys = {
   },
   fixtures: {
     byDate: (date: string) => ["fixtures", "date", { date }] as const,
-    team: (teamId: number, today: string) => ["fixtures", "team", { teamId, today }] as const,
+    team: (teamId: number, period: string) => ["fixtures", "team", { teamId, period }] as const,
     next: (teamIds: readonly number[]) => ["fixtures", "next", { teams: teamIds.join(",") }] as const,
   },
   teams: {

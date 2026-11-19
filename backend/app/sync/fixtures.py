@@ -1,8 +1,10 @@
 """Schedule and live sync for the current season (guide §6.5, OPS-001·003, LIVE-003·004).
 
-- fixtures (every 30 min): one /fixtures request per available competition for today-3 ..
-  today+17 (KST), 14 requests per run. A failed competition keeps its stored rows and is
-  marked failed so the screen can tell "no matches" from "not collected" (CMP-004).
+- fixtures (every 30 min): the common match-day period's calendar span (SCH-002·003, from the
+  stored schedule), one /fixtures request per competition season that can play in it - a
+  period may cross seasons, and one-off cups outside it cost nothing. A failed competition
+  keeps its stored rows and is marked failed so the screen can tell "no matches" from "not
+  collected" (CMP-004).
 - fixtures_live (every 60 s, only while a match is live or about to start): one
   /fixtures?live=<our leagues> request, plus /fixtures?ids= for tracked matches missing
   from the live answer (finished or delayed), 20 ids per request. Idle minutes make no
@@ -28,9 +30,11 @@ from app.config import settings
 from app.models.reference import Competition, CompetitionSeason
 from app.providers.api_football import ApiFootballError
 from app.services.fixtures import (
-    collection_window,
     live_targets,
     needs_live_sync,
+    overlaps,
+    schedule_period,
+    stored_seasons,
     upsert_fixtures,
 )
 from app.services.match_detail import (
@@ -64,20 +68,24 @@ def _available_competitions(session: Session, season: int) -> list[CompetitionSe
 
 @register_job(
     "fixtures",
-    description="Current-season schedule, today-3 .. today+17 KST (1 request per competition)",
+    description="Schedule of the common match-day period (1 request per competition season)",
     schedule={"trigger": "interval", "minutes": 30},
 )
 def sync_fixtures(ctx: JobContext) -> None:
     session = ctx.session
-    season = int(ctx.params.get("season", settings.current_season))
-    competitions = _available_competitions(session, season)
+    start, end = schedule_period(session).bounds()
+    stored = stored_seasons(session, start, end)
+    competitions = [
+        row
+        for season in managed_seasons()
+        for row in _available_competitions(session, season)
+        if overlaps(row, start, end, stored)
+    ]
     if not competitions:
         raise JobPartialFailure("No available competitions: run the reference job first")
 
-    start, end = collection_window()
     # The provider filters by UTC date; a KST day starts at 15:00 UTC the day before.
     params = {
-        "season": season,
         "from": (start - timedelta(days=1)).isoformat(),
         "to": end.isoformat(),
         "timezone": "UTC",
@@ -87,7 +95,9 @@ def sync_fixtures(ctx: JobContext) -> None:
     for index, row in enumerate(competitions):
         now = datetime.now(UTC)
         try:
-            result = client.get("/fixtures", {**params, "league": row.competition_id})
+            result = client.get(
+                "/fixtures", {**params, "league": row.competition_id, "season": row.season}
+            )
         except ApiFootballError as exc:
             logger.warning("fixtures %s failed: %s", row.competition_id, type(exc).__name__)
             pending = competitions[index:] if isinstance(exc, FATAL) else [row]
@@ -135,6 +145,10 @@ def sync_season_fixtures(ctx: JobContext) -> None:
     if season not in managed_seasons():
         raise JobPartialFailure(f"Season {season} is not managed")
     competitions = _available_competitions(session, season)
+    # `league=528,556` (manual): only those competitions (new ones, without reloading all).
+    only = {int(x) for x in str(ctx.params.get("league", "")).split(",") if x.strip()}
+    if only:
+        competitions = [row for row in competitions if row.competition_id in only]
     if not competitions:
         raise JobPartialFailure(f"No available competitions in {season}: run reference first")
 
@@ -197,8 +211,13 @@ def _live_precheck(session: Session, params: Mapping[str, Any]) -> bool:
 )
 def sync_live(ctx: JobContext) -> None:
     session = ctx.session
-    season = settings.current_season
-    league_ids = [r.competition_id for r in _available_competitions(session, season)]
+    # Competition ids only (any managed season): a tournament held in an earlier season's
+    # calendar - e.g. a club world cup or super cup - is followed as well.
+    league_ids = sorted({
+        row.competition_id
+        for season in managed_seasons()
+        for row in _available_competitions(session, season)
+    })
     now = datetime.now(UTC)
     tracked = set(live_targets(session, now))
 

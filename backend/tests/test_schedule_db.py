@@ -18,8 +18,15 @@ from app.models.fixture import Fixture
 from app.models.match_detail import FixtureDetail, FixtureEvent
 from app.models.reference import CompetitionSeason
 from app.providers.api_football import ApiFootballClient, DailyBudget, MinuteRateLimiter
-from app.services.fixtures import fixtures_on, next_for_teams, upsert_fixtures
+from app.services.fixtures import (
+    fixtures_on,
+    next_for_teams,
+    overlaps,
+    schedule_period,
+    upsert_fixtures,
+)
 from app.services.match_detail import detail_fetch_due, ensure_records, store_fixture_records
+from app.services.reference import managed_seasons
 from app.services.team_search import search_teams
 from app.sync import fixtures as fixture_jobs
 from app.sync.fixtures import sync_fixtures
@@ -161,7 +168,21 @@ def test_fixtures_job_keeps_data_and_marks_failed_competition(session, monkeypat
     assert epl.fixtures_failed_at is not None
     after = session.execute(text("SELECT count(*) FROM fixtures WHERE competition_id = 39"))
     assert after.scalar() == count_before  # a failure never deletes stored matches
-    assert ctx.api_requests == 14
+    assert ctx.api_requests == len(period_rows(session))
+
+
+def period_rows(session):
+    """One schedule request per managed competition season that can play in the period."""
+    start, end = schedule_period(session).bounds()
+    return [
+        row for season in managed_seasons()
+        for row in session.scalars(
+            select(CompetitionSeason).where(
+                CompetitionSeason.season == season, CompetitionSeason.availability == "available"
+            )
+        )
+        if overlaps(row, start, end)
+    ]
 
 
 @pytest.fixture
@@ -274,23 +295,60 @@ def test_rejected_fixture_keeps_records_and_remains_retryable(
     assert detail_fetch_due(session.get(Fixture, bad_id), row, now + timedelta(minutes=11))
 
 
-def test_team_schedule_covers_the_same_three_weeks_as_date_view(session):
-    from app.services.fixtures import team_schedule, team_schedule_window
+def _at(day, hour=12, minute=0):  # 12:00 UTC = 21:00 KST the same calendar day
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=UTC)
+
+
+def _after_every_stored_match(session, days):
+    """A day far enough after every stored match that only test rows shape the period."""
+    last = session.scalar(select(func.max(Fixture.kickoff_date_kst))) or kst_today()
+    return max(last, kst_today()) + timedelta(days=days)
+
+
+def test_period_is_three_past_match_days_today_and_seventeen_ahead(session):
+    now = datetime.now(UTC)
+    today = _after_every_stored_match(session, 60)
+    yesterday = today - timedelta(days=1)
+    rows = [
+        # KST midnight: 14:59 UTC is still yesterday in Korea, 15:00 UTC is already today.
+        item(41, _at(yesterday, 14, 59), "FT"),
+        item(42, _at(yesterday, 15), "NS"),
+        item(43, _at(today - timedelta(days=2)), "FT"),
+        item(44, _at(today - timedelta(days=3)), "Canc"),  # a cancelled match is no match day
+        item(45, _at(today - timedelta(days=5)), "FT"),
+        item(46, _at(today - timedelta(days=9)), "FT"),  # fourth past match day: left out
+        item(47, _at(today - timedelta(days=2), 13), "FT"),  # same day twice counts once
+    ]
+    rows += [item(50 + n, _at(today + timedelta(days=n)), "NS") for n in range(1, 19)]
+    upsert_fixtures(session, rows, now)
+    session.flush()
+
+    period = schedule_period(session, today)
+    ahead = [today + timedelta(days=n) for n in range(1, 18)]  # the 18th day is left out
+    assert period.dates == (
+        today - timedelta(days=5), today - timedelta(days=2), yesterday, today, *ahead
+    )
+    assert period.bounds() == (today - timedelta(days=5), today + timedelta(days=17))
+
+    # A day without a match: no "today" entry, and the range still includes today.
+    later = today + timedelta(days=40)
+    empty = schedule_period(session, later)
+    assert later not in empty.dates and len(empty.dates) == 3
+    assert empty.end == today + timedelta(days=18) and empty.bounds()[1] == later
+
+
+def test_team_schedule_covers_the_common_period(session):
+    from app.services.fixtures import team_schedule
 
     now = datetime.now(UTC)
-    start, end = team_schedule_window()
-    assert (end - start).days == 20
-
-    def at(day, hour=12):  # 12:00 UTC = 21:00 KST the same calendar day
-        return datetime(day.year, day.month, day.day, hour, tzinfo=UTC)
-
+    start, end = schedule_period(session).bounds()
     upsert_fixtures(
         session,
         [
-            item(21, at(start - timedelta(days=1)), "FT", goals=(1, 0)),
-            item(22, at(start), "NS"),  # today−3: in
-            item(23, at(end), "NS", league=2),  # today+17: in
-            item(24, at(end + timedelta(days=1)), "NS"),
+            item(21, _at(start - timedelta(days=1)), "FT", goals=(1, 0)),
+            item(22, _at(start), "NS"),  # first day of the period: in
+            item(23, _at(end), "NS", league=2),  # last day: in
+            item(24, _at(end + timedelta(days=1)), "NS"),
         ],
         now,
     )
@@ -308,19 +366,25 @@ def test_availability_keeps_uncovered_dates_separate_from_stored_games(session):
     now = datetime.now(UTC)
     # A month after every stored match (any competition, any season): no real game is on
     # these days, whatever the collected schedule holds (the whole season is stored since 05).
-    last = session.scalar(select(func.max(Fixture.kickoff_date_kst))) or kst_today()
-    day = max(last, kst_today()) + timedelta(days=30)
+    day = _after_every_stored_match(session, 30)
     covered = day + timedelta(days=1)
     row = session.get(CompetitionSeason, (39, 2026))
     row.fixtures_window_start = row.fixtures_window_end = covered
     row.fixtures_synced_at = now
     row.fixtures_failed_at = None
+    # Outside the 30-minute job's window the whole-season load decides: its last run failed.
+    row.season_fixtures_failed_at = now
+    row.end_date = covered  # the season still plays then (dates after every stored match)
     kickoff = datetime(day.year, day.month, day.day, 12, tzinfo=UTC)
     upsert_fixtures(session, [item(31, kickoff, "NS")], now)
     session.flush()
-    first, second = fixture_availability(session, day, covered)
+    first, second = fixture_availability(session, [day, covered])
     assert 39 in first[1] and 39 in first[2]  # a stored game cannot prove full coverage
-    assert 39 not in second[1] and 39 not in second[2]  # confirmed empty
+    assert 39 not in second[1] and 39 not in second[2]  # the job confirmed it empty
+    # Once the season load succeeds again, the day outside the job window is confirmed too.
+    row.season_fixtures_synced_at = now + timedelta(seconds=1)
+    session.flush()
+    assert 39 not in fixture_availability(session, [day])[0][2]
 
 
 def test_news_cap_applies_before_badge_filter_and_cursor(session):
@@ -343,3 +407,138 @@ def test_news_cap_applies_before_badge_filter_and_cursor(session):
     assert total == second_total == len({a.id for a in first + second}) == 48
     assert cursor is None
     assert list_news(session, now, badge="EPL", size=24, cursor=None) == ([], None, 0)
+
+
+def test_current_season_state_trusts_the_season_load_for_unjobbed_competitions(session):
+    """A competition the 30-minute job never had to ask (no match in the period, e.g. a super
+    cup months away) is not "unconfirmed" while its season load is fine (2026-11-19)."""
+    from app.services.fixtures import sync_state
+
+    now = datetime.now(UTC)
+    row = session.get(CompetitionSeason, (547, 2026))
+    if row is None or row.availability != "available":
+        pytest.skip("Italian Super Cup 2026 not loaded")
+    row.fixtures_synced_at = row.fixtures_failed_at = None
+    row.season_fixtures_synced_at, row.season_fixtures_failed_at = now, None
+    session.flush()
+    assert 547 not in sync_state(session).failed_competition_ids
+    row.season_fixtures_failed_at = now + timedelta(seconds=1)  # season load failed
+    session.flush()
+    assert 547 in sync_state(session).failed_competition_ids
+    row.fixtures_synced_at, row.fixtures_failed_at = now, now + timedelta(seconds=2)
+    session.flush()
+    assert 547 in sync_state(session).failed_competition_ids  # a failed job run still counts
+
+
+def test_failed_refresh_after_a_success_is_not_never_collected(session):
+    """Both refreshes failing after earlier successes keeps the stored matches with the
+    failure meta instead of "never collected" (Codex N1, 2026-11-19)."""
+    from app.services.fixtures import sync_state
+
+    later = datetime.now(UTC) + timedelta(hours=1)
+    rows = list(session.scalars(
+        select(CompetitionSeason).where(CompetitionSeason.availability == "available")
+    ))
+    if not any(r.fixtures_synced_at or r.season_fixtures_synced_at for r in rows):
+        pytest.skip("nothing collected yet")
+    for row in rows:
+        row.fixtures_failed_at = row.season_fixtures_failed_at = later
+    session.flush()
+    start, end = schedule_period(session).bounds()
+    state = sync_state(session, window=(start, end))
+    assert not state.never_synced
+    assert state.failed_competition_ids
+
+
+def test_no_match_day_with_every_window_competition_failed_is_unavailable(session):
+    """A day without stored matches whose every competition failed is "not collected" (503),
+    even when a competition outside that day (e.g. a super cup months away) is fine
+    (Codex 2차 N8, 2026-11-19)."""
+    from app.api.errors import ApiError
+    from app.api.routes.schedule import read_fixtures
+    from app.services.fixtures import sync_state
+
+    start, end = schedule_period(session).bounds()
+    played = set(session.scalars(
+        select(Fixture.kickoff_date_kst).where(Fixture.kickoff_date_kst.between(start, end))
+    ))
+    empty = next(
+        (start + timedelta(days=n) for n in range((end - start).days + 1)
+         if start + timedelta(days=n) not in played),
+        None,
+    )
+    if empty is None:
+        pytest.skip("every calendar day of the period has a stored match")
+    rows = list(session.scalars(
+        select(CompetitionSeason).where(CompetitionSeason.availability == "available")
+    ))
+    if not any(r.fixtures_synced_at or r.season_fixtures_synced_at for r in rows):
+        pytest.skip("nothing collected yet")
+    later = datetime.now(UTC) + timedelta(hours=1)
+    state = sync_state(session, window=(empty, empty))
+    relevant = set(state.relevant_competition_ids)
+    assert relevant
+    for row in rows:
+        if row.competition_id in relevant:
+            row.fixtures_failed_at = row.season_fixtures_failed_at = later
+    session.flush()
+    state = sync_state(session, window=(empty, empty))
+    assert state.all_failed and not state.never_synced
+    with pytest.raises(ApiError) as caught:
+        read_fixtures(db=session, day=empty)
+    assert caught.value.status_code == 503
+
+    # One competition of that day confirmed again: an empty day with the failure meta.
+    back = next(
+        (r for r in rows if r.competition_id in relevant and r.season_fixtures_synced_at
+         and r.fixtures_synced_at),
+        None,
+    )
+    if back is None:
+        return
+    back.fixtures_failed_at = back.season_fixtures_failed_at = None
+    session.flush()
+    assert not sync_state(session, window=(empty, empty)).all_failed
+    response = read_fixtures(db=session, day=empty)
+    assert response.data == [] and response.meta.failed_competition_ids
+
+
+@pytest.mark.parametrize("collected", [True, False])
+def test_day_outside_every_season_is_empty_only_after_collection(session, collected):
+    """No relevant season is a normal empty day, except before anything was collected (N11)."""
+    from app.api.errors import ApiError
+    from app.api.routes.schedule import read_fixtures
+    from app.services.fixtures import sync_state
+
+    start, end = schedule_period(session).bounds()
+    played = set(session.scalars(
+        select(Fixture.kickoff_date_kst).where(Fixture.kickoff_date_kst.between(start, end))
+    ))
+    empty = next(
+        (start + timedelta(days=n) for n in range((end - start).days + 1)
+         if start + timedelta(days=n) not in played),
+        None,
+    )
+    if empty is None:
+        pytest.skip("every calendar day of the period has a stored match")
+
+    rows = list(session.scalars(select(CompetitionSeason)))
+    for row in rows:
+        row.start_date = start - timedelta(days=30)
+        row.end_date = empty - timedelta(days=1)
+        row.fixtures_synced_at = row.season_fixtures_synced_at = None
+        row.fixtures_failed_at = row.season_fixtures_failed_at = None
+    if collected:
+        session.get(CompetitionSeason, (39, 2026)).season_fixtures_synced_at = datetime.now(UTC)
+    session.flush()
+
+    state = sync_state(session, window=(empty, empty))
+    assert state.relevant_competition_ids == () and not state.all_failed
+    assert state.never_synced is not collected
+    if collected:
+        response = read_fixtures(db=session, day=empty)
+        assert response.data == [] and response.meta.failed_competition_ids == []
+    else:
+        with pytest.raises(ApiError) as caught:
+            read_fixtures(db=session, day=empty)
+        assert caught.value.status_code == 503

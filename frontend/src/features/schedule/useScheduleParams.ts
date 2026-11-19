@@ -2,12 +2,8 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useSyncExternalStore } from "react";
-import { addDaysIso, kstTodayIso, parseIsoDate } from "@/lib/format/kst";
+import { kstTodayIso } from "@/lib/format/kst";
 import type { DateAvailability } from "./DateBar";
-
-/** Three calendar weeks in KST, including three past dates. */
-export const SCHEDULE_BEFORE = 3;
-export const SCHEDULE_DAYS = 21;
 
 const DAY_MS = 86_400_000;
 const KST_OFFSET_MS = 9 * 3_600_000; // KST has no daylight saving time
@@ -42,12 +38,11 @@ function useKstToday(): string {
 }
 
 export interface ScheduleParams {
+  /** Today's KST date on this device (refetch key; the server's period decides the dates). */
   today: string;
-  dates: string[];
-  /** Selected KST date; defaults to today. */
-  date: string;
-  /** false when ?date= is outside the date bar (shown as a range notice, never replaced). */
-  dateInRange: boolean;
+  /** `?date=` as written, null for the default match day. A value outside the common period
+   *  (or not a date at all) is shown as a range notice, never silently replaced. */
+  date: string | null;
   /** Selected competition ids; empty = every competition. */
   competitions: number[];
   team: number | null;
@@ -56,6 +51,14 @@ export interface ScheduleParams {
 function ids(value: string | null): number[] {
   if (!value) return [];
   return [...new Set(value.split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+}
+
+/**
+ * Default match day of the date view (SCH-002, 2026-11-19): today when it has a match,
+ * otherwise the nearest later match day; null when the period has no today/future date.
+ */
+export function defaultMatchDate(dates: readonly string[], today: string): string | null {
+  return dates.find((date) => date >= today) ?? null;
 }
 
 /**
@@ -107,9 +110,10 @@ export function withoutTeam(query: string): string {
 /**
  * Main schedule filters live in the URL (guide §6.6: back/forward and sharing work):
  * `?date=2026-11-03&competitions=39,2&team=50&from=135`. With `team` the view is the team's
- * 21 days (SCH-006, 2026-11-10): `competitions` narrows that team view, while `date` and
- * `from` keep the date and competitions from just before the first team was picked, which
- * clearing the team restores (the date bar stays mounted, so its position returns too).
+ * matches in the common match-day period (SCH-006, 2026-11-19): `competitions` narrows that
+ * team view, while `date` and `from` keep the date and competitions from just before the first
+ * team was picked, which clearing the team restores (the date bar stays mounted, so its
+ * position returns too).
  */
 export function useScheduleParams() {
   const params = useSearchParams();
@@ -117,16 +121,11 @@ export function useScheduleParams() {
   const pathname = usePathname();
 
   const today = useKstToday();
-  const dates = Array.from({ length: SCHEDULE_DAYS }, (_, i) => addDaysIso(today, i - SCHEDULE_BEFORE));
-  const rawDate = params.get("date");
-  const date = rawDate && parseIsoDate(rawDate) ? rawDate : today;
   const team = Number(params.get("team"));
 
   const state: ScheduleParams = {
     today,
-    dates,
-    date,
-    dateInRange: dates.includes(date),
+    date: params.get("date") || null,
     competitions: ids(params.get("competitions")),
     team: Number.isInteger(team) && team > 0 ? team : null,
   };
@@ -163,7 +162,8 @@ export function useScheduleParams() {
     [params, pathname, router],
   );
 
-  /** Filter reset (SCH-006): today, every competition, no team. Other areas keep their state. */
+  /** Filter reset (SCH-006): default match day, every competition, no team. Other areas
+   *  (favourites, news, standings) keep their state. */
   const reset = useCallback(() => router.push(pathname, { scroll: false }), [pathname, router]);
 
   return { ...state, update, selectTeam, clearTeam, reset };

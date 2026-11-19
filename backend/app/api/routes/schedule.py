@@ -40,13 +40,12 @@ from app.schemas.schedule import (
 )
 from app.services.fixtures import (
     SyncState,
-    collection_window,
     fixture_availability,
     fixtures_on,
     next_for_teams,
+    schedule_period,
     sync_state,
     team_schedule,
-    team_schedule_window,
 )
 from app.services.news import InvalidCursor, collection_state, list_news
 from app.services.news_link import check_link
@@ -131,7 +130,7 @@ def read_fixtures(
     Competition/team filters are applied on screen to this list, so "no matches that day"
     and "no matches for the filter" stay distinguishable."""
     day = day or kst_today()
-    start, end = collection_window()
+    start, end = schedule_period(db).bounds()
     if not start <= day <= end:
         raise ApiError(
             422,
@@ -141,7 +140,7 @@ def read_fixtures(
         )
     state = sync_state(db, window=(day, day))
     matches, updated_at = fixtures_on(db, day)
-    if state.never_synced or (not matches and _all_failed(db, state.failed_competition_ids)):
+    if state.never_synced or (not matches and state.all_failed):
         raise ApiError(503, "UPSTREAM_UNAVAILABLE", NOT_COLLECTED)
     return FixturesResponse(
         data=matches,
@@ -149,28 +148,16 @@ def read_fixtures(
     )
 
 
-def _all_failed(db: Session, failed_ids: list[int]) -> bool:
-    available = db.scalar(
-        select(CompetitionSeason.competition_id)
-        .where(
-            CompetitionSeason.season == settings.current_season,
-            CompetitionSeason.availability == "available",
-            CompetitionSeason.competition_id.not_in(failed_ids),
-        )
-        .limit(1)
-    )
-    return available is None
-
-
 @router.get("/fixtures/availability")
 def read_fixture_availability(db: Db) -> FixtureAvailabilityResponse:
-    start, end = collection_window()
+    period = schedule_period(db)
     return FixtureAvailabilityResponse(data=FixtureAvailability(
-        start=start,
-        end=end,
+        today=period.today,
+        start=period.start,
+        end=period.end,
         dates=[
             FixtureDateAvailability(date=day, competition_ids=ids, unknown_competition_ids=unknown)
-            for day, ids, unknown in fixture_availability(db, start, end)
+            for day, ids, unknown in fixture_availability(db, period.dates)
         ],
     ))
 
@@ -207,10 +194,10 @@ def read_favorite_schedule(
 def read_team_schedule(
     db: Db, team: Annotated[int, Query(gt=0, description="Team id")]
 ) -> TeamScheduleResponse:
-    """Team view: the team's stored matches today-3 .. today+17 KST.
-    Competition filters are applied on screen; `failedCompetitionIds` tells which
-    competitions may be incomplete, so "no matches" is never claimed for them."""
-    start, end = team_schedule_window()
+    """Team view: the team's stored matches in the common match-day period (its first to last
+    date, SCH-006). Competition filters are applied on screen; `failedCompetitionIds` tells
+    which competitions may be incomplete, so "no matches" is never claimed for them."""
+    start, end = schedule_period(db).bounds()
     state = sync_state(db, window=(start, end))
     if state.never_synced:
         raise ApiError(503, "UPSTREAM_UNAVAILABLE", NOT_COLLECTED)
