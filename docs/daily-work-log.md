@@ -1,5 +1,21 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-19 (목) — 01 비회원 전체 검수 개선(헤더 높이·순환 띠·PC 패널 비모달·펼친 목록 행)
+
+브랜치 `feat/01-header-footer`(최신 `dev` a3cda8a 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.13 Fix·기능 명세서 v1.13 Fix(COM-003·TOP-003)·유저 플로우 v1.12 Fix, Figma `128:3700`·`128:4408`·`308:4617`. Codex 교차 검증 1차(보완 필요: 중요 1·경미 2) 보완 후 재검증 통과. 같은 날 앞서 사용자 요청으로 주요 뉴스 제목 옆 '매시간 수집 · 전체 최신 최대 48개' 문구를 삭제했다(`fix/main-news-caption` → `dev`).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 높이 | `frontend/src/components/layout/SiteHeader.tsx`(내비 위아래 여백 PC 11px·모바일 10px), `src/app/globals.css`(`--kt-header-height` 130px, 1024px 이상 118px), `HeaderHeight.tsx`(주석) | 헤더+띠 PC 68+1+48+1=118px, 모바일 64+1+64+1=130px. 로고 46/40px·버튼 44px 유지 |
+| 순환 띠 | `features/top5/Top5Strip.tsx`(`TICKER_SPEED` 28, `STRIP` 48/64px) | Figma `308:4617` 28px/s 선형 |
+| PC 패널 비모달 | `Top5Strip.tsx`(`inertOutside`·Tab 순환·`FOCUSABLE` 삭제, `aria-modal` 제거, 문서 click 캡처로 링크 이동·같은 페이지 메뉴 재선택 시 닫힘, Escape는 상위 모달이 없을 때만) | COM-003·TOP-003: 열린 채 헤더 로고·메뉴·인증 메뉴 사용. 닫기·Escape·딤만 띠로 포커스 복귀, 링크 이동은 이동한 페이지에 포커스 |
+| 펼친 목록 행 | `features/top5/Top5List.tsx`(PC 팀 영역 420px, `MatchTeams`·`MatchStatus` 사용, 모바일 높이 420px 미만 시트 본문 스크롤 `SHEET_BODY`·`SHEET_LIST`), `top5/model.ts`(`changeText` 사유 제거), `components/common/MatchCard.tsx`(`useMatchScore`·`MatchStatus`·`MatchTeams` 분리) | 양 팀 엠블럼, 공통 경기 카드와 같은 스코어(VS·—·PK·상태 확인 중)·상태 표시. 200% 확대(640×285)에서 목록이 10px로 납작해지던 문제 |
+| Codex 1차 보완 | N1 `MatchCard.tsx` 팀명 `overflow-wrap:anywhere`, N2 `top5/model.ts` `isPlainClick`(문서 캡처·목록 행 공통), N3 `lib/format/match.ts` `statusNotes`(+`MatchStatus`), `tests/top5.test.mjs` +2 | N1 320px '묀헨글라트바흐'가 카드 밖으로 넘침, N2 목록 행 Ctrl+클릭에도 패널이 닫힘, N3 중단 경기에서 제공사 사유가 사라짐 |
+
+- **실제 확인(3000·헤드리스 Edge):** 헤더 실측 1920·1280·1024 118px, 1023·768·375·320 130px, 가로 넘침 0. 본문 시작 32/24px, 앵커 제목 top 118px, 메인 우측 패널 top 130px·구간 끝 멈춤. PC 패널: 띠 Enter → 닫기 포커스 → Shift+Tab 헤더 메뉴 → Enter 이동(패널 닫힘, 포커스는 메뉴 링크), 같은 페이지 메뉴 재선택 닫힘, Escape·닫기·딤 → 띠 포커스, 목록 경기 → 경기 상세(포커스 H1), Ctrl+클릭 유지. 1280×570 목록만 내부 스크롤(301/392). 모바일 시트: 열기·닫기·포커스 제한·띠 복귀·경기 이동, 640×285 본문 스크롤. 순환 28px/s·호버/포커스 정지와 같은 위치 재개·모션 감소 정적·접근성 트리 대진 1회. 목록 행: 실제 경기 응답으로 예정·종료(연장)·경기 중단·취소·긴 팀명, 실제 경기의 상태만 바꿔 진행 중·연기·5개 미만, 띠 상태 지난주 유지·경기 없음·지연 — 겹침·잘림 0. 콘솔 오류 0. 푸터 변경 없음·잘림 없음.
+- **제한:** DB에 실제 '진행 중'·'연기' 경기가 없어 상태만 바꿔 확인. 320px 지난주 유지 상태는 기간 줄바꿈으로 헤더 150px(실측 동기화가 따라감). Figma `128:4408`의 모바일 하단 고정 의견 버튼은 사용자 결정(제거)대로 넣지 않음.
+- **검사:** 프런트 lint·`tsc --noEmit`·`npm test` 55·build·`git diff --check` 통과. 외부 API 호출 0회, DB는 경기 요약 조회만(읽기 전용).
+
 ## 2026-11-18 (수) — 08 팀 상세 수정 반영
 
 브랜치 `feat/08-team-detail`(최신 `dev` e72a3ee 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.12, 기능 명세서 v1.12(TEAM-002·004·005·006, NEWS-003), 유저 플로우 v1.11(UF-11·UF-15), Figma 52:1254·52:1866·472:18198·478:6886·469:6642·470:6667·471:6856. 사용자 결정: 이적료·원화 환산 제외(D-08-10), 선수 기록은 8개 대회만. Codex 교차 검증 2회(1차 차단 1·경미 5 → 보완 후 2차 통과).

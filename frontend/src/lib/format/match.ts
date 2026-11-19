@@ -72,3 +72,13 @@ export function statusWord(match: MatchSummary): string {
 export function awaitingStatus(match: MatchSummary, now: number): boolean {
   return match.status === "scheduled" && match.timeConfirmed && Date.parse(match.kickoffAt) <= now;
 }
+
+/**
+ * Notes under a status badge: the abandoned-score notice and the provider's reason, both kept
+ * when both apply (e.g. "중단 시점 스코어" + "기상 악화로 경기 중단").
+ */
+export function statusNotes(match: MatchSummary): string[] {
+  const notes = match.status === "abandoned" ? ["중단 시점 스코어"] : [];
+  if (match.statusReason) notes.push(match.statusReason);
+  return notes;
+}

@@ -1,15 +1,17 @@
 import Link from "next/link";
-import { MatchStatusBadge } from "@/components/common/MatchStatusBadge";
+import { MatchStatus, MatchTeams, useMatchScore } from "@/components/common/MatchCard";
 import { Badge } from "@/components/ui/Badge";
 import { DataState } from "@/components/ui/DataState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { cx } from "@/components/ui/cx";
 import type { TopMatchItem, TopMatches } from "@/lib/api/types";
-import { competitionName, scoreText, teamName } from "@/lib/format/match";
+import { competitionName } from "@/lib/format/match";
 import {
   LIST_FOOTNOTE,
   SHORT_LIST_NOTICE,
   TOP5_MAX,
   changeText,
+  isPlainClick,
   kickoffText,
   noticeCopy,
   noticeOf,
@@ -17,6 +19,15 @@ import {
 } from "./model";
 
 type Top5Layout = "desktop" | "mobile";
+
+/*
+ * Mobile sheet: only the list scrolls (Figma 128:4408). On a very short screen (under 420px,
+ * e.g. 200% zoom) a list squeezed between the heading and the footnote would shrink to a
+ * sliver, so there the list is not a scroll box and the sheet body scrolls as a whole.
+ */
+const SHEET_BODY = "shrink-0 [@media(min-height:420px)]:min-h-0 [@media(min-height:420px)]:shrink";
+const SHEET_LIST =
+  "[@media(min-height:420px)]:min-h-0 [@media(min-height:420px)]:overflow-y-auto [@media(min-height:420px)]:overscroll-contain";
 
 function Rank({ item }: { item: TopMatchItem }) {
   return (
@@ -28,12 +39,15 @@ function Rank({ item }: { item: TopMatchItem }) {
 }
 
 /**
- * One selected match (Figma TOP5 Row in 159:218 / 159:621). The whole row opens the match
- * detail. Desktop: rank · centred teams with competition and kickoff · reason · status.
- * Mobile: rank, competition, status / kickoff / teams / reason.
+ * One selected match (Figma TOP5 Row in 128:3700 / 128:4408). The whole row opens the match
+ * detail. Teams, crests, score (VS / — / PK), status badge and its note come from the common
+ * match card parts (`MatchTeams`, `MatchStatus`); rank, the selected kickoff, its change line
+ * and the reason are TOP 5's own. Desktop: rank · teams over competition and kickoff · reason ·
+ * status. Mobile: rank, competition, status / kickoff / teams / reason.
  */
 function Top5Row({ item, layout, onSelect }: { item: TopMatchItem; layout: Top5Layout; onSelect: () => void }) {
   const { match } = item;
+  const { awaiting } = useMatchScore(match);
   const change = changeText(item);
   const competition = <span className="text-fg-secondary">{competitionName(match.competition)}</span>;
   const kickoff = <span className="text-fg-muted">{kickoffText(item)}</span>;
@@ -49,16 +63,12 @@ function Top5Row({ item, layout, onSelect }: { item: TopMatchItem; layout: Top5L
       <li>
         <Link
           href={`/matches/${match.id}`}
-          onClick={onSelect}
+          onClick={(event) => isPlainClick(event) && onSelect()}
           className="flex items-center gap-5 rounded-control border border-line bg-surface px-4 py-[11px] hover:bg-subtle"
         >
           <Rank item={item} />
-          <span className="flex w-[328px] shrink-0 flex-col gap-1">
-            <span className="flex items-center gap-2 font-bold text-fg">
-              <span className="min-w-0 flex-1 truncate text-right text-body">{teamName(match.home)}</span>
-              <span className="w-12 shrink-0 text-center text-lead">{scoreText(match)}</span>
-              <span className="min-w-0 flex-1 truncate text-body">{teamName(match.away)}</span>
-            </span>
+          <span className="flex w-[420px] shrink-0 flex-col gap-1">
+            <MatchTeams match={match} />
             <span className="flex justify-center gap-3 whitespace-nowrap text-small">
               {competition}
               {kickoff}
@@ -66,7 +76,7 @@ function Top5Row({ item, layout, onSelect }: { item: TopMatchItem; layout: Top5L
           </span>
           <span className="min-w-0 flex-1">{reason}</span>
           <span className="flex w-[108px] shrink-0 justify-end">
-            <MatchStatusBadge match={match} size="small" />
+            <MatchStatus match={match} awaiting={awaiting} end />
           </span>
         </Link>
       </li>
@@ -77,21 +87,17 @@ function Top5Row({ item, layout, onSelect }: { item: TopMatchItem; layout: Top5L
     <li>
       <Link
         href={`/matches/${match.id}`}
-        onClick={onSelect}
+        onClick={(event) => isPlainClick(event) && onSelect()}
         className="flex flex-col gap-2 rounded-control border border-line bg-surface p-3 hover:bg-subtle"
       >
-        <span className="flex items-center gap-2 text-small">
+        <span className="flex items-start gap-2 text-small">
           <Rank item={item} />
-          <span className="min-w-0 flex-1 truncate">{competition}</span>
-          <MatchStatusBadge match={match} size="small" />
+          <span className="min-w-0 flex-1 truncate py-1">{competition}</span>
+          <MatchStatus match={match} awaiting={awaiting} end className="shrink-0" />
         </span>
         <span className="flex flex-col gap-1">
           <span className="text-small">{kickoff}</span>
-          <span className="flex items-center gap-2 font-bold text-fg">
-            <span className="min-w-0 flex-1 truncate text-body">{teamName(match.home)}</span>
-            <span className="w-12 shrink-0 text-center text-lead">{scoreText(match)}</span>
-            <span className="min-w-0 flex-1 truncate text-right text-body">{teamName(match.away)}</span>
-          </span>
+          <MatchTeams match={match} />
         </span>
         {reason}
       </Link>
@@ -144,8 +150,8 @@ export function Top5List({ data, isPending, error, onRetry, onSelect, layout }: 
   const notice = noticeOf(data);
   if (notice) return <NoticeBox notice={notice} data={data} />;
   return (
-    <div className="flex min-h-0 flex-col gap-3">
-      <ol className="flex min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain">
+    <div className={cx("flex flex-col gap-3", layout === "mobile" ? SHEET_BODY : "min-h-0")}>
+      <ol className={cx("flex flex-col gap-2", layout === "mobile" ? SHEET_LIST : "min-h-0 overflow-y-auto overscroll-contain")}>
         {data.items.map((item) => (
           <Top5Row key={item.match.id} item={item} layout={layout} onSelect={onSelect} />
         ))}

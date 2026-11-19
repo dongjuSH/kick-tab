@@ -32,8 +32,8 @@
   --kt-brand-arrow: #2563eb;
   --kt-brand-rim: #e2e8f0;
 
-  /* Sticky header + TOP 5 strip with dividers: 68+1+68+1 on mobile, 86+1+50+1 on desktop. */
-  --kt-header-height: 138px;
+  /* Sticky header + TOP 5 strip with dividers: 64+1+64+1 on mobile, 68+1+48+1 on desktop. */
+  --kt-header-height: 130px;
   --kt-gutter: 16px;
 }
 
@@ -43,9 +43,15 @@
   }
 }
 
+@media (min-width: 1024px) {
+  :root {
+    --kt-header-height: 118px;
+  }
+}
+
 /*
- * TOP 5 lineup (Figma 159:923): ranks 1-5 run as one line and repeat, so the loop continues
- * at any width (1920px included). 24px/s; pauses at its current place while the whole strip
+ * TOP 5 lineup (Figma 159:923, 308:4617): ranks 1-5 run as one line and repeat, so the loop
+ * continues at any width (1920px included). 28px/s; pauses at its current place while the whole strip
  * is hovered, focused or open. Reduced motion shows the first lap statically.
  */
 .kt-ticker-copy { display: none; }
