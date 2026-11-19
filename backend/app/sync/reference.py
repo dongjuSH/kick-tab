@@ -1,8 +1,8 @@
 """Reference sync (daily + manual): competitions, seasons, five-league teams, aliases.
 
-API requests per run: 14 (/leagues per competition) + 8 (/teams per league and UEFA
-competition) = 22. UEFA participants tell news classification which competition a club
-actually plays this season.
+API requests per run: 21 (/leagues per competition) + 8 (/teams per league and UEFA
+competition) = 29; `league=` limits a run to one competition's /leagues request. UEFA
+participants tell news classification which competition a club actually plays this season.
 A failed competition or league keeps its previous rows (CMP-004); the run is recorded as
 failed with the affected IDs only after the others are saved.
 """
@@ -98,12 +98,15 @@ def _save_season(
 
 @register_job(
     "reference",
-    description="Competitions, managed seasons, league/UEFA team lists and aliases (22 requests)",
+    description="Competitions, managed seasons, league/UEFA team lists and aliases (29 requests)",
     # 04:00 KST daily, before the morning schedule refresh.
     schedule={"trigger": "cron", "hour": 19, "minute": 0},
 )
 def sync_reference(ctx: JobContext) -> None:
     season = int(ctx.params.get("season", settings.current_season))
+    # `league=528,556` (manual): only those competitions' seasons, no team lists - e.g. to
+    # add newly supported competitions without repeating the 29 daily requests.
+    only = {int(x) for x in str(ctx.params.get("league", "")).split(",") if x.strip()}
     session = ctx.session
     upsert_competitions(session)
     session.commit()
@@ -111,6 +114,8 @@ def sync_reference(ctx: JobContext) -> None:
     client = ctx.api_football()
     failed: list[str] = []
     for seed in COMPETITIONS:
+        if only and seed.id not in only:
+            continue
         try:
             result = client.get("/leagues", {"id": seed.id})
         except FATAL:
@@ -130,7 +135,7 @@ def sync_reference(ctx: JobContext) -> None:
         session.commit()
 
     now = datetime.now(UTC)
-    for league_id in (*LEAGUE_IDS, *UEFA_IDS):
+    for league_id in () if only else (*LEAGUE_IDS, *UEFA_IDS):
         try:
             result = client.get("/teams", {"league": league_id, "season": season})
         except FATAL:

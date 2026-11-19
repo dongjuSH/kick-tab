@@ -40,7 +40,8 @@ interface DialogProps {
   /**
    * The content owns the scroll area (03 competition picker, Figma 308:4628): the dialog keeps
    * its height limit without scrolling as a whole, so fixed rows (count, buttons) stay put and
-   * only the child marked `min-h-0 flex-1 overflow-y-auto` scrolls.
+   * only the child marked `min-h-0 flex-1 overflow-y-auto` scrolls. Below 500px of screen
+   * height the dialog scrolls as a whole instead.
    */
   scrollArea?: boolean;
   /** Where focus starts on open: the dialog itself (default) or its close button. */
@@ -147,6 +148,9 @@ export function Dialog({
         // height even when its content fits, so its body scrolls inside instead.
         compact || scrollArea ? "overflow-clip" : "overflow-y-auto",
         scrollArea && "open:flex open:flex-col",
+        // A short screen (200% zoom, landscape phone) leaves no room for the fixed rows: the
+        // whole dialog scrolls instead so the list and the buttons stay reachable (Codex N6).
+        scrollArea && "[@media(max-height:500px)]:open:block [@media(max-height:500px)]:overflow-y-auto",
         "backdrop:bg-fg/12 lg:max-w-(--kt-dialog-width)",
         layout === "center" && "max-w-(--kt-dialog-width)",
         // Sheet height: 85% of the screen; the compact sheet stops at the bottom of the sticky

@@ -6,14 +6,16 @@ import { cx } from "@/components/ui/cx";
 import { parseIsoDate } from "@/lib/format/kst";
 
 export type DateAvailability = "ready" | "empty" | "partial" | "unknown" | "pending";
-const DATE_STATUS = { empty: "경기 없음", unknown: "확인 필요", partial: "일부 확인" };
+const DATE_STATUS = { unknown: "확인 필요", partial: "일부 확인" };
 // A narrow bar (320px: about 29px of text per date) shows these instead; the full words stay
 // in each date's accessible name.
-const DATE_STATUS_SHORT = { empty: "없음", unknown: "미확인", partial: "일부" };
+const DATE_STATUS_SHORT = { unknown: "미확인", partial: "일부" };
 
 /**
- * A horizontally scrolling row of 21 dates, opening at yesterday unless the selected
- * date needs to be brought into view. Arrows (every width) and touch both expose past dates.
+ * The common match-day row (SCH-002, Figma 234:8881 / 234:9750): only dates with a match,
+ * each with its weekday and month/day. It opens with the latest past match day first, so that
+ * day and the selected one (today or the next match day) are both in view. Arrows (every
+ * width) and touch scroll it.
  */
 export function DateBar({
   dates,
@@ -26,7 +28,7 @@ export function DateBar({
 }: {
   dates: readonly string[];
   today: string;
-  selected: string;
+  selected: string | null;
   onSelect: (date: string) => void;
   resetKey: number;
   availability: ReadonlyMap<string, DateAvailability>;
@@ -39,6 +41,8 @@ export function DateBar({
   const lastLeft = useRef(0);
   const wasHidden = useRef(false);
   const [edges, setEdges] = useState({ start: true, end: false });
+  const ready = dates.length > 0;
+  const shown = dates.join(",");
 
   const update = () => {
     const el = scroller.current;
@@ -50,45 +54,47 @@ export function DateBar({
 
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (!el) return;
+    if (!el || !ready) return;
     if (!visible) {
       wasHidden.current = true;
       return;
     }
     const key = `${today}:${resetKey}`;
     const target = el.querySelector<HTMLElement>('[aria-pressed="true"]');
-    if (initialized.current !== key) {
-      initialized.current = key;
-      el.scrollLeft = el.querySelector<HTMLElement>("[data-yesterday]")?.offsetLeft ?? 0;
-    } else if (wasHidden.current) {
-      el.scrollLeft = lastLeft.current;
-      wasHidden.current = false;
+    const observe = () => {
       update();
       const observer = new ResizeObserver(update);
       observer.observe(el);
       return () => observer.disconnect();
+    };
+    if (initialized.current !== key) {
+      initialized.current = key;
+      el.scrollLeft = el.querySelector<HTMLElement>("[data-last-past]")?.offsetLeft ?? 0;
+    } else if (wasHidden.current) {
+      el.scrollLeft = lastLeft.current;
+      wasHidden.current = false;
+      return observe();
     }
     wasHidden.current = false;
-    if (target && (target.offsetLeft < el.scrollLeft
-      || target.offsetLeft + target.offsetWidth > el.scrollLeft + el.clientWidth)) {
-      el.scrollLeft = target.offsetLeft;
+    if (target && target.offsetLeft < el.scrollLeft) el.scrollLeft = target.offsetLeft;
+    else if (target && target.offsetLeft + target.offsetWidth > el.scrollLeft + el.clientWidth) {
+      // Keep the past day in view when it fits: bring the selection in from the right edge.
+      el.scrollLeft = target.offsetLeft + target.offsetWidth - el.clientWidth;
     }
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [resetKey, selected, today, visible]);
+    return observe();
+  }, [ready, resetKey, selected, shown, today, visible]);
 
   const page = (direction: 1 | -1) => {
     const el = scroller.current;
     if (el) el.scrollBy({ left: direction * Math.max(64, el.clientWidth - 64),
       behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   };
+  const lastPast = dates.findLast((date) => date < today);
 
   return (
-    // Arrows at both ends on every width. Mobile (Figma 278:2575): 32px arrow slots (44px
-    // targets) and five 52px-high dates 3px apart filling the row (44px wide at 375px, narrower
-    // at 320px so five still fit); desktop (49:57) keeps 56×64.
+    // Arrows at both ends on every width. Mobile (Figma 234:9750): 32px arrow slots (44px
+    // targets) and five dates 3px apart filling the row (four when the row is 240px or less);
+    // desktop (234:8881): 60×52 dates 4px apart.
     <div className="flex items-center gap-1.5 lg:gap-2">
       <IconButton icon="chevron-left" label="이전 날짜 보기" className="-mx-1.5 shrink-0 disabled:opacity-40 lg:mx-0" disabled={edges.start} onClick={() => page(-1)} />
       <div
@@ -96,45 +102,43 @@ export function DateBar({
         onScroll={update}
         className="@container relative min-w-0 flex-1 snap-x overflow-x-auto [scrollbar-width:none]"
         role="group"
-        aria-label="날짜 선택 (지난 3일부터 향후 17일까지)"
+        aria-label="경기 날짜 선택"
       >
-        <div className="flex w-max gap-[3px] lg:gap-2">
-          {dates.map((date, index) => {
+        <div className="flex w-max gap-[3px] lg:gap-1">
+          {dates.map((date) => {
             const parts = parseIsoDate(date)!;
             const isSelected = date === selected;
+            const isToday = date === today;
             const state = availability.get(date);
-            const statusKey = state === "empty" || state === "unknown" || state === "partial" ? state : null;
+            const statusKey = state === "unknown" || state === "partial" ? state : null;
             const status = statusKey ? DATE_STATUS[statusKey] : "";
-            // The row opens at yesterday, which reads as its weekday like every other date.
-            const yesterday = dates[index + 1] === today;
-            const label = date === today ? "오늘" : parts.weekday;
             return (
               <button
                 key={date}
                 type="button"
                 aria-pressed={isSelected}
-                aria-label={`${parts.month}월 ${parts.day}일 ${parts.weekday}요일${date === today ? " 오늘" : ""}${status ? ` · ${status}` : ""}`}
-                data-yesterday={yesterday ? "" : undefined}
-                disabled={state === "empty"}
+                aria-label={`${parts.month}월 ${parts.day}일 ${parts.weekday}요일${isToday ? " 오늘" : ""}${status ? ` · ${status}` : ""}`}
+                data-last-past={date === lastPast ? "" : undefined}
                 onClick={() => onSelect(date)}
                 className={cx(
-                  "flex h-[52px] w-[calc((100cqw-12px)/5)] shrink-0 snap-start flex-col items-center overflow-hidden rounded-control px-0.5 pt-1 text-center lg:h-16 lg:w-14 lg:px-1 lg:pt-1.5",
-                  state === "empty" ? "cursor-not-allowed text-fg-muted" :
-                    isSelected ? "bg-action text-fg-inverse" : "text-fg hover:bg-subtle",
+                  "relative flex min-h-[52px] w-[calc((100cqw-12px)/5)] shrink-0 [@container_(max-width:240px)]:w-[calc((100cqw-9px)/4)] snap-start flex-col items-center justify-center overflow-hidden rounded-control border px-0.5 py-1 text-center lg:w-[60px]",
+                  isSelected ? "border-action bg-selected text-action" : "border-transparent text-fg hover:bg-subtle",
                 )}
               >
-                {/* Mobile: a status takes the weekday's slot so the date stays 52px high
-                    (Figma 352:10189) — except today, which keeps "오늘" (the status stays in
-                    its accessible name and the disabled grey); desktop shows it under the day. */}
-                <span className={cx("text-caption", status && date !== today && "hidden lg:inline")}>{label}</span>
-                {status && date !== today && (
-                  <span className="max-w-full whitespace-nowrap text-[9px] leading-[17px] lg:hidden">
+                <span className={cx("text-caption", !isSelected && "text-fg-muted")}>{parts.weekday}</span>
+                {/* A bar of 240px or less (375px and below) shows four dates so month/day fit;
+                    at 320px (about 42px each) the text steps down to 14px so "11/15" is never cut. */}
+                <span className="whitespace-nowrap text-[15px] font-medium leading-[22px] [@container_(max-width:190px)]:text-[14px]">
+                  {parts.month}/{parts.day}
+                </span>
+                {/* Today keeps its weekday (SCH-002): a dot marks it, the name says "오늘". */}
+                {isToday && <span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-action lg:top-1.5 lg:right-1.5" />}
+                {status && (
+                  <span className="max-w-full whitespace-nowrap text-[10px] leading-3 text-fg-muted">
                     <span className="[@container_(max-width:200px)]:hidden">{status}</span>
                     <span className="hidden [@container_(max-width:200px)]:inline">{statusKey && DATE_STATUS_SHORT[statusKey]}</span>
                   </span>
                 )}
-                <span className="text-lead font-bold">{parts.day}</span>
-                {status && <span className="hidden whitespace-nowrap text-[9px] leading-3 lg:inline">{status}</span>}
               </button>
             );
           })}

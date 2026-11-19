@@ -28,18 +28,133 @@ from app.services.reference import (
 
 logger = logging.getLogger(__name__)
 
-# Inclusive dates for the main schedule, team view and fixture collector.
-WINDOW_BEFORE_DAYS = 3
-WINDOW_AFTER_DAYS = 17
+# Main schedule period (SCH-002·003, 2026-11-19): match days, not calendar days - the last
+# three KST dates before today with a stored match, today when it has one, and the next 17.
+PAST_MATCH_DAYS = 3
+FUTURE_MATCH_DAYS = 17
 # Live sync runs when a match is live, starts within this lead time, or should have started
 # within the lag (kickoff passed but the provider has not switched it to live yet).
 LIVE_LEAD = timedelta(minutes=30)
 LIVE_LAG = timedelta(hours=3)
 
 
-def collection_window(today: date | None = None) -> tuple[date, date]:
+@dataclass(frozen=True)
+class SchedulePeriod:
+    """The common match-day set every main view shares (date bar, team view, filters)."""
+
+    today: date
+    dates: tuple[date, ...]
+
+    @property
+    def start(self) -> date | None:
+        return self.dates[0] if self.dates else None
+
+    @property
+    def end(self) -> date | None:
+        return self.dates[-1] if self.dates else None
+
+    def bounds(self) -> tuple[date, date]:
+        """Calendar range the period spans, always including today (collection, lookups)."""
+        return min(self.start or self.today, self.today), max(self.end or self.today, self.today)
+
+
+def schedule_period(session: Session, today: date | None = None) -> SchedulePeriod:
+    """Match days from the stored schedule of every active competition (any season): a day
+    counts once however many matches it has; cancelled matches do not make a match day.
+    Short announced schedules give fewer days - nothing is invented to fill the count."""
     today = today or kst_today()
-    return today - timedelta(days=WINDOW_BEFORE_DAYS), today + timedelta(days=WINDOW_AFTER_DAYS)
+    days = (
+        select(Fixture.kickoff_date_kst)
+        .join(Competition, Competition.id == Fixture.competition_id)
+        .where(Competition.active, Fixture.status != "cancelled")
+        .distinct()
+    )
+    past = session.scalars(
+        days.where(Fixture.kickoff_date_kst < today)
+        .order_by(Fixture.kickoff_date_kst.desc())
+        .limit(PAST_MATCH_DAYS)
+    ).all()
+    ahead = session.scalars(
+        days.where(Fixture.kickoff_date_kst >= today)
+        .order_by(Fixture.kickoff_date_kst)
+        .limit(FUTURE_MATCH_DAYS + 1)
+    ).all()
+    future = [day for day in ahead if day > today][:FUTURE_MATCH_DAYS]
+    return SchedulePeriod(
+        today, (*sorted(past), *((today,) if today in ahead else ()), *future)
+    )
+
+
+def _season_rows(session: Session) -> list[CompetitionSeason]:
+    """Every managed season row of the active competitions."""
+    return list(
+        session.scalars(
+            select(CompetitionSeason)
+            .join(Competition, Competition.id == CompetitionSeason.competition_id)
+            .where(
+                Competition.active,
+                CompetitionSeason.season.between(settings.first_season, settings.current_season),
+            )
+        )
+    )
+
+
+def overlaps(
+    row: CompetitionSeason, start: date, end: date, stored: set[tuple[int, int]] | None = None
+) -> bool:
+    """The season can have matches in [start, end]. Unknown dates count for the current season,
+    and for a past season whose stored matches fall in the range (`stored` = competition and
+    season pairs with a stored match there, from `stored_seasons`)."""
+    if row.start_date and row.end_date:
+        return row.start_date <= end and start <= row.end_date
+    if row.season == settings.current_season:
+        return True
+    return stored is not None and (row.competition_id, row.season) in stored
+
+
+def stored_seasons(session: Session, start: date, end: date) -> set[tuple[int, int]]:
+    """Competition seasons with a stored match on a KST date in [start, end]."""
+    return {
+        (cid, season)
+        for cid, season in session.execute(
+            select(Fixture.competition_id, Fixture.season)
+            .where(Fixture.kickoff_date_kst.between(start, end))
+            .distinct()
+        )
+    }
+
+
+def _job_ok(row: CompetitionSeason) -> bool:
+    return bool(
+        row.fixtures_synced_at
+        and (not row.fixtures_failed_at or row.fixtures_failed_at <= row.fixtures_synced_at)
+    )
+
+
+def _season_ok(row: CompetitionSeason) -> bool:
+    return bool(
+        row.season_fixtures_synced_at
+        and (
+            not row.season_fixtures_failed_at
+            or row.season_fixtures_failed_at <= row.season_fixtures_synced_at
+        )
+    )
+
+
+def covered(row: CompetitionSeason, start: date, end: date) -> bool:
+    """[start, end] of this competition season is confirmed. The part inside the 30-minute
+    schedule job's window needs that job's result (a failed run is not hidden by the daily
+    load); any part outside it needs the whole-season load, so a range crossing the window's
+    edge needs both. A season without provider data is confirmed."""
+    if row.availability == "no_data":
+        return True
+    ws, we = row.fixtures_window_start, row.fixtures_window_end
+    if ws and we and ws <= end and start <= we:
+        if not _job_ok(row):
+            return False
+        if ws <= start and end <= we:
+            return True
+    return _season_ok(row)
 
 
 def _parse_kickoff(item: dict[str, Any]) -> datetime | None:
@@ -256,6 +371,16 @@ class SyncState:
     # competition has confirmed: the "last normal check" shown while collection lags.
     checked_at: datetime | None = None
     checked_through: date | None = None
+    # With a window: the competitions that can play in it, the set "every one failed" is
+    # judged against (Codex 2차 N8: not the whole season's list).
+    relevant_competition_ids: tuple[int, ...] = ()
+
+    @property
+    def all_failed(self) -> bool:
+        """Every competition that can play in the window is unconfirmed."""
+        return bool(self.relevant_competition_ids) and set(self.relevant_competition_ids) <= set(
+            self.failed_competition_ids
+        )
 
     @property
     def delayed(self) -> bool:
@@ -270,24 +395,51 @@ SYNC_DELAY = timedelta(minutes=75)
 def sync_state(
     session: Session, season: int | None = None, *, window: tuple[date, date] | None = None
 ) -> SyncState:
+    """Without `window`: the current season's schedule job (TOP 5 freshness). With a window:
+    every managed competition season that can play in it (a period may cross seasons, e.g. a
+    super cup of the previous season), failed when its stored rows are not confirmed."""
+    if window is not None:
+        start, end = window
+        stored = stored_seasons(session, start, end)
+        seasons = _season_rows(session)
+        rows = [
+            row for row in seasons
+            if row.availability == "available" and overlaps(row, start, end, stored)
+        ]
+        jobbed = [row for row in rows if row.fixtures_synced_at is not None]
+        return SyncState(
+            failed_competition_ids=sorted(
+                {row.competition_id for row in rows if not covered(row, start, end)}
+            ),
+            # "Never collected" only before any success: a later failed refresh keeps the
+            # stored matches visible with the failure meta (CMP-004).
+            # A day outside every season is empty, not uncollected; only that empty
+            # relevant set falls back to the managed seasons' collection history.
+            never_synced=not any(
+                row.fixtures_synced_at or row.season_fixtures_synced_at
+                for row in (rows or seasons)
+            ),
+            checked_at=min((row.fixtures_synced_at for row in jobbed), default=None),
+            checked_through=min(
+                (row.fixtures_window_end for row in jobbed if row.fixtures_window_end),
+                default=None,
+            ),
+            relevant_competition_ids=tuple(sorted({row.competition_id for row in rows})),
+        )
     season = season or settings.current_season
-    rows = session.execute(
-        select(
-            CompetitionSeason.competition_id,
-            CompetitionSeason.fixtures_synced_at,
-            CompetitionSeason.fixtures_failed_at,
-            CompetitionSeason.fixtures_window_start,
-            CompetitionSeason.fixtures_window_end,
-        ).where(
+    rows = list(session.scalars(
+        select(CompetitionSeason).where(
             CompetitionSeason.season == season,
             CompetitionSeason.availability == "available",
         )
-    ).all()
+    ))
+    # A failed schedule run marks the competition; one the 30-minute job never had to ask
+    # (no match in the period, e.g. a super cup months away) relies on the season load.
     failed = [
-        cid
-        for cid, ok_at, failed_at, start, end in rows
-        if ok_at is None or (failed_at is not None and failed_at > ok_at)
-        or (window is not None and not (start and end and start <= window[0] <= window[1] <= end))
+        row.competition_id
+        for row in rows
+        if (row.fixtures_failed_at is not None and not _job_ok(row))
+        or (row.fixtures_synced_at is None and not _season_ok(row))
     ]
     synced = [row for row in rows if row.fixtures_synced_at is not None]
     return SyncState(
@@ -306,54 +458,34 @@ def fixtures_on(session: Session, day: date) -> tuple[list[MatchSummary], dateti
     return [s for _, s in rows], updated
 
 
-def team_schedule_window(today: date | None = None) -> tuple[date, date]:
-    return collection_window(today)
-
-
 def fixture_availability(
-    session: Session, start: date, end: date
+    session: Session, dates: Sequence[date]
 ) -> list[tuple[date, list[int], list[int]]]:
-    """For each date, stored matches and competitions without complete coverage."""
-    sources = session.execute(
-        select(Competition.id, CompetitionSeason)
-        .outerjoin(
-            CompetitionSeason,
-            (CompetitionSeason.competition_id == Competition.id)
-            & (CompetitionSeason.season == settings.current_season),
-        )
-        .where(Competition.active)
-    ).all()
+    """For each match day: competitions with a stored match, and competitions whose season can
+    play that day but is not confirmed (SCH-004: a filter never treats those as empty)."""
+    if not dates:
+        return []
+    rows = [row for row in _season_rows(session) if row.availability == "available"]
     observed: dict[date, set[int]] = {}
-    for day, cid in session.execute(
-        select(Fixture.kickoff_date_kst, Fixture.competition_id)
+    stored: dict[date, set[tuple[int, int]]] = {}
+    for day, cid, season in session.execute(
+        select(Fixture.kickoff_date_kst, Fixture.competition_id, Fixture.season)
         .join(Competition, Competition.id == Fixture.competition_id)
-        .where(Competition.active, Fixture.kickoff_date_kst.between(start, end))
+        .where(Competition.active, Fixture.kickoff_date_kst.in_(dates))
         .distinct()
     ):
         observed.setdefault(day, set()).add(cid)
-
-    def covered(source: CompetitionSeason | None, day: date) -> bool:
-        if source is None:
-            return False
-        if source.availability == "no_data":
-            return True  # the provider has no supported season for this competition
-        return bool(
-            source.fixtures_synced_at
-            and (not source.fixtures_failed_at
-                 or source.fixtures_failed_at <= source.fixtures_synced_at)
-            and source.fixtures_window_start
-            and source.fixtures_window_end
-            and source.fixtures_window_start <= day <= source.fixtures_window_end
-        )
-
-    days = (start + timedelta(days=i) for i in range((end - start).days + 1))
+        stored.setdefault(day, set()).add((cid, season))
     return [
         (
             day,
             sorted(observed.get(day, ())),
-            sorted(cid for cid, row in sources if not covered(row, day)),
+            sorted({
+                row.competition_id for row in rows
+                if overlaps(row, day, day, stored.get(day)) and not covered(row, day, day)
+            }),
         )
-        for day in days
+        for day in dates
     ]
 
 

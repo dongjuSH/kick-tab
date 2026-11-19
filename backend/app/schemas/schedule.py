@@ -9,8 +9,9 @@ from pydantic import Field
 from app.schemas.common import ApiModel
 from app.schemas.match import MatchSummary, TeamRef
 
-CompetitionGroup = Literal["EPL", "LaLiga", "SerieA", "Bundesliga", "Ligue1", "UEFA"]
-NewsBadge = CompetitionGroup
+CompetitionGroup = Literal["EPL", "LaLiga", "SerieA", "Bundesliga", "Ligue1", "UEFA", "FIFA"]
+# News is classified into the five leagues and UEFA only (P-08); FIFA has no news badge.
+NewsBadge = Literal["EPL", "LaLiga", "SerieA", "Bundesliga", "Ligue1", "UEFA"]
 
 
 class CompetitionSeasonInfo(ApiModel):
@@ -73,8 +74,13 @@ class FixtureDateAvailability(ApiModel):
 
 
 class FixtureAvailability(ApiModel):
-    start: date
-    end: date
+    """The common match-day period (SCH-002·003): only dates with a stored match, the last
+    three before today, today when it has a match, and the next 17. `start`/`end` are the
+    first and last of them (null when nothing is stored yet)."""
+
+    today: date
+    start: date | None
+    end: date | None
     dates: list[FixtureDateAvailability]
 
 
@@ -97,7 +103,7 @@ class FavoriteScheduleResponse(ApiModel):
 
 class TeamSchedule(ApiModel):
     team: TeamRef
-    # Inclusive KST dates: today-3 .. today+17.
+    # Inclusive KST dates: first and last day of the common match-day period.
     start: date
     end: date
     matches: list[MatchSummary]

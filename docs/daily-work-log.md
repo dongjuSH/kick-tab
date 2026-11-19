@@ -1,5 +1,21 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-19 (목) — 03 경기 일정 비회원 전체 검수 개선(대회 21개·공통 경기일 기간·팀 보기 복원)
+
+브랜치 `feat/03-schedule`(최신 `dev` 359f2e9 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.13 Fix·기능 명세서 v1.13 Fix(SCH·CMP·NEWS·FAV 비회원, COM-003 대회명)·유저 플로우 v1.12 Fix, Figma `49:57`·`49:570`·`234:8881`·`234:9750`·`193:12311`·`193:12949`·`187:1946`·`308:4617`. 사용자 결정: 대회명은 DB `name_ko` 기준('리그 1' 유지), 21일 달력 폐기, 팀 선택 시 전체 대회. Codex 교차 검증 3회(1차 수정 필요 6·문서 1 → 2차 수정 필요 2·문서 1(00이 보완, 1차 D·I 포함) → 3차 잔여 N11~N13을 Codex가 보완 후 통과).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 대회 21개 | `backend/migrations/versions/20261119_0017_competition_groups.py`(새, `FIFA` 그룹 허용 — downgrade는 FIFA 저장 경기가 있으면 중단), `seed/competitions.py`(528·556·547·529·526·531·15, `name_ko`), `models/reference.py`, `sync/reference.py`(21 + 8 = 29회) | 국가별 슈퍼컵 5개·UEFA 슈퍼컵·FIFA 클럽 월드컵 추가, 시즌별 노출(클럽 월드컵은 2025-26만) |
+| 수집·판정 | `services/fixtures.py`(`SchedulePeriod`·`schedule_period`, `overlaps(..., stored)`·`stored_seasons`, `covered`(30분 작업 창 안/밖 구분), `sync_state(window)` — `relevant_competition_ids`·`all_failed`·관련 대회가 없는 날은 관리 시즌 적재 이력으로 판정, `fixture_availability`), `sync/fixtures.py`, `api/routes/schedule.py`(`/fixtures/availability`, `/fixtures`의 503 조건, `/fixtures/team` 기간), `schemas/schedule.py` | 공통 경기일 기간(과거 3 + 오늘 + 미래 17 경기일), 갱신 실패·미수집·정상 0건 구분 |
+| 메인 일정 화면 | `frontend/src/features/schedule/ScheduleSection.tsx`(기간 공유 날짜 막대·좁히기 합집합·소멸 날짜 이동과 안내(`seenDates`, 목적지 변경 시 안내 갱신)·기간 갱신 실패 경고·팀 보기), `DateBar.tsx`, `queries.ts`(`fixtureAvailabilityQuery`, `teamScheduleQuery(teamId, period)`), `useScheduleParams.ts`, `lib/api/query-keys.ts`, 생성 타입 | 경기 없는 날짜 버튼 제거, 팀 진입은 전체 대회·해제 시 이전 날짜·대회·막대 위치 복원, 기간 변경 시 팀 일정 재조회 |
+| 공통 UI | `components/common/CompetitionFilter.tsx`(21개 그룹, 높이 500px 이하 대화상자 전체 스크롤), `components/ui/Dialog.tsx`(`scrollArea`), `components/common/NewsCard.tsx`·`lib/format/match.ts`(대회명 `name_ko` 통일, 시간 미정·VS), `lib/format/kst.ts`, `components/layout/StickyPanel.tsx`·`app/page.tsx`(1280px 두 열/미만 720px 단일 열) | Figma `308:4617`, COM-003 대회명 규칙 |
+| 테스트 | `backend/tests/test_schedule_rules.py`·`test_schedule_db.py`·`test_results_db.py`, `frontend/tests/match-regressions.test.mjs` | 기간·창 경계·전체 실패 범위·과거 시즌·소멸 날짜 뒤로 가기 회귀 |
+
+- **실제 확인:** 실제 수집(reference 7·fixtures_season 13·fixtures 14회, 새 대회 경기 81건). 브라우저 320·375·768·1023·1024·1279·1280·1920·200%·1280×570, 콘솔 오류 0. 모의 응답으로 기간 갱신 실패·소멸 날짜 자동 이동·뒤로/앞으로·대회별 목적지 변경 확인. `0017` downgrade 보호는 롤백 트랜잭션에서 확인(FIFA 경기 63건 → 중단).
+- **제한:** 실제 진행 경기·실제 자정 경과 미확인. 새로고침 뒤에는 빠진 날짜와 처음부터 잘못된 URL을 구분할 수 없음(범위 안내). 375px 이하 날짜 막대 4칸(Figma 5칸). 06 순위 칩·07/08 영문 대회명은 각 채팅 인수인계.
+- **검사:** ruff, 기본 pytest 316 통과/96 건너뜀, DB 포함 pytest 412, alembic check 변경 없음, lint·tsc·프런트 테스트 59·build·`git diff --check` 통과.
+
 ## 2026-11-19 (목) — 01 비회원 전체 검수 개선(헤더 높이·순환 띠·PC 패널 비모달·펼친 목록 행)
 
 브랜치 `feat/01-header-footer`(최신 `dev` a3cda8a 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.13 Fix·기능 명세서 v1.13 Fix(COM-003·TOP-003)·유저 플로우 v1.12 Fix, Figma `128:3700`·`128:4408`·`308:4617`. Codex 교차 검증 1차(보완 필요: 중요 1·경미 2) 보완 후 재검증 통과. 같은 날 앞서 사용자 요청으로 주요 뉴스 제목 옆 '매시간 수집 · 전체 최신 최대 48개' 문구를 삭제했다(`fix/main-news-caption` → `dev`).

@@ -85,12 +85,13 @@ export function favoriteScheduleQuery(teamIds: readonly number[]) {
 }
 
 /**
- * Team view: the team's stored matches from today−3 through today+17.
- * The server picks the window; `today` is in the key only so a new KST day fetches again.
+ * Team view: the team's stored matches in the common match-day period (first to last date).
+ * The server picks the window; `period` (today and the period's first/last date) is in the key
+ * only so a new KST day or a changed common period fetches again (Codex N5, 2026-11-19).
  */
-export function teamScheduleQuery(teamId: number, today: string) {
+export function teamScheduleQuery(teamId: number, period: string) {
   return queryOptions({
-    queryKey: queryKeys.fixtures.team(teamId, today),
+    queryKey: queryKeys.fixtures.team(teamId, period),
     queryFn: async ({ signal }): Promise<ScheduleData<TeamSchedule>> =>
       apiFetch<TeamSchedule, ScheduleMeta>("/fixtures/team", { query: { team: teamId }, signal }),
     refetchInterval: (query) => liveRefetchInterval(query.state.data?.data.matches ?? []),

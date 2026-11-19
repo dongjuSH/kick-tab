@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { CompetitionFilter } from "@/components/common/CompetitionFilter";
 import { MatchCard } from "@/components/common/MatchCard";
 import { TeamSearch } from "@/components/common/TeamSearch";
@@ -13,12 +13,12 @@ import { useFavorites } from "@/features/favorites/useFavorites";
 import { isApiError } from "@/lib/api/errors";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import type { MatchSummary, TeamRef } from "@/lib/api/types";
-import { addDaysIso, formatKstMonthDayTime, formatKstTime, formatShortDate, parseIsoDate } from "@/lib/format/kst";
+import { formatDateRange, formatKstMonthDayTime, formatKstTime, formatShortDate } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
 import { DateBar, type DateAvailability } from "./DateBar";
 import { competitionsQuery, favoriteScheduleQuery, fixtureAvailabilityQuery, fixturesByDateQuery, teamScheduleQuery } from "./queries";
 import { ScheduleNotice, failedNames } from "./ScheduleNotice";
-import { SCHEDULE_BEFORE, SCHEDULE_DAYS, nearestMatchDate, useScheduleParams } from "./useScheduleParams";
+import { defaultMatchDate, nearestMatchDate, useScheduleParams } from "./useScheduleParams";
 
 const PAGE_SIZE = 6;
 const STALE_LIVE_MS = 3 * 60_000;
@@ -43,12 +43,6 @@ export function SectionSkeleton() {
   );
 }
 
-/** "10/29" (no weekday) for compact ranges. */
-function monthDay(iso: string) {
-  const p = parseIsoDate(iso);
-  return p ? `${p.month}/${p.day}` : iso;
-}
-
 /** "21:35 갱신"; flagged when the stored data was already old when this screen fetched it. */
 function UpdatedAt({ value, checkedAt }: { value: string | null | undefined; checkedAt: number }) {
   if (!value) return null;
@@ -64,10 +58,11 @@ function UpdatedAt({ value, checkedAt }: { value: string | null | undefined; che
  * Main schedule (SCH-002~006, UF-07·UF-20, schedule UX policy 2026-11-02; Figma
  * `KickTab/Schedule Explorer` 225:2013 and `Schedule Feedback` 225:2374).
  *
- * - Date view: one KST date of every supported competition, picked on the date bar.
- * - Team view (search pick or favourite button): that team's matches today−3 .. today+17,
- *   grouped by date. The date in the URL is left untouched, so clearing the team returns to
- *   the previous date and date-bar position; the competition condition carries over.
+ * - Date view: one KST match day of every supported competition, picked on the date bar of
+ *   the common period (three past match days, today when it has a match, 17 ahead).
+ * - Team view (search pick or favourite button): that team's matches in the same period,
+ *   grouped by date, starting from every competition. The date in the URL is left untouched,
+ *   so clearing the team returns to the previous date, date-bar position and competitions.
  * Competition filters are applied here to the loaded list, so an empty day, an empty filter
  * result, a failed lookup and an incomplete (partly failed) lookup each read differently.
  */
@@ -84,9 +79,66 @@ export function ScheduleSection() {
   const teamMode = params.team !== null;
 
   const competitions = useQuery(competitionsQuery);
-  const availability = useQuery({ ...fixtureAvailabilityQuery(params.today), enabled: !teamMode });
-  const byDate = useQuery({ ...fixturesByDateQuery(params.date), enabled: !teamMode && params.dateInRange });
-  const byTeam = useQuery({ ...teamScheduleQuery(params.team ?? 0, params.today), enabled: teamMode });
+  // Also loaded in the team view: it holds the common period both views share.
+  const availability = useQuery(fixtureAvailabilityQuery(params.today));
+  const period = availability.data;
+  const today = period?.today ?? params.today;
+  const periodDates = period?.dates.map((item) => item.date) ?? [];
+  const coveredDates = new Map(period?.dates.map((item) => [item.date, item]));
+  const dateState = (day: string, ids: readonly number[]): DateAvailability => {
+    const row = coveredDates.get(day);
+    if (!row || availability.isError) return availability.isPending ? "pending" : "unknown";
+    const any = (values: readonly number[]) => values.some((id) => !ids.length || ids.includes(id));
+    const exists = any(row.competitionIds);
+    return any(row.unknownCompetitionIds) ? (exists ? "partial" : "unknown") : exists ? "ready" : "empty";
+  };
+  const dates = new Map(periodDates.map((day) => [day, dateState(day, params.competitions)]));
+  // Narrowing keeps the same period: only its dates where a chosen competition plays (or is
+  // not confirmed yet) stay; nothing is added from beyond the period (2026-11-19).
+  const barDates = periodDates.filter((day) => dates.get(day) !== "empty");
+  // No date in the URL: today or the next match day of the current condition.
+  const defaultDate = defaultMatchDate(barDates, today);
+  const date = params.date ?? defaultDate;
+  // A date outside the period is answered by the range notice, never sent to the server.
+  const urlDateValid = params.date !== null && periodDates.includes(params.date);
+  const dateInRange = params.date === null || !period || urlDateValid;
+  // A day that was on the bar and then left the period (its matches moved or were cancelled)
+  // is not a wrong URL: the next match day of the current condition is picked and announced
+  // (Codex N4, 2026-11-19). A date never valid here still gets the range notice. Every date
+  // seen valid on this screen is kept, so going back to one after an automatic move is also
+  // treated as gone, not as a wrong URL (Codex 2차 N9).
+  const [seenDates, setSeenDates] = useState<ReadonlySet<string>>(() => new Set());
+  const [moved, setMoved] = useState<{ from: string; to: string | null } | null>(null);
+  if (urlDateValid && params.date !== null && !seenDates.has(params.date)) {
+    setSeenDates(new Set(seenDates).add(params.date));
+  }
+  const goneDate = !teamMode && period !== undefined && !dateInRange
+    && params.date !== null && seenDates.has(params.date)
+    ? params.date : null;
+  const goneTarget = goneDate ? (barDates.find((day) => day > goneDate) ?? defaultDate) : null;
+  if (goneDate && (moved?.from !== goneDate || moved.to !== goneTarget)) {
+    setMoved({ from: goneDate, to: goneTarget });
+  }
+  // The notice lasts until another date is shown.
+  if (moved && !goneDate && params.date !== moved.from && date !== moved.to) setMoved(null);
+  const { update } = params;
+  const unfiltered = params.competitions.length === 0;
+  useEffect(() => {
+    if (!goneDate) return;
+    update({ date: goneTarget === null || (unfiltered && goneTarget === defaultDate) ? null : goneTarget });
+  }, [goneDate, goneTarget, defaultDate, unfiltered, update]);
+  const byDate = useQuery({
+    ...fixturesByDateQuery(date ?? ""),
+    enabled: !teamMode && period !== undefined && date !== null && dateInRange,
+  });
+  // The team view uses the same common period: a changed period fetches it again (Codex N5).
+  const periodKey = `${today}|${period?.start ?? ""}|${period?.end ?? ""}`;
+  const byTeam = useQuery({
+    ...teamScheduleQuery(params.team ?? 0, periodKey),
+    enabled: teamMode && !availability.isPending,
+  });
+  // The period could not be refreshed but an older one is shown (Codex N3).
+  const periodStale = availability.isError && period !== undefined;
   const favoriteIds = favorites.status === "ready" ? favorites.ids : [];
   const favoriteTeams = useQuery(favoriteScheduleQuery(favoriteIds)).data?.data.teams ?? [];
 
@@ -102,20 +154,15 @@ export function ScheduleSection() {
   const filtered = all.filter(
     (m) => params.competitions.length === 0 || params.competitions.includes(m.competition.id),
   );
-  const coveredDates = new Map(availability.data?.dates.map((item) => [item.date, item]));
-  const dateState = (date: string, ids: readonly number[]): DateAvailability => {
-    const row = coveredDates.get(date);
-    if (!row || availability.isError) return availability.isPending ? "pending" : "unknown";
-    const any = (values: readonly number[]) => values.some((id) => !ids.length || ids.includes(id));
-    const exists = any(row.competitionIds);
-    return any(row.unknownCompetitionIds) ? (exists ? "partial" : "unknown") : exists ? "ready" : "empty";
-  };
-  const dates = new Map(params.dates.map((date) => [date, dateState(date, params.competitions)]));
+  const upcoming = barDates.some((day) => day >= today);
+  // No today/future match day for the condition (SCH-004): "예정 일정 없음", past days stay.
+  const noUpcoming = !teamMode && period !== undefined && !upcoming
+    && (date === null || !barDates.includes(date));
   const selectCompetitions = (ids: number[]) => {
     const change: { competitions: number[]; date?: string | null } = { competitions: ids };
-    if (!teamMode) {
-      const date = nearestMatchDate(params.dates, params.today, params.date, (day) => dateState(day, ids));
-      if (date) change.date = date === params.today ? null : date;
+    if (!teamMode && date) {
+      const next = nearestMatchDate(periodDates, today, date, (day) => dateState(day, ids));
+      if (next) change.date = next;
     }
     params.update(change);
   };
@@ -128,7 +175,7 @@ export function ScheduleSection() {
 
   // "경기 더 보기" starts over whenever the list changes or the filters are reset, even when
   // the reset leaves the URL as it was (already today and every competition).
-  const listKey = `${params.today}|${params.team ?? params.date}|${params.competitions.join(",")}|${resetKey}`;
+  const listKey = `${today}|${params.team ?? date}|${params.competitions.join(",")}|${resetKey}`;
   const [shown, setShown] = useState({ key: listKey, all: false });
   if (shown.key !== listKey) setShown({ key: listKey, all: false });
   const expanded = shown.key === listKey && shown.all;
@@ -136,7 +183,7 @@ export function ScheduleSection() {
   const visible = filtered.slice(0, visibleCount);
   const failed = failedNames(query.data?.meta.failedCompetitionIds ?? [], competitions.data, params.competitions);
 
-  if (pendingReset && params.date === params.today && params.team === null && params.competitions.length === 0) {
+  if (pendingReset && params.date === null && params.team === null && params.competitions.length === 0) {
     setPendingReset(false);
     setResetKey((k) => k + 1);
   }
@@ -151,8 +198,9 @@ export function ScheduleSection() {
     else params.clearTeam();
   };
 
-  const rangeStart = byTeam.data?.data.start ?? addDaysIso(params.today, -SCHEDULE_BEFORE);
-  const rangeEnd = byTeam.data?.data.end ?? addDaysIso(params.today, SCHEDULE_DAYS - SCHEDULE_BEFORE - 1);
+  const rangeStart = (teamMode ? byTeam.data?.data.start : null) ?? period?.start ?? null;
+  const rangeEnd = (teamMode ? byTeam.data?.data.end : null) ?? period?.end ?? null;
+  const range = rangeStart && rangeEnd ? formatDateRange(rangeStart, rangeEnd) : null;
   const retry = (
     <Button variant="ghost" onClick={() => query.refetch()}>
       다시 시도
@@ -170,12 +218,78 @@ export function ScheduleSection() {
     />
   ) : null;
 
+  const periodRetry = (
+    <Button variant="ghost" onClick={() => availability.refetch()}>
+      다시 시도
+    </Button>
+  );
+  const notices: ReactNode[] = [];
+  if (!teamMode && periodStale && !noUpcoming) {
+    notices.push(
+      <ScheduleNotice
+        key="period"
+        tone="warning"
+        title="조회 기간을 갱신하지 못했습니다"
+        description="마지막으로 확인한 경기일을 보여줍니다. 새로 잡히거나 바뀐 경기일은 반영되지 않았을 수 있습니다."
+        action={periodRetry}
+      />,
+    );
+  }
+  if (!teamMode && moved && !goneDate && date === moved.to) {
+    notices.push(
+      <ScheduleNotice
+        key="moved"
+        title="선택한 경기일이 조회 기간에서 빠졌습니다"
+        description={date
+          ? `${formatShortDate(moved.from)} 경기가 취소되거나 다른 날로 옮겨져 ${formatShortDate(date)} 경기로 이동했습니다.`
+          : `${formatShortDate(moved.from)} 경기가 취소되거나 다른 날로 옮겨졌습니다.`}
+      />,
+    );
+  }
+
   let body: ReactNode;
-  if (!teamMode && !params.dateInRange) {
+  if (goneDate) {
+    body = <ListSkeleton />;
+  } else if (!teamMode && !dateInRange) {
     body = (
       <ScheduleNotice
         title="조회할 수 없는 날짜입니다"
-        description="메인 일정은 지난 3일부터 향후 17일까지 제공합니다. 더 이전 결과는 지난 경기에서 확인해 주세요."
+        description={`메인 일정은 ${range ?? "표시된 조회 기간"}의 경기일만 제공합니다. 더 이전 결과는 지난 경기에서 확인해 주세요.`}
+        action={
+          <Button fullWidth onClick={() => params.update({ date: null })}>
+            기본 경기일 보기
+          </Button>
+        }
+      />
+    );
+  } else if (!teamMode && !period && availability.isError) {
+    // The date list is fetched only once the period is known, so a written date waits too.
+    body = (
+      <ScheduleNotice
+        tone="error"
+        title="경기 일정을 확인하지 못했습니다"
+        description="조회 기간을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+        action={periodRetry}
+      />
+    );
+  } else if (noUpcoming && periodStale) {
+    // An old period without future days must not turn a failed refresh into "no schedule".
+    body = (
+      <ScheduleNotice
+        tone="error"
+        title="최신 경기 일정을 확인하지 못했습니다"
+        description="조회 기간을 갱신하지 못했습니다. 마지막으로 확인한 지난 경기일만 표시하며, 오늘 이후 일정이 있을 수 있습니다."
+        action={periodRetry}
+      />
+    );
+  } else if (noUpcoming) {
+    const who = params.competitions.length ? "선택한 대회는 조회 기간에" : "조회 기간에";
+    body = (
+      <ScheduleNotice
+        title="예정 일정 없음"
+        description={barDates.length
+          ? `${who} 오늘 이후 경기가 없습니다. 날짜 막대에서 지난 경기일을 선택해 볼 수 있습니다.`
+          : `${who} 등록된 경기가 없습니다. 다른 대회를 선택하거나 지난 경기에서 확인해 주세요.`}
       />
     );
   } else if (query.isPending) {
@@ -183,7 +297,7 @@ export function ScheduleSection() {
       <ScheduleNotice
         busy
         title="팀 경기 일정을 불러오고 있습니다"
-        description="선택한 팀·대회와 21일 조회 범위를 유지합니다."
+        description="선택한 팀·대회와 표시된 조회 기간을 유지합니다."
       />
     ) : (
       <ListSkeleton />
@@ -220,13 +334,13 @@ export function ScheduleSection() {
     body = (
       <ScheduleNotice
         title="조회 기간에 등록된 경기 일정이 없습니다"
-        description={`${selectedTeam ? teamName(selectedTeam) : "선택한 팀"} · ${monthDay(rangeStart)}–${monthDay(rangeEnd)} · 지원 14개 대회 기준`}
+        description={`${selectedTeam ? teamName(selectedTeam) : "선택한 팀"}${range ? ` · ${range}` : ""} · 지원 대회 기준`}
       />
     );
   } else if (filtered.length === 0) {
     body = (
       <ScheduleNotice
-        title={`${formatShortDate(params.date)} 경기가 없습니다`}
+        title={`${date ? formatShortDate(date) : "선택한 날짜"} 경기가 없습니다`}
         description={
           params.competitions.length
             ? "선택한 날짜에 대회 조건의 등록 일정이 없습니다."
@@ -283,30 +397,36 @@ export function ScheduleSection() {
         </Button>
       </div>
 
-      {teamMode && (
+      {/* Figma 193:12311: the team's name over the shared period; the date view shows the
+          period alone above the bar (234:8881). */}
+      {teamMode ? (
         <div className="flex items-end gap-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <p className="text-subtitle font-bold">
-              {selectedTeam ? `${teamName(selectedTeam)} 경기 일정 · 21일 모아 보기` : "팀 경기 일정 · 21일 모아 보기"}
+              {selectedTeam ? `${teamName(selectedTeam)} 경기 일정` : "팀 경기 일정"}
             </p>
-            <p className="text-small text-fg-secondary">
-              {formatShortDate(rangeStart)}–{formatShortDate(rangeEnd)} · 지난 3일부터 향후 17일까지
-            </p>
+            {range && <p className="text-caption text-fg-muted">{range}</p>}
           </div>
           {live && <UpdatedAt value={byTeam.data?.meta.updatedAt} checkedAt={byTeam.dataUpdatedAt} />}
         </div>
+      ) : (
+        range && <p className="text-caption text-fg-muted">{range}</p>
       )}
 
       {/* Kept mounted in the team view so its scroll position returns with the date view. */}
-      <div hidden={teamMode}>
+      <div hidden={teamMode || (period !== undefined && barDates.length === 0)}>
         <DateBar
-          dates={params.dates}
-          today={params.today}
-          selected={params.date}
-          onSelect={(date) => params.update({ date: date === params.today ? null : date })}
+          dates={barDates}
+          today={today}
+          selected={date}
+          // Only the unfiltered default is left out of the URL: a day picked while narrowed
+          // stays when the competitions are cleared.
+          onSelect={(day) => params.update({
+            date: params.competitions.length === 0 && day === defaultDate ? null : day,
+          })}
           resetKey={resetKey}
           availability={dates}
-          visible={!teamMode}
+          visible={!teamMode && barDates.length > 0}
         />
       </div>
 
@@ -334,15 +454,15 @@ export function ScheduleSection() {
         <div className="flex flex-col gap-1.5">
         {/* Remounted by a reset: also clears a typed term that never selected a team. */}
         <TeamSearch key={resetKey} selected={selectedTeam} onSelect={selectTeam}
-          description="선택한 팀의 지난 3일~향후 17일 경기를 모아 봅니다."
+          description="팀을 선택하면 표시된 조회 기간의 경기를 모아봅니다. 대회별로 좁혀볼 수 있습니다."
         />
         <FavoriteTeamButtons teams={favoriteTeams} activeId={params.team} onSelect={selectTeam} label="관심 팀 일정" />
         </div>
       </div>
 
-      {!teamMode && (
+      {!teamMode && !noUpcoming && dateInRange && (
         <div className="flex items-center gap-2">
-          <h3 className="flex-1 text-body font-bold">{formatShortDate(params.date)} 경기</h3>
+          <h3 className="flex-1 text-body font-bold">{date ? `${formatShortDate(date)} 경기` : "경기"}</h3>
           {live && <UpdatedAt value={byDate.data?.meta.updatedAt} checkedAt={byDate.dataUpdatedAt} />}
         </div>
       )}
@@ -350,6 +470,7 @@ export function ScheduleSection() {
 
       <div className="flex flex-col gap-3">
         {delayed}
+        {notices}
         {body}
       </div>
     </section>

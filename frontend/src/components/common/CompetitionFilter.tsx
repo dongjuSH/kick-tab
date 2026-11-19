@@ -16,14 +16,36 @@ const GROUP_TITLES: Record<CompetitionGroup, string> = {
   Bundesliga: "독일",
   Ligue1: "프랑스",
   UEFA: "UEFA",
+  FIFA: "FIFA",
 };
 const GROUPS = Object.keys(GROUP_TITLES) as CompetitionGroup[];
 
+/** The viewed season of a competition: the given one (past results) or the current one. */
+function seasonInfo(competition: CompetitionItem, season?: number) {
+  return season === undefined
+    ? competition.currentSeason
+    : competition.seasons.find((s) => s.season === season) ?? null;
+}
+
+/**
+ * Picker name (CMP-001, 2026-11-19): the competition's name, with the tournament year for the
+ * club world cup, which is held only in some seasons ("FIFA 클럽 월드컵 2025").
+ */
+function pickerName(competition: CompetitionItem, season?: number) {
+  const name = competitionName(competition);
+  const held = seasonInfo(competition, season);
+  return competition.group === "FIFA" && held ? `${name} ${held.season}` : name;
+}
+
 /** "전체 대회", "FA컵", "FA컵 외 1개" (first selected in list order + the rest). */
-function competitionSummary(competitions: readonly CompetitionItem[], selected: readonly number[]) {
+function competitionSummary(
+  competitions: readonly CompetitionItem[],
+  selected: readonly number[],
+  season?: number,
+) {
   const chosen = competitions.filter((c) => selected.includes(c.id));
   if (chosen.length === 0) return "전체 대회";
-  const first = competitionName(chosen[0]);
+  const first = pickerName(chosen[0], season);
   return chosen.length === 1 ? first : `${first} 외 ${chosen.length - 1}개`;
 }
 
@@ -53,7 +75,16 @@ export function CompetitionFilter({
     onChange(ids);
     setOpen(false);
   };
-  const summary = competitionSummary(competitions, selected);
+  const summary = competitionSummary(competitions, selected, season);
+  // A competition the viewed season does not know is left out, and so is the club world
+  // cup outside its tournament season (2026-11-19: shown for 2025-26 only). Other "no data"
+  // seasons stay listed with that note (CMP-004). A selection the URL still carries stays
+  // listed so it can be cleared.
+  const offered = competitions.filter((c) => {
+    if (selected.includes(c.id)) return true;
+    const info = seasonInfo(c, season);
+    return info !== null && (c.group !== "FIFA" || info.availability === "available");
+  });
 
   return (
     <>
@@ -84,11 +115,12 @@ export function CompetitionFilter({
           </p>
           <Button fullWidth onClick={() => apply([])}>전체 대회 보기</Button>
 
-          {/* Only the check list scrolls; the count and the buttons below stay in view. */}
-          <div className="min-h-0 max-h-[340px] flex-1 overflow-y-auto overscroll-contain px-1">
+          {/* Only the check list scrolls; the count and the buttons below stay in view. On a
+              short screen the whole dialog scrolls instead (Dialog scrollArea, Codex N6). */}
+          <div className="min-h-0 max-h-[340px] flex-1 overflow-y-auto overscroll-contain px-1 [@media(max-height:500px)]:max-h-none [@media(max-height:500px)]:overflow-visible">
             <div className="gap-6 lg:columns-2">
               {GROUPS.map((group) => {
-              const items = competitions.filter((c) => c.group === group);
+              const items = offered.filter((c) => c.group === group);
               if (!items.length) return null;
               return (
                 <fieldset key={group} className="mb-3 break-inside-avoid">
@@ -168,7 +200,7 @@ function DraftOption({
         onChange={(event) => onToggle(event.target.checked)}
       />
       <span className="min-w-0 flex-1">
-        {competitionName(competition)}
+        {pickerName(competition, season)}
         {noTeamMatch ? <span className="block text-small text-fg-muted">기간 내 팀 경기 없음</span>
           : <NoData competition={competition} season={season} />}
       </span>
@@ -178,8 +210,7 @@ function DraftOption({
 
 /** The provider has no data for the season (CMP-004, V-16): "no data", never "no matches". */
 function NoData({ competition, season }: { competition: CompetitionItem; season?: number }) {
-  const info =
-    season === undefined ? competition.currentSeason : competition.seasons.find((s) => s.season === season);
+  const info = seasonInfo(competition, season);
   if (!info || info.availability !== "no_data") return null;
   return (
     <span className="text-small text-fg-muted">

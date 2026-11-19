@@ -23,7 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-COMPETITION_GROUPS = ("EPL", "LaLiga", "SerieA", "Bundesliga", "Ligue1", "UEFA")
+COMPETITION_GROUPS = ("EPL", "LaLiga", "SerieA", "Bundesliga", "Ligue1", "UEFA", "FIFA")
 COMPETITION_TYPES = ("league", "cup", "uefa")
 SEASON_AVAILABILITY = ("available", "no_data")
 
