@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useRef } from "react";
-import { PlayerPhoto } from "@/components/common/TeamCrest";
+import { PlayerPhoto, TeamCrest } from "@/components/common/TeamCrest";
 import { Button } from "@/components/ui/Button";
 import { DataState, StateMessage } from "@/components/ui/DataState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -16,6 +16,7 @@ import type {
   PlayerRating,
   StatRow,
   TeamLineup,
+  TeamRef,
 } from "@/lib/api/types";
 import { MISSING, formatKstTime } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
@@ -51,6 +52,11 @@ interface Names {
   away: string;
 }
 
+interface Teams {
+  home: TeamRef;
+  away: TeamRef;
+}
+
 function BlockMessage({ tab, status, onRetry }: { tab: RecordTab; status: BlockStatus; onRetry: () => void }) {
   if (status === "unavailable") {
     return (
@@ -77,21 +83,87 @@ function BlockMessage({ tab, status, onRetry }: { tab: RecordTab; status: BlockS
   );
 }
 
-function Timeline({ events, names }: { events: MatchEvent[]; names: Names }) {
-  if (events.length === 0) return <StateMessage title="아직 기록된 이벤트가 없습니다" />;
-  // Latest first, each record with its icon and text (MAT-002, Figma 52:151).
+// Home column | time on the centre line | away column (MAT-002, Figma 52:151 / 52:404).
+const TIMELINE_GRID = "grid grid-cols-[minmax(0,1fr)_3.25rem_minmax(0,1fr)] items-start gap-x-2 lg:gap-x-3";
+
+function TimelineTeam({ team, align }: { team: TeamRef; align: "end" | "start" }) {
+  const name = teamName(team);
   return (
-    <ol>
-      {[...events].reverse().map((event, index) => (
-        <li key={index} className="flex items-center gap-3 border-b border-line py-3 first:pt-0 lg:gap-4">
-          <span className="w-13 shrink-0 text-center text-label font-bold text-action">{minuteText(event)}</span>
-          <span className="grid size-4 shrink-0 place-items-center">
-            <EventIcon kind={eventKind(event)} />
-          </span>
-          <span className="min-w-0 text-body text-fg">{eventText(event, names)}</span>
-        </li>
-      ))}
-    </ol>
+    <span
+      className={cx(
+        "flex min-w-0 items-center gap-1.5 text-small font-bold text-fg",
+        align === "end" ? "flex-row-reverse text-right" : "text-left",
+      )}
+    >
+      <TeamCrest src={team.crestUrl} name={name} size={20} />
+      <span className="min-w-0 break-keep [overflow-wrap:anywhere]">{name}</span>
+    </span>
+  );
+}
+
+function EventBody({ event, align }: { event: MatchEvent; align: "end" | "start" | "center" }) {
+  return (
+    <span
+      className={cx(
+        "flex min-w-0 max-w-full items-start gap-1.5 text-body text-fg",
+        align === "end" && "flex-row-reverse text-right",
+        align === "center" && "justify-center text-center",
+      )}
+    >
+      <span className="grid h-6 w-4 shrink-0 place-items-center">
+        <EventIcon kind={eventKind(event)} />
+      </span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{eventText(event)}</span>
+    </span>
+  );
+}
+
+/**
+ * Timeline, latest first: home events left (icon toward the centre line), away events
+ * right, the minute on the centre line. An event whose team the provider did not give
+ * stays in the middle as '소속 미확인' — it is never assigned to a side (MAT-002).
+ * Each row names its team for screen readers, since the column alone carries it.
+ */
+function Timeline({ events, teams }: { events: MatchEvent[]; teams: Teams }) {
+  if (events.length === 0) return <StateMessage title="아직 기록된 이벤트가 없습니다" />;
+  return (
+    <div className="relative">
+      <span aria-hidden className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line" />
+      <div aria-hidden className={cx(TIMELINE_GRID, "relative border-b border-line bg-surface pb-3")}>
+        <TimelineTeam team={teams.home} align="end" />
+        <span className="text-center text-small text-fg-muted">시간</span>
+        <TimelineTeam team={teams.away} align="start" />
+      </div>
+      <ol className="relative">
+        {[...events].reverse().map((event, index) => {
+          const minute = (
+            <span className="relative bg-surface text-center text-label leading-6 font-bold text-action">
+              {minuteText(event)}
+            </span>
+          );
+          if (!event.side) {
+            return (
+              <li key={index} className="flex flex-col items-center gap-0.5 py-2.5">
+                {minute}
+                <span className="relative flex max-w-full flex-col items-center gap-0.5 bg-surface px-2">
+                  <EventBody event={event} align="center" />
+                  <span className="text-small text-fg-muted">소속 미확인</span>
+                </span>
+              </li>
+            );
+          }
+          const home = event.side === "home";
+          return (
+            <li key={index} className={cx(TIMELINE_GRID, "py-2.5")}>
+              <span className="sr-only">{`${teamName(teams[event.side])}, `}</span>
+              <span className="min-w-0">{home && <EventBody event={event} align="end" />}</span>
+              {minute}
+              <span className="min-w-0">{!home && <EventBody event={event} align="start" />}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -217,14 +289,26 @@ function Ratings({ players, names }: { players: PlayerRating[]; names: Names }) 
   );
 }
 
-function Panel({ tab, records, names, onRetry }: { tab: RecordTab; records: Records; names: Names; onRetry: () => void }) {
+function Panel({
+  tab,
+  records,
+  names,
+  teams,
+  onRetry,
+}: {
+  tab: RecordTab;
+  records: Records;
+  names: Names;
+  teams: Teams;
+  onRetry: () => void;
+}) {
   const block = records[BLOCK_OF[tab]];
   if (block.status !== "available" || !block.data) {
     return <BlockMessage tab={tab} status={block.status} onRetry={onRetry} />;
   }
   switch (tab) {
     case "timeline":
-      return <Timeline events={records.events.data ?? []} names={names} />;
+      return <Timeline events={records.events.data ?? []} teams={teams} />;
     case "stats":
       return <Statistics rows={records.statistics.data ?? []} names={names} />;
     case "lineups":
@@ -281,6 +365,7 @@ export function MatchRecords({
   }, [status, infoUpdatedAt, refetch]);
   const idBase = useId();
   const names = { home: teamName(info.match.home), away: teamName(info.match.away) };
+  const teams = { home: info.match.home, away: info.match.away };
   const retry = () => void query.refetch();
 
   if (!query.data) {
@@ -304,7 +389,7 @@ export function MatchRecords({
       <section className={CARD} aria-label="경기 기록">
         <h2 className="text-subtitle font-bold">타임라인</h2>
         {query.isError && <RefreshFailure onRetry={retry} />}
-        <Panel tab="timeline" records={records} names={names} onRetry={retry} />
+        <Panel tab="timeline" records={records} names={names} teams={teams} onRetry={retry} />
       </section>
     );
   }
@@ -344,7 +429,7 @@ export function MatchRecords({
         tabIndex={0}
         className="pt-4"
       >
-        <Panel tab={tab} records={records} names={names} onRetry={retry} />
+        <Panel tab={tab} records={records} names={names} teams={teams} onRetry={retry} />
       </div>
     </section>
   );

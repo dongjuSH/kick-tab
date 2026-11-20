@@ -10,6 +10,7 @@ import { MISSING } from "@/lib/format/kst";
 import { ThumbIcon } from "./icons";
 import { reviewsQuery } from "./queries";
 import { ReviewGuidance } from "./ReviewGuidance";
+import { ReviewLoginNotice } from "./ReviewLoginNotice";
 
 const SORTS = [
   { value: "popular", label: "인기순" },
@@ -35,8 +36,9 @@ function Reactions({ review }: { review: ReviewItem }) {
 /**
  * Match reviews: public text reviews of a live or normally finished match (REV-001·004,
  * Figma 52:151 · 161:4161). The valid review count, popular/latest order, reactions and
- * the review rules; no star rating or average. Writing, editing, reacting and the login
- * box above the list (Figma 52:294) are chat 02's: nothing to write with is placed here.
+ * the review rules; no star rating or average. Guests see the login notice above the list
+ * (`ReviewLoginNotice`, login 준비 중 until chat 02). Writing, editing and reacting are
+ * chat 02's: nothing to write with is placed here.
  */
 export function ReviewSection({
   fixtureId,
@@ -54,7 +56,7 @@ export function ReviewSection({
   return (
     <section
       aria-labelledby={`${idBase}-title`}
-      className="flex flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
+      className="flex flex-col gap-4 rounded-card border border-line bg-surface p-4"
     >
       <div className="flex items-center gap-1">
         <h2 id={`${idBase}-title`} className="text-subtitle font-bold">경기 평가</h2>
@@ -70,6 +72,7 @@ export function ReviewSection({
           )}
         </span>
       </div>
+      <ReviewLoginNotice />
       <div>
         <Tabs items={SORTS} value={sort} onChange={onSort} label="평가 정렬" idBase={idBase} />
         <div role="tabpanel" id={tabPanelId(idBase, sort)} aria-labelledby={tabId(idBase, sort)} className="pt-4">

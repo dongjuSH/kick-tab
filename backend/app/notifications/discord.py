@@ -9,14 +9,13 @@ import logging
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
 from pydantic import SecretStr
 
 from app.config import settings
-from app.core.kst import KST
 from app.models.feedback import Feedback
 
 logger = logging.getLogger(__name__)
@@ -147,17 +146,12 @@ class Top5DelayNotice:
     attempts: int
     error: str
     failed_at: datetime
-    # "delay": second automatic failure, delay notice shown (sent once per week).
-    # "models_failed": main and fallback model both failed in one attempt; next_retry_at is
-    # the remaining automatic slot, if any.
-    kind: Literal["delay", "models_failed"] = "delay"
-    next_retry_at: datetime | None = None
+    # The automatic selection failed or did not finish by Monday 00:20 KST; the delay
+    # notice is shown (sent once per week).
 
 
 def build_top5_payload(notice: Top5DelayNotice) -> dict[str, Any]:
     end = date.fromordinal(notice.week_start.toordinal() + 6)
-    if notice.kind == "models_failed":
-        return _top5_models_failed_payload(notice, end)
     return {
         "username": "KickTab TOP 5",
         "allowed_mentions": {"parse": []},
@@ -165,7 +159,8 @@ def build_top5_payload(notice: Top5DelayNotice) -> dict[str, Any]:
             {
                 "title": "TOP 5 업데이트 지연 · 수동 복구 필요",
                 "description": (
-                    "자동 선정이 모두 실패해 사용자에게 업데이트 지연 안내를 표시하고 있습니다. "
+                    "월요일 00:00~00:20(KST) 자동 선정이 실패해 사용자에게 업데이트 지연 "
+                    "안내를 표시하고 있습니다. "
                     "원인을 확인한 뒤 백엔드 폴더에서 관리 명령으로 다시 실행해 주세요."
                 ),
                 "color": TOP5_ALERT_COLOR,
@@ -185,45 +180,13 @@ def build_top5_payload(notice: Top5DelayNotice) -> dict[str, Any]:
     }
 
 
-def _top5_models_failed_payload(notice: Top5DelayNotice, end: date) -> dict[str, Any]:
-    if notice.next_retry_at is not None:
-        next_step = f"{notice.next_retry_at.astimezone(KST):%m/%d %H:%M} KST 자동 재시도 예정"
-    else:
-        next_step = f"자동 재시도 없음 · `{TOP5_RECOVERY_COMMAND}`로 수동 복구"
-    return {
-        "username": "KickTab TOP 5",
-        "allowed_mentions": {"parse": []},
-        "embeds": [
-            {
-                "title": "TOP 5 AI 호출 실패 · 주 모델과 하위 모델 모두 실패",
-                "description": (
-                    "이번 시도에서 주 모델 오류 후 하위 모델로 다시 호출했지만 실패했습니다. "
-                    "공개 결과는 정책대로 유지됩니다."
-                ),
-                "color": TOP5_ALERT_COLOR,
-                "fields": [
-                    {
-                        "name": "대상 주(KST)",
-                        "value": f"{notice.week_start.isoformat()} ~ {end.isoformat()}",
-                        "inline": True,
-                    },
-                    {"name": "자동 시도", "value": f"{notice.attempts}회", "inline": True},
-                    {"name": "원인", "value": notice.error[:300] or "—", "inline": False},
-                    {"name": "다음 단계", "value": next_step, "inline": False},
-                ],
-                "timestamp": notice.failed_at.isoformat(),
-            }
-        ],
-    }
-
-
 def notify_top5_delay(
     notice: Top5DelayNotice,
     *,
     webhook_url: SecretStr | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> bool:
-    """Operator alert: second automatic failure, or main and fallback model both failing in
-    one attempt. A failed alert is only logged and never adds a selection attempt."""
+    """Operator alert: the automatic selection failed (once per week). A failed alert is
+    only logged and never adds a selection attempt."""
     url = webhook_url if webhook_url is not None else settings.top5_alert_discord_webhook_url
     return _post(url, build_top5_payload(notice), "TOP 5 delay", transport)

@@ -51,26 +51,25 @@ export function eventKind(event: Pick<MatchEvent, "type" | "detail">): EventKind
   }
 }
 
-/** "골 · 레알 마드리드 · 비니시우스 (도움 벨링엄)", "교체 · PSV · A → B" (A off, B on),
- * "골 취소 · 레알 마드리드 · 비니시우스". */
-export function eventText(event: MatchEvent, teamNames: { home: string; away: string }): string {
-  const team = event.side ? teamNames[event.side] : null;
+/** "골 · 비니시우스 (도움 벨링엄)", "교체 · A → B" (A off, B on), "골 취소 · 비니시우스".
+ * The team is shown by the timeline column (home left, away right), not in the text. */
+export function eventText(event: MatchEvent): string {
   const join = (...parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ");
   switch (event.type) {
     case "goal": {
       const kind = GOALS[event.detail ?? ""] ?? "골";
       const assist = event.assist && kind !== "페널티킥 실축" ? ` (도움 ${event.assist})` : "";
-      return join(kind, team, event.player ? `${event.player}${assist}` : null);
+      return join(kind, event.player ? `${event.player}${assist}` : null);
     }
     case "card":
-      return join(CARDS[event.detail ?? ""] ?? "카드", team, event.player);
+      return join(CARDS[event.detail ?? ""] ?? "카드", event.player);
     case "subst":
-      return join("교체", team, `${event.player ?? MISSING} → ${event.assist ?? MISSING}`);
+      return join("교체", `${event.player ?? MISSING} → ${event.assist ?? MISSING}`);
     case "var":
-      if (event.detail === "Goal cancelled") return join(VAR["Goal cancelled"], team, event.player);
-      return join("VAR", VAR[event.detail ?? ""] ?? event.detail, team, event.player);
+      if (event.detail === "Goal cancelled") return join(VAR["Goal cancelled"], event.player);
+      return join("VAR", VAR[event.detail ?? ""] ?? event.detail, event.player);
     default:
-      return join(event.detail, team, event.player);
+      return join(event.detail, event.player);
   }
 }
 

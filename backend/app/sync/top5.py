@@ -1,12 +1,13 @@
 """AI weekly TOP 5 jobs (chat 04, TOP 5 policy 2026-11-02 in the planning docs).
 
 - top5_weekly: Monday 00:00 KST, first automatic attempt (skipped if the week has started).
-- top5_retry:  Monday 00:05 KST, fixed retry slot; runs only after a failed (or missed)
-  00:00 attempt. A second failure publishes the delay notice and alerts the operator.
+  It is the only automatic attempt and ends by 00:20 KST (model requests are retried inside
+  it); a failure publishes the delay notice and alerts the operator. The 00:05 retry job
+  was removed on 2026-11-19.
 - top5:        manual recovery for the current week (`uv run python -m app.sync top5`),
   refused once the week is published.
 API-Football requests (standings, form, head-to-head) are counted in sync_runs; the one
-Gemini request per attempt is recorded on the attempt row.
+Gemini model and its output are recorded on the attempt row.
 """
 
 from collections.abc import Mapping
@@ -50,12 +51,6 @@ def _first_precheck(session: Session, params: Mapping[str, Any]) -> bool:
     return first_attempt_due(session, datetime.now(UTC))
 
 
-def _retry_precheck(session: Session, params: Mapping[str, Any]) -> bool:
-    from app.services.top5_selection import retry_due
-
-    return retry_due(session, datetime.now(UTC))
-
-
 @register_job(
     "top5_weekly",
     description="AI TOP 5: first attempt, Monday 00:00 KST",
@@ -64,16 +59,6 @@ def _retry_precheck(session: Session, params: Mapping[str, Any]) -> bool:
 )
 def top5_weekly(ctx: JobContext) -> None:
     _run(ctx, "scheduled")
-
-
-@register_job(
-    "top5_retry",
-    description="AI TOP 5: single retry, Monday 00:05 KST (only after a failed first attempt)",
-    schedule={**KST_CRON, "minute": 5, **GRACE},
-    precheck=_retry_precheck,
-)
-def top5_retry(ctx: JobContext) -> None:
-    _run(ctx, "retry")
 
 
 @register_job("top5", description="AI TOP 5: manual recovery of the current week")

@@ -18,11 +18,12 @@ from app.services.top5_selection import (
     LlmPick,
     LlmSelection,
     SelectionError,
+    _form_summary,
     build_prompt,
     load_curation,
-    retry_slot,
     validate_picks,
     week_bounds,
+    window_end,
 )
 from app.services.top_matches import shown_publication
 
@@ -38,11 +39,10 @@ def picks(*rows):
     return [LlmPick(fixture_id=f, rank=r, reason=reason) for f, r, reason in rows]
 
 
-def test_week_bounds_and_retry_slot_are_kst():
+def test_week_bounds_are_kst():
     start, end = week_bounds(WEEK)
     assert start == datetime(2026, 11, 1, 15, 0, tzinfo=UTC)  # Monday 00:00 KST
     assert end == datetime(2026, 11, 8, 15, 0, tzinfo=UTC)  # next Monday 00:00 KST, excluded
-    assert retry_slot(WEEK) == datetime(2026, 11, 1, 15, 5, tzinfo=UTC)  # fixed 00:05 KST
 
 
 def test_valid_selection_is_ordered_by_rank():
@@ -116,6 +116,38 @@ def test_prompt_lists_rules_and_candidates_only_as_given():
     assert '"fixtureId":1000' in prompt
 
 
+@pytest.mark.parametrize(
+    "reason",
+    ["분데스리가 1위 · 관심 팀 바이에른 뮌헨", "관심팀끼리의 맞대결", "국내 관심이 큰 경기",
+     "관심도 높은 두 팀", "등록 팀 경기"],
+)
+def test_reason_implying_personal_favourites_is_refused(reason):
+    # TOP 5 is not personalised (TOP-002, 2026-11-19): the operator tier is input only.
+    with pytest.raises(SelectionError, match="personalisation"):
+        validate_picks(picks((1000, 1, reason)), candidates(1), WEEK)
+
+
+def test_reason_as_one_sentence_is_accepted():
+    reason = "단판으로 트로피 주인이 정해지는 결승"
+    assert validate_picks(picks((1000, 1, reason)), candidates(1), WEEK) == [(1, 1000, reason)]
+
+
+def test_prompt_asks_for_a_sentence_without_favourites_or_lists():
+    prompt = build_prompt([{"fixtureId": 1000, "home": {"name": "맨체스터 시티"}}], 1)
+    assert "한국어 한 문장" in prompt and "40자 이내" in prompt
+    assert "' · '나 쉼표로 나열하지 않는다" in prompt
+    assert "'관심 팀'" in prompt and "선정 판단에만 쓰고" in prompt
+    assert "standing이 null" in prompt and "Final은 단판 결승" in prompt
+    # The old list-style example that taught "관심 팀 맞대결" is gone.
+    assert "관심 팀 맞대결" not in prompt and "interest" not in prompt
+
+
+def test_form_summary_counts_the_compact_lines():
+    lines = ["W 1-0 H", "L 0-2 A", "D 3-3 H", "W 4-1 H"]
+    assert _form_summary(lines) == "2승 1무 1패"
+    assert _form_summary([]) is None
+
+
 def test_curation_seed_has_unique_pairs_and_tiers():
     curation = load_curation()
     assert curation.version
@@ -171,6 +203,12 @@ def test_gemini_structured_answer_is_validated(monkeypatch):
     config = models.calls[0]["config"]
     assert config.response_mime_type == "application/json"
     assert config.response_json_schema["properties"]["picks"]
+    assert config.thinking_config is None  # empty level = the model's default
+    generate_structured(
+        "p", LlmSelection, model="m", api_key=SecretStr("k"), timeout_seconds=30,
+        thinking_level="low",
+    )
+    assert models.calls[1]["config"].thinking_config.thinking_level == "LOW"
 
 
 def test_gemini_failures_are_safe_errors(monkeypatch):
@@ -180,9 +218,17 @@ def test_gemini_failures_are_safe_errors(monkeypatch):
     with pytest.raises(LlmError) as info:
         generate_structured("p", LlmSelection, model="m", api_key=SecretStr("k"), timeout_seconds=5)
     assert "secret" not in str(info.value)
+    assert info.value.transient  # transport problems may be retried in the attempt
     use_fake(monkeypatch, FakeModels(SimpleNamespace(text='{"picks": "x"}', candidates=[])))
-    with pytest.raises(LlmError, match="schema"):
+    with pytest.raises(LlmError, match="schema") as info:
         generate_structured("p", LlmSelection, model="m", api_key=SecretStr("k"), timeout_seconds=5)
+    assert not info.value.transient
+    for code, transient in ((503, True), (504, True), (429, False), (400, False)):
+        use_fake(monkeypatch, FakeModels(error=gemini.errors.APIError(code, {})))
+        with pytest.raises(LlmError) as info:
+            generate_structured("p", LlmSelection, model="m", api_key=SecretStr("k"),
+                                timeout_seconds=5)
+        assert info.value.transient is transient, code
 
 
 NOTICE = Top5DelayNotice(WEEK, 2, "LLM failed: Gemini API error 429", IN_WEEK)
@@ -223,8 +269,8 @@ def fake_call(results):
     """generate_structured stand-in: pops one result (an answer or an exception) per call."""
     calls = []
 
-    def call(prompt, schema, *, model, api_key, timeout_seconds):
-        calls.append((model, timeout_seconds))
+    def call(prompt, schema, *, model, api_key, timeout_seconds, thinking_level):
+        calls.append((model, timeout_seconds, thinking_level))
         result = results.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -233,58 +279,104 @@ def fake_call(results):
     return call, calls
 
 
-def models(monkeypatch, primary="gemini-3.8-flash", fallback="gemini-3.5-flash-lite"):
-    monkeypatch.setattr(top5.settings, "top5_llm_model", primary)
-    monkeypatch.setattr(top5.settings, "top5_llm_fallback_model", fallback)
+class FakeClock:
+    """monotonic stand-in: `sleep` and each call advance it."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
 
 
-def test_main_model_answer_skips_fallback(monkeypatch):
-    models(monkeypatch)
-    call, calls = fake_call([{"picks": []}])
-    _, raw = top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
-    assert calls == [("gemini-3.8-flash", 60.0)]  # main model gets its share of the budget
+def model_setup(monkeypatch, thinking="low"):
+    monkeypatch.setattr(top5.settings, "top5_llm_model", "gemini-3.8-flash")
+    monkeypatch.setattr(top5.settings, "top5_llm_thinking_level", thinking)
+
+
+def timed_call(clock, results):
+    """generate_structured stand-in: each result is (seconds the request takes, answer or
+    exception); the fake clock advances by that time."""
+    calls = []
+
+    def call(prompt, schema, *, model, api_key, timeout_seconds, thinking_level):
+        calls.append((clock.now, timeout_seconds, thinking_level))
+        took, result = results.pop(0)
+        clock.now += took
+        if isinstance(result, Exception):
+            raise result
+        return LlmSelection(picks=[]), result
+
+    return call, calls
+
+
+BUSY = LlmError("Gemini API error 503 UNAVAILABLE", transient=True)
+SLOW = LlmError("Gemini API error 504 DEADLINE_EXCEEDED", transient=True)
+
+
+def test_each_request_waits_up_to_ten_minutes_with_the_thinking_level(monkeypatch):
+    model_setup(monkeypatch)
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(90, {"picks": []})])
+    _, raw = top5.gemini_generate("p", 1100, call=call, clock=clock, sleep=clock.sleep)
+    assert calls == [(0.0, 600.0, "low")]  # 10 minutes, never beyond the attempt
+    assert raw["model"] == "gemini-3.8-flash"
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(90, {"picks": []})])
+    top5.gemini_generate("p", 400, call=call, clock=clock, sleep=clock.sleep)
+    assert calls[0][1] == 400.0  # less than 10 minutes left: only what is left
+
+
+def test_quick_errors_wait_longer_each_time_slow_ones_retry_at_once(monkeypatch):
+    model_setup(monkeypatch)
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(3, BUSY), (4, BUSY), (600, SLOW), (100, {"picks": []})])
+    _, raw = top5.gemini_generate("p", 1190, call=call, clock=clock, sleep=clock.sleep)
+    starts = [c[0] for c in calls]
+    # 503 after 3 s -> 30 s pause; 503 after 4 s -> 60 s pause; 504 after 600 s -> at once.
+    assert starts == [0.0, 33.0, 97.0, 697.0]
+    assert calls[3][1] == 1190.0 - 697.0  # the last request gets the time still left
     assert raw["model"] == "gemini-3.8-flash"
 
 
-def test_request_error_falls_back_to_lower_model(monkeypatch):
-    models(monkeypatch)
-    call, calls = fake_call([LlmError("Gemini API error 503 UNAVAILABLE"), {"picks": []}])
-    _, raw = top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
-    assert [m for m, _ in calls] == ["gemini-3.8-flash", "gemini-3.5-flash-lite"]
-    assert calls[1][1] == 98.0  # the rest of the budget
-    assert raw["model"] == "gemini-3.5-flash-lite"
+def test_at_most_five_requests_then_failure_names_every_error(monkeypatch):
+    model_setup(monkeypatch)
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(2, LlmError(f"Gemini API error 503 #{i}", transient=True))
+                                     for i in range(6)])
+    with pytest.raises(top5.ModelFailed) as info:
+        top5.gemini_generate("p", 1190, call=call, clock=clock, sleep=clock.sleep)
+    assert len(calls) == top5.MAX_REQUESTS == 5
+    assert str(info.value).startswith("gemini-3.8-flash: Gemini API error 503 #0 → ")
 
 
-def test_both_models_failing_is_reported_as_all_failed(monkeypatch):
-    models(monkeypatch)
-    call, _ = fake_call([LlmError("Gemini API error 503"), LlmError("Gemini API error 429")])
-    with pytest.raises(top5.AllModelsFailed) as info:
-        top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
-    assert "gemini-3.8-flash: Gemini API error 503" in str(info.value)
-    assert "gemini-3.5-flash-lite: Gemini API error 429" in str(info.value)
+def test_no_retry_for_lasting_errors_or_without_time(monkeypatch):
+    model_setup(monkeypatch)
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(1, LlmError("Gemini API error 429 RESOURCE_EXHAUSTED"))])
+    with pytest.raises(top5.ModelFailed):
+        top5.gemini_generate("p", 1190, call=call, clock=clock, sleep=clock.sleep)
+    assert len(calls) == 1  # quota, bad request or bad answer: not asked again
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(600, SLOW)])
+    with pytest.raises(top5.ModelFailed):
+        top5.gemini_generate("p", 700, call=call, clock=clock, sleep=clock.sleep)
+    assert len(calls) == 1  # 100 s left < 180 s needed for another answer
 
 
-def test_no_fallback_without_time_or_when_disabled(monkeypatch):
-    models(monkeypatch)
-    ticks = iter([0.0, 95.0])
-    call, calls = fake_call([LlmError("timeout")])
-    with pytest.raises(top5.AllModelsFailed, match="not tried"):
-        top5.gemini_generate("p", 100, call=call, clock=lambda: next(ticks))
-    assert len(calls) == 1
-    models(monkeypatch, fallback="")
-    call, calls = fake_call([LlmError("Gemini API error 503")])
-    with pytest.raises(LlmError) as info:
-        top5.gemini_generate("p", 100, call=call, clock=lambda: 0.0)
-    assert not isinstance(info.value, top5.AllModelsFailed) and calls == [("gemini-3.8-flash", 100)]
+def test_first_request_also_needs_180_seconds(monkeypatch):
+    model_setup(monkeypatch)
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(90, {"picks": []})])
+    with pytest.raises(top5.ModelFailed, match="not requested"):
+        top5.gemini_generate("p", 179, call=call, clock=clock, sleep=clock.sleep)
+    assert calls == []
+    top5.gemini_generate("p", 180, call=call, clock=clock, sleep=clock.sleep)
+    assert len(calls) == 1  # exactly 180 s left is enough
 
 
-def test_models_failed_alert_payload_names_next_step():
-    retry_at = datetime(2026, 11, 1, 15, 5, tzinfo=UTC)  # 11/02 00:05 KST
-    notice = Top5DelayNotice(WEEK, 1, "LLM failed: a; b", IN_WEEK, "models_failed", retry_at)
-    embed = build_top5_payload(notice)["embeds"][0]
-    fields = {f["name"]: f["value"] for f in embed["fields"]}
-    assert "모두 실패" in embed["title"]
-    assert fields["다음 단계"] == "11/02 00:05 KST 자동 재시도 예정"
-    manual = Top5DelayNotice(WEEK, 2, "x", IN_WEEK, "models_failed", None)
-    fields = {f["name"]: f["value"] for f in build_top5_payload(manual)["embeds"][0]["fields"]}
-    assert "app.sync top5" in fields["다음 단계"]
+def test_window_end_is_monday_0020_kst():
+    assert window_end(WEEK) == datetime(2026, 11, 1, 15, 20, tzinfo=UTC)
