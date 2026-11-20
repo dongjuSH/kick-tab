@@ -4,7 +4,7 @@ What users see is decided only by published rows (`top5_publications`), never by
 state of the week being prepared:
 - a publication for the current KST week -> that result (list, none or the delay notice);
 - otherwise last week's published list/none, with its real week and selection time, while
-  the new week is being selected and retried (00:00 / 00:05 KST);
+  the new week is being selected (Monday 00:00-00:20 KST);
 - otherwise (nothing usable was ever published) the delay notice for the current week.
 Visits and refreshes only read; they never start a selection.
 """

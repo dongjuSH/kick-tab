@@ -116,28 +116,30 @@ test("page areas by state: no lineup or review area before kickoff, reviews besi
 
 test("timeline records carry an icon kind and text: goal, substitution, cards, cancelled goal (MAT-002)", () => {
   const { eventKind, eventText } = loader()("@/features/match/model");
-  const names = { home: "레알 마드리드", away: "PSV" };
   const ev = (type, detail, extra = {}) => ({ elapsed: 10, extra: null, side: "home", type, detail, player: "A", assist: null, ...extra });
   const cases = [
-    [ev("goal", "Normal Goal", { assist: "B" }), "goal", "골 · 레알 마드리드 · A (도움 B)"],
-    [ev("goal", "Missed Penalty", { assist: "B" }), "missed", "페널티킥 실축 · 레알 마드리드 · A"],
-    [ev("subst", "Substitution 1", { assist: "B" }), "subst", "교체 · 레알 마드리드 · A → B"],
-    [ev("card", "Yellow Card", { side: "away" }), "yellow", "경고 · PSV · A"],
-    [ev("card", "Red Card", { side: "away" }), "red", "퇴장 · PSV · A"],
-    [ev("card", "Second Yellow card"), "red", "경고 누적 퇴장 · 레알 마드리드 · A"],
-    [ev("var", "Goal cancelled"), "cancelled", "골 취소 · 레알 마드리드 · A"],
-    [ev("var", "Penalty confirmed"), "var", "VAR · 페널티킥 인정 · 레알 마드리드 · A"],
+    // The team is the timeline column, not part of the text (MAT-002, Figma 52:151).
+    [ev("goal", "Normal Goal", { assist: "B" }), "goal", "골 · A (도움 B)"],
+    [ev("goal", "Missed Penalty", { assist: "B" }), "missed", "페널티킥 실축 · A"],
+    [ev("subst", "Substitution 1", { assist: "B" }), "subst", "교체 · A → B"],
+    [ev("card", "Yellow Card", { side: "away" }), "yellow", "경고 · A"],
+    [ev("card", "Red Card", { side: "away" }), "red", "퇴장 · A"],
+    [ev("card", "Second Yellow card"), "red", "경고 누적 퇴장 · A"],
+    [ev("var", "Goal cancelled"), "cancelled", "골 취소 · A"],
+    [ev("var", "Penalty confirmed"), "var", "VAR · 페널티킥 인정 · A"],
   ];
   for (const [event, kind, text] of cases) {
     assert.equal(eventKind(event), kind);
-    assert.equal(eventText(event, names), text);
+    assert.equal(eventText(event), text);
   }
 });
 
-test("timeline shows an icon per record and no repeated provider notice", () => {
+test("timeline puts home events left, away right, unknown-team events in the middle (MAT-002)", () => {
   const h = hooks();
   const withEvents = { ...records, events: { status: "available", data: [
     { elapsed: 12, extra: null, side: "home", type: "goal", detail: "Normal Goal", player: "A", assist: null },
+    { elapsed: 30, extra: null, side: "away", type: "card", detail: "Yellow Card", player: "Away Player", assist: null },
+    { elapsed: 50, extra: null, side: null, type: "card", detail: "Yellow Card", player: "Unknown Player", assist: null },
     { elapsed: 79, extra: null, side: "home", type: "var", detail: "Goal cancelled", player: "A", assist: null },
   ] } };
   const load = loader({ ...leaves, react: h.react,
@@ -146,8 +148,18 @@ test("timeline shows an icon per record and no repeated provider notice", () => 
   });
   const { MatchRecords } = load("@/features/match/MatchRecords");
   const { html } = h.render(MatchRecords, { info: info("finished"), tab: "timeline", onTab() {} });
-  assert.equal((html.match(/<svg/g) ?? []).length, 2);
-  assert.match(html, /골 취소 · 팀 50 · A/);
+  assert.equal((html.match(/<svg/g) ?? []).length, 4);
+  // Header: home | 시간 | away.
+  assert.match(html, /팀 50[\s\S]*시간[\s\S]*팀 42/);
+  const rows = html.match(/<li[\s\S]*?<\/li>/g) ?? [];
+  assert.equal(rows.length, 4);
+  // Latest first; each sided row: [sr team] [home cell] [minute] [away cell].
+  const cells = (row) => row.replace(/^<li[^>]*>/, "").replace(/<\/li>$/, "");
+  assert.match(rows[0], /79′/);
+  assert.match(cells(rows[0]), /^<span class="sr-only">팀 50, <\/span><span class="min-w-0">[\s\S]*골 취소 · A[\s\S]*<\/span><span[^>]*>79′<\/span><span class="min-w-0"><\/span>$/);
+  assert.match(rows[1], /50′[\s\S]*Unknown Player[\s\S]*소속 미확인/);
+  assert.doesNotMatch(rows[1], /sr-only/);
+  assert.match(cells(rows[2]), /^<span class="sr-only">팀 42, <\/span><span class="min-w-0"><\/span><span[^>]*>30′<\/span><span class="min-w-0">[\s\S]*경고 · Away Player/);
   assert.doesNotMatch(html, /데이터 제공사가 전달한 이벤트만/);
 });
 
@@ -199,6 +211,10 @@ test("match reviews show the count only: no star rating or average", () => {
   })("@/features/match/ReviewSection");
   const { html } = h.render(reviewLoader(list).ReviewSection, { fixtureId: 1, sort: "popular", onSort() {} });
   assert.match(html, /경기 평가/);
+  // Guest notice as the latest Figma (408:16478): primary 로그인 button; 02 adds its action.
+  assert.match(html, /로그인 후 경기 평가를 작성할 수 있습니다\./);
+  assert.match(html, /<button[^>]*bg-action[^>]*>로그인<\/button>/);
+  assert.doesNotMatch(html, /href="\/login/);
   assert.match(html, /2건/);
   assert.match(html, /좋아요 3/);
   assert.match(html, /인기순/);

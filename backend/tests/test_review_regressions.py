@@ -5,7 +5,6 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, date, datetime, timedelta
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -16,7 +15,7 @@ from app.models.top_matches import Top5Attempt, Top5Publication, Top5Week
 from app.providers.api_football import ApiFootballUnavailable
 from app.services.head_to_head import ensure_form, ensure_meetings
 from app.services.match_detail import read_records
-from app.services.top5_selection import Selection, SelectionError, _publish, retry_due
+from app.services.top5_selection import Selection, SelectionError, _publish
 from app.services.top_matches import shown_publication
 
 NOW = datetime(2027, 6, 6, 15, 0, 30, tzinfo=UTC)
@@ -57,12 +56,6 @@ def test_publication_checks_clock_after_lock_waits(cross_week):
     with pytest.raises(SelectionError):
         _publish(session, 1, Selection([], {}, 0, {}), clock=lambda: wall[0])
     session.add.assert_not_called()
-
-
-def test_retry_precheck_admits_interrupted_running_attempt():
-    session = Mock()
-    session.get.return_value = SimpleNamespace(status="running")
-    assert retry_due(session, NOW + timedelta(minutes=5))
 
 
 @pytest.mark.parametrize("operation", ["meetings", "form"])

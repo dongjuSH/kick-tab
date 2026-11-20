@@ -1,11 +1,11 @@
 """AI weekly TOP 5 selection (TOP-001·002, TOP 5 policy 2026-11-02 in the planning docs).
 
-One attempt = candidates -> evidence -> one Gemini request -> server validation -> one
-atomic publication. Week rules (stored in `top5_weeks`):
-- 00:00 KST Monday (`scheduled`): first automatic attempt. Failure -> `retry_scheduled`.
-- 00:05 KST Monday (`retry`): second and last automatic attempt (also the first one if the
-  00:00 run was missed). Failure -> `delayed`: the delay notice is published, an operator
-  alert is sent once (a failed alert is only logged), nothing else is scheduled.
+One attempt = candidates -> evidence -> Gemini requests (at most 5, see `gemini_generate`)
+-> server validation -> one atomic publication. Week rules (stored in `top5_weeks`):
+- 00:00 KST Monday (`scheduled`): the only automatic attempt, which must end by 00:20 KST
+  (user decision 2026-11-19; the 00:05 retry slot was removed). Failure or no result by
+  00:20 -> `delayed`: the delay notice is published and an operator alert is sent once (a
+  failed alert is only logged); nothing else is scheduled.
 - `manual` (operator command): only for the current week while it is not published.
 A published week is never selected again. Until a new result is published, users keep
 seeing last week's public result (services.top_matches).
@@ -26,7 +26,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from functools import lru_cache
 from pathlib import Path
 from queue import Empty, Queue
-from time import monotonic
+from time import monotonic, sleep
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -55,23 +55,32 @@ from app.services.top_matches import current_kst_week
 
 logger = logging.getLogger(__name__)
 
-Trigger = Literal["scheduled", "retry", "manual"]
+# "retry" (the old 00:05 slot) is no longer started; old attempt rows may still carry it.
+Trigger = Literal["scheduled", "manual"]
 SessionFactory = Callable[[], Session]
 ClientFactory = Callable[[], ApiFootballClient]
 Clock = Callable[[], datetime]
 
-PROMPT_VERSION = "2026-11-04.1"
+PROMPT_VERSION = "2026-11-19.1"
 CURATION_PATH = Path(__file__).resolve().parents[1] / "seed" / "top5_curation.json"
 TOP_N = 5
-RETRY_MINUTE = 5
+# One automatic selection window per week: Monday 00:00-00:20 KST (user decision
+# 2026-11-19, replacing the 00:00 attempt + 00:05 retry). Unfinished at 00:20 = delay notice.
+WINDOW_MINUTES = 20
 REASON_MAX = 60
+# TOP 5 is not personalised: a reason never speaks of "관심 팀" or registration, and the
+# operator's domestic-attention tier is a selection input only (TOP-002, 2026-11-19).
+FORBIDDEN_REASON_WORDS = ("관심 팀", "관심팀", "관심도", "국내 관심", "등록")
+# Compared without spaces, so "관심  팀" or "국내관심" are caught too.
+_FORBIDDEN_COMPACT = frozenset(w.replace(" ", "") for w in FORBIDDEN_REASON_WORDS)
 # The schedule must have been collected recently and completely (TOP-001 완전성).
 SCHEDULE_MAX_AGE = timedelta(minutes=90)
 EVIDENCE_WORKERS = 4
-# Upper bound of the single Gemini request; never beyond the attempt deadline.
-LLM_TIMEOUT_CAP = 150.0
 DB_WAIT_MS = 5_000
-RETRY_GRACE = timedelta(seconds=60)
+# A scheduler fire may be up to a minute late (job misfire grace).
+WINDOW_GRACE = timedelta(seconds=60)
+# How often a running manual recovery checks whether a held delay notice is due.
+HELD_POLL_SECONDS = 1.0
 
 
 class SelectionError(Exception):
@@ -209,6 +218,9 @@ def validate_picks(
         reason = " ".join(pick.reason.split())
         if not reason or len(reason) > REASON_MAX or "\n" in pick.reason.strip():
             raise SelectionError(f"Validation: reason of {pick.fixture_id} is not one short line")
+        compact = reason.replace(" ", "")
+        if any(word in compact for word in _FORBIDDEN_COMPACT):
+            raise SelectionError(f"Validation: reason of {pick.fixture_id} implies personalisation")
         items.append((pick.rank, pick.fixture_id, reason))
     return items
 
@@ -222,8 +234,9 @@ def week_bounds(week_start: date) -> tuple[datetime, datetime]:
     return start, start + timedelta(days=7)
 
 
-def retry_slot(week_start: date) -> datetime:
-    return datetime.combine(week_start, time(0, RETRY_MINUTE), KST).astimezone(UTC)
+def window_end(week_start: date) -> datetime:
+    """Monday 00:20 KST: the automatic selection must be published by then."""
+    return datetime.combine(week_start, time(0, WINDOW_MINUTES), KST).astimezone(UTC)
 
 
 def check_schedule(session: Session, now: datetime) -> None:
@@ -270,7 +283,8 @@ def candidate_rows(session: Session, week_start: date, now: datetime):
 
 
 def fetch_standings(client: ApiFootballClient, competition_id: int, season: int):
-    """team id -> {rank, points, played, group} of one competition's table(s)."""
+    """team id -> {rank, of, points, played, group} of one competition's table(s); `of` is
+    the number of teams in that table, so "상위권" can be judged against its size."""
     result = client.get("/standings", {"league": competition_id, "season": season})
     table: dict[int, dict[str, Any]] = {}
     for entry in result.response or []:
@@ -280,6 +294,7 @@ def fetch_standings(client: ApiFootballClient, competition_id: int, season: int)
                 if team_id:
                     table[team_id] = {
                         "rank": row.get("rank"),
+                        "of": len(group),
                         "points": row.get("points"),
                         "played": (row.get("all") or {}).get("played"),
                         "group": row.get("group"),
@@ -287,19 +302,32 @@ def fetch_standings(client: ApiFootballClient, competition_id: int, season: int)
     return table
 
 
+def _form_summary(lines: list[str]) -> str | None:
+    """"3승 1무 1패" from the compact lines (counted here so the model does not miscount)."""
+    if not lines:
+        return None
+    results = [line.split()[0] for line in lines]
+    return f"{results.count('W')}승 {results.count('D')}무 {results.count('L')}패"
+
+
 def _form_entries(payload: list[dict[str, Any]], team_id: int, before: datetime) -> list[str]:
-    """Compact lines, newest first: "2026-11-01 W 6-1 H vs Alaves (La Liga)"."""
+    """Compact results, newest first: "W 6-1 H" (result, goals for-against, H/A). Dates,
+    opponents and competitions are left out to keep the prompt short (2026-11-19: 23k input
+    tokens made the main model answer in about 90 s)."""
     lines = []
     for r in recent_form(payload, team_id, before):
         home = r["homeId"] == team_id
         goals = (r["goalsHome"], r["goalsAway"])
         mine, theirs = goals if home else goals[::-1]
-        opponent = r["awayName"] if home else r["homeName"]
-        lines.append(
-            f"{r['kickoffAt'][:10]} {result_for(r, team_id)} {mine}-{theirs} "
-            f"{'H' if home else 'A'} vs {opponent} ({r.get('leagueName')})"
-        )
+        lines.append(f"{result_for(r, team_id)} {mine}-{theirs} {'H' if home else 'A'}")
     return lines
+
+
+def _meeting_line(meeting: dict[str, Any], team_id: int) -> str:
+    """One past meeting from `team_id`'s side: "W 2-0" (result, goals for-against)."""
+    goals = (meeting["goalsHome"], meeting["goalsAway"])
+    mine, theirs = goals if meeting["homeId"] == team_id else goals[::-1]
+    return f"{result_for(meeting, team_id)} {mine}-{theirs}"
 
 
 def _kickoff_kst(moment: datetime) -> str:
@@ -323,29 +351,48 @@ def build_prompt(candidates: list[dict[str, Any]], picks: int) -> str:
         "너는 축구 경기 일정 서비스 KickTab의 'AI 선정 이번 주 주목 경기 TOP 5' 선정자다.\n"
         f"아래 후보 경기 중에서만 이번 주에 볼 만한 경기를 정확히 {picks}개 골라 1위부터 "
         f"{picks}위까지 순위를 매겨라.\n"
-        "규칙:\n"
+        "[선정 규칙]\n"
         "- fixtureId는 후보 목록에 있는 값만 쓰고 중복하지 않는다.\n"
-        "- 근거는 제공된 여섯 지표만 쓴다: 대회·경기 단계(competition, round), 같은 대회 순위·"
-        "승점 차이(standing, pointsGap), 최근 공식 5경기(recentForm), 최근 맞대결"
-        "(headToHead), 운영자 더비 목록(derby), 운영자 팀 관심도(interest).\n"
+        "- 근거는 제공된 지표만 쓴다: 대회·경기 단계(competition, competitionType, round), 같은 "
+        "대회 순위·경기 수·승점 차이(standing, pointsGap), 최근 공식 5경기(recentForm, "
+        "formSummary), 최근 맞대결(headToHead), 운영자 더비 목록(derby), 운영자 관리 국내 "
+        "주목도 등급(domesticPriority).\n"
         "- 값이 null이거나 비어 있으면 미제공이다. 제공되지 않은 사실(선수, 부상, 이적, 감독, "
-        "과거 우승 등)을 만들거나 기억으로 보완하지 않는다.\n"
-        "- 첫 판단 기준은 국내 팬이 이번 주 일정을 찾아 시청할 만한 대진인지다. 운영자 팀 "
-        "관심도(interest)는 국내 관심을 가늠하는 첫 신호이며, 실제 시청률이나 인기 수치가 "
-        "아니다. 한 팀의 이름만으로 자동 선정하지 말고 상대와 경기 단계도 함께 본다.\n"
-        "- 결승·토너먼트·진출 또는 우승 등 구체적 이해관계가 확인되면 관심도만 높은 일반 "
-        "리그 경기보다 우선할 수 있다. 대회별 할당은 두지 않는다.\n"
-        "- 리그는 라운드(round)와 양 팀 경기 수(standing.played)를 보고 시즌의 진행 정도를 "
-        "판단한다. 초반 순위와 근소한 승점 차이, 특히 중상위권의 단순 맞대결은 강한 근거가 "
-        "아니다. 라운드나 경기 수가 불명확하면 순위만 보고 우승·진출 경쟁이라 단정하지 "
-        "않는다. 서로 다른 대회나 조의 순위를 직접 비교하지 않는다. UEFA 리그 페이즈는 "
-        "토너먼트가 아니다.\n"
-        "- 등록된 더비라는 사실만으로 우선하지 않는다. 시청 관심이나 현재 경기의 중요도가 "
-        "다른 지표로도 뒷받침되는지 확인한다. 최근 폼과 맞대결은 비슷한 후보를 비교하는 "
-        "보조 근거로 쓴다.\n"
-        "- recentForm은 최신순 '날짜 결과(W/D/L) 득점-실점 H(홈)/A(원정) vs 상대 (대회)'이다.\n"
-        "- reason은 한국어 한 줄, 40자 이내로 지표 기반 핵심을 ' · '로 나열한다 "
-        "(예: 챔피언스리그 토너먼트 · 관심 팀 맞대결).\n"
+        "과거 우승, 시청률·인기 수치 등)을 만들거나 기억으로 보완하지 않는다.\n"
+        "- 첫 판단 기준은 국내 팬이 이번 주 일정을 찾아 시청할 만한 대진인지다. "
+        "domesticPriority는 운영자가 관리하는 국내 주목도 등급(high/medium)으로, 실제 "
+        "시청률이나 인기 수치가 아니다. 한 팀의 등급만으로 자동 선정하지 말고 상대와 경기 "
+        "단계도 함께 본다.\n"
+        "- 결승·토너먼트·진출 또는 우승 등 구체적 이해관계가 확인되면 일반 리그 경기보다 "
+        "우선할 수 있다. 대회별 할당은 두지 않는다.\n"
+        "- 컵 대회(competitionType이 cup)는 순위표가 없어 standing이 null이다. 이는 미제공이며 "
+        "순위를 추정하지 말고 round(예: Final은 단판 결승, Semi-finals는 4강)로 판단한다.\n"
+        "- standing.rank는 순위, standing.of는 그 순위표의 팀 수다.\n"
+        "- 리그는 round와 양 팀 경기 수(standing.played)로 시즌 진행 정도를 판단한다. 초반 "
+        "순위와 근소한 승점 차이, 특히 중상위권의 단순 맞대결은 강한 근거가 아니다. 서로 다른 "
+        "대회나 조의 순위를 직접 비교하지 않는다. UEFA 리그 페이즈는 토너먼트가 아니다.\n"
+        "- 등록된 더비라는 사실만으로 우선하지 않는다. 최근 폼과 맞대결은 비슷한 후보를 "
+        "비교하는 보조 근거로 쓴다.\n"
+        "- recentForm은 최신순 '결과(W/D/L) 득점-실점 H(홈)/A(원정)'이고 formSummary는 그 "
+        "승·무·패 수다. headToHead.recent는 최신순이며 이 경기 홈팀 기준 '결과 득점-실점'이다.\n"
+        "[이유(reason) 작성 규칙]\n"
+        "- 이 경기를 왜 볼 만한지 한국어 한 문장으로, 40자 이내로 쓴다. 문장은 '~경기', "
+        "'~맞대결', '~결승'처럼 명사로 끝내도 된다.\n"
+        "- 위 지표 중 이 경기에 실제로 확인되는 대회 단계·최근 공식 경기·맞대결·시즌 맥락만 "
+        "근거로 쓴다. 지표 이름이나 순위·팀명을 ' · '나 쉼표로 나열하지 않는다.\n"
+        "- '상위권'은 순위가 standing.of의 상위 3분의 1 안인 팀에만 쓴다. 두 팀 중 한 팀만 "
+        "해당하면 '상위권 맞대결·상위권 경기'라고 하지 말고 그 팀의 사실만 말한다.\n"
+        "- 최근 흐름은 formSummary와 recentForm에서 확인되는 만큼만 말한다(예: 최근 공식 "
+        "5경기 4승 1무). 연승은 recentForm 맨 앞부터 이어진 승리만 센다.\n"
+        "- TOP 5는 사용자별 개인화가 아니다. '관심 팀', '관심도', '국내 관심', '등록' 같은 "
+        "표현이나 이를 암시하는 말을 쓰지 않는다. domesticPriority는 선정 판단에만 쓰고 "
+        "이유 문장에 드러내지 않는다.\n"
+        "- 시즌 초반 근소한 승점 차이나 더비 이름만으로 '우승 결정전', '운명의', '빅매치', "
+        "'치열한' 같이 중요도를 부풀리지 않는다. 근거가 직접 보여 주지 않는 수식어나 "
+        "목표('~을 노리는')를 쓰지 않는다. 확인되지 않은 수치나 사실을 쓰지 않는다.\n"
+        "- 좋은 형식의 예(내용을 그대로 쓰지 말 것): '두 팀 모두 최근 공식 5경기 무패로 맞붙는 "
+        "경기', '단판으로 트로피 주인이 정해지는 결승', '최근 맞대결 3연승 흐름이 이어질지 "
+        "보는 경기'.\n"
         f"후보 경기({len(candidates)}개, 킥오프는 KST):\n"
         + json.dumps(candidates, ensure_ascii=False, separators=(",", ":"))
     )
@@ -413,12 +460,17 @@ def select_week(
             table = standings.get(competition.id, {})
 
             def side(team: Team, table: dict[int, dict[str, Any]] = table) -> dict[str, Any]:
+                form = _form_entries(forms.get(team.id, []), team.id, now)
                 return {
                     "teamId": team.id,
                     "name": team.name_ko or team.name_en,
+                    # null for cups (no table) and teams outside the table: not provided.
                     "standing": table.get(team.id),
-                    "recentForm": _form_entries(forms.get(team.id, []), team.id, now),
-                    "interest": curation.interest.get(team.id),
+                    "recentForm": form,
+                    "formSummary": _form_summary(form),
+                    # Operator-managed domestic attention tier: a selection input only,
+                    # never written in the reason (TOP-002, not personal favourites).
+                    "domesticPriority": curation.interest.get(team.id),
                 }
 
             past = [m for m in meetings.get(fixture.id, []) if m["kickoffAt"] < now.isoformat()]
@@ -446,11 +498,8 @@ def select_week(
                         "homeWins": sum(result_for(m, home.id) == "W" for m in past),
                         "draws": sum(result_for(m, home.id) == "D" for m in past),
                         "awayWins": sum(result_for(m, away.id) == "W" for m in past),
-                        "recent": [
-                            f"{m['kickoffAt'][:10]} {m['homeName']} {m['goalsHome']}-"
-                            f"{m['goalsAway']} {m['awayName']}"
-                            for m in past
-                        ],
+                        # Newest first, from this match's home team: "W 2-0" (for-against).
+                        "recent": [_meeting_line(m, home.id) for m in past],
                     },
                     "derby": curation.derbies.get(frozenset((home.id, away.id))),
                 }
@@ -464,11 +513,12 @@ def select_week(
     if remaining <= 5 or cancelled.is_set():
         raise SelectionError("No time left for the model request")
     try:
-        answer, raw = generate(build_prompt(candidates, picks), min(LLM_TIMEOUT_CAP, remaining))
+        # The model may use all the time left (no fallback model shares it any more).
+        answer, raw = generate(build_prompt(candidates, picks), remaining)
     except LlmError as exc:
         error = SelectionError(f"LLM failed: {exc}")
         error.evidence = evidence  # type: ignore[attr-defined]
-        error.all_models_failed = isinstance(exc, AllModelsFailed)  # type: ignore[attr-defined]
+        error.model_failed = isinstance(exc, ModelFailed)  # type: ignore[attr-defined]
         raise error from None
     try:
         items = validate_picks(answer.picks, kickoffs, week_start)
@@ -479,12 +529,23 @@ def select_week(
     return Selection(items, kickoffs, len(candidates), evidence, raw, curation.version)
 
 
-class AllModelsFailed(LlmError):
-    """Both the main and the fallback model failed in one attempt (operator alert)."""
+class ModelFailed(LlmError):
+    """The TOP 5 model gave no usable answer in this attempt."""
 
 
-PRIMARY_TIME_SHARE = 0.6  # of the attempt's model budget; the rest is left for the fallback
-FALLBACK_MIN_SECONDS = 10.0
+# Model requests inside one attempt (user decision 2026-11-19, no lower fallback model):
+# - each request waits up to 10 minutes (observed answers took 93-162 s, a slow one >280 s);
+# - a quick transient error (503 overloaded, 500/502, transport) is asked again after a
+#   growing pause; a slow one (504 or a request that ran long) is asked again at once;
+# - at most 5 requests: in the 20-minute window quick errors fit 5 tries (≈5.5 min of
+#   pauses) and slow ones at most 2, well inside the free tier's daily request quota;
+# - quota (429), bad requests and bad answers are not asked again.
+REQUEST_TIMEOUT = 600.0
+MAX_REQUESTS = 5
+QUICK_ERROR_SECONDS = 60.0
+BACKOFF = (30.0, 60.0, 120.0, 120.0)
+# A new request needs at least this much time left (162 s was the slowest answer seen).
+MIN_TRY_SECONDS = 180.0
 
 
 def gemini_generate(
@@ -493,39 +554,40 @@ def gemini_generate(
     *,
     call: Callable[..., tuple[LlmSelection, dict[str, Any]]] = generate_structured,
     clock: Callable[[], float] = monotonic,
+    sleep: Callable[[float], None] = sleep,
 ) -> tuple[LlmSelection, dict[str, Any]]:
-    """Main model first; on a request error, the lower fallback model once.
-
-    The answer's raw JSON carries `model` (the model that answered) for the attempt record.
-    """
-    primary = settings.top5_llm_model
-    fallback = settings.top5_llm_fallback_model.strip()
-    if fallback == primary:
-        fallback = ""
-    started = clock()
-
-    def ask(model: str, budget: float) -> tuple[LlmSelection, dict[str, Any]]:
-        answer, raw = call(
-            prompt, LlmSelection, model=model, api_key=settings.gemini_api_key,
-            timeout_seconds=budget,
-        )
-        return answer, {"model": model, **raw}
-
-    if not fallback:
-        return ask(primary, timeout_seconds)
-    try:
-        return ask(primary, timeout_seconds * PRIMARY_TIME_SHARE)
-    except LlmError as first:
-        remaining = timeout_seconds - (clock() - started) - 2
-        if remaining < FALLBACK_MIN_SECONDS:
-            raise AllModelsFailed(
-                f"{primary}: {first}; {fallback}: not tried (no time left)"
-            ) from None
-        logger.warning("TOP 5 main model %s failed (%s); trying %s", primary, first, fallback)
+    """The configured model within `timeout_seconds` (the attempt's time left), asked again
+    after transient errors by the rules above. The raw JSON carries `model`."""
+    model = settings.top5_llm_model
+    ends = clock() + timeout_seconds
+    failures: list[str] = []
+    took = 0.0
+    for n in range(MAX_REQUESTS):
+        wait = BACKOFF[n - 1] if n and took < QUICK_ERROR_SECONDS else 0.0
+        if ends - clock() - wait < MIN_TRY_SECONDS:
+            # Every request, the first included, needs time for an answer.
+            if not failures:
+                failures.append(f"not requested: less than {MIN_TRY_SECONDS:.0f} s left")
+            break
+        if n:
+            logger.warning(
+                "TOP 5 model %s: %s; request %d in %.0f s", model, failures[-1], n + 1, wait
+            )
+            sleep(wait)
+        started = clock()
         try:
-            return ask(fallback, remaining)
-        except LlmError as second:
-            raise AllModelsFailed(f"{primary}: {first}; {fallback}: {second}") from None
+            answer, raw = call(
+                prompt, LlmSelection, model=model, api_key=settings.gemini_api_key,
+                timeout_seconds=max(1.0, min(REQUEST_TIMEOUT, ends - started)),
+                thinking_level=settings.top5_llm_thinking_level.strip(),
+            )
+            return answer, {"model": model, **raw}
+        except LlmError as exc:
+            took = clock() - started
+            failures.append(str(exc))
+            if not exc.transient:
+                break
+    raise ModelFailed(f"{model}: {' → '.join(failures)}")
 
 
 # ---- week state, publication ----------------------------------------------------------------
@@ -559,7 +621,8 @@ def week_lock(engine: Engine, week_start: date) -> Iterator[bool]:
                 connection.commit()
 
 
-def _publish_delay(session: Session, week_start: date) -> None:
+def _publish_delay(session: Session, week_start: date) -> bool:
+    """Add the delay notice unless it is already the week's latest version (True = added)."""
     latest = session.scalar(
         select(Top5Publication)
         .where(Top5Publication.week_start == week_start)
@@ -568,19 +631,44 @@ def _publish_delay(session: Session, week_start: date) -> None:
     )
     if latest is None or latest.kind != "delayed":
         session.add(Top5Publication(week_start=week_start, kind="delayed"))
+        return True
+    return False
+
+
+def _publish_due_delay(session: Session, week: Top5Week, now: datetime) -> bool:
+    """A failed week whose delay notice was held until Monday 00:20 KST (`next_retry_at`)
+    shows it now, once, also while a manual recovery is running (only its success cancels
+    the hold). Returns True when the operator must be alerted."""
+    if (
+        week.status not in ("delayed", "running")
+        or week.next_retry_at is None
+        or now < week.next_retry_at
+    ):
+        return False
+    week.next_retry_at = None
+    week.updated_at = now
+    if week.week_start != current_kst_week(now).start:
+        week.needs_manual = False  # that week is over: nothing to show or alert
+        return False
+    return _publish_delay(session, week.week_start) and week.alert_sent_at is None
 
 
 def _fail(
     session: Session,
     week: Top5Week,
     attempt: Top5Attempt,
-    previous: str | None,
     error: str,
     now: datetime,
     *,
     timed_out: bool = False,
 ) -> bool:
-    """Record a failed attempt. Returns True when the operator must be alerted."""
+    """Record a failed attempt. Returns True when the operator must be alerted.
+
+    There is no second automatic attempt. Before Monday 00:20 KST a failure is only recorded:
+    users keep last week's result with '준비 중' and the delay notice plus the operator
+    alert follow at 00:20 (`next_retry_at`, published by `reconcile_attempts`), once. From
+    00:20 on the delay notice is shown at once. A failed manual recovery after the delay
+    is public keeps it without a new alert."""
     attempt.outcome = "timeout" if timed_out else "failed"
     attempt.error = error[:1000]
     attempt.finished_at = now
@@ -592,20 +680,18 @@ def _fail(
         week.needs_manual = False
         week.next_retry_at = None
         return False
-    if attempt.trigger == "scheduled":
-        week.status = "retry_scheduled"
-        week.next_retry_at = retry_slot(week.week_start)
-        return False
-    if attempt.trigger == "manual" and previous in ("retry_scheduled", "delayed"):
-        # A failed recovery keeps the current public state and the remaining auto slot.
-        week.status = previous
-        week.next_retry_at = retry_slot(week.week_start) if previous == "retry_scheduled" else None
-        return False
     week.status = "delayed"
     week.needs_manual = True
-    week.next_retry_at = None
-    _publish_delay(session, week.week_start)
-    return attempt.trigger == "retry" and week.alert_sent_at is None
+    # `next_retry_at` now means "show the delay notice at" (the old 00:05 slot is gone).
+    # Nothing is held once the delay notice is already public (e.g. a failed recovery).
+    latest = session.scalar(
+        select(Top5Publication.kind)
+        .where(Top5Publication.week_start == week.week_start)
+        .order_by(Top5Publication.version.desc())
+        .limit(1)
+    )
+    week.next_retry_at = now if latest == "delayed" else window_end(week.week_start)
+    return _publish_due_delay(session, week, now)
 
 
 def _start(
@@ -619,21 +705,15 @@ def _start(
         # The week lock is free, so the process that ran this attempt is gone.
         stale = session.get(Top5Attempt, week.current_attempt_id)
         if stale is not None and stale.outcome == "running":
-            previous = (
-                "retry_scheduled" if stale.trigger == "manual" and week.next_retry_at else None
-            )
-            alert = _fail(
-                session, week, stale, previous, "Attempt interrupted", now, timed_out=True
-            )
+            alert = _fail(session, week, stale, "Attempt interrupted", now, timed_out=True)
     status = week.status if week else None
     if status == "published":
         return None, status, "This week's result is already published", alert
     allowed = {
         "scheduled": status is None,
-        "retry": status in (None, "retry_scheduled"),
-        "manual": status in (None, "retry_scheduled", "delayed"),
+        "manual": status in (None, "delayed"),
     }[trigger]
-    if trigger != "manual" and week is not None and week.auto_attempts >= 2:
+    if trigger != "manual" and week is not None and week.auto_attempts >= 1:
         allowed = False
     if not allowed:
         return None, status, f"Not allowed for a week in state {status}", alert
@@ -653,9 +733,7 @@ def _start(
     session.flush()
     week.status = "running"
     week.current_attempt_id = attempt.id
-    # Preserve the remaining fixed slot if a manual recovery is itself interrupted.
-    if trigger != "manual" or status != "retry_scheduled":
-        week.next_retry_at = None
+    # A held delay notice (`next_retry_at`) stays: only a published result cancels it.
     week.updated_at = now
     if trigger != "manual":
         week.auto_attempts += 1
@@ -734,6 +812,51 @@ def _send_alert(
     return sent
 
 
+def _show_held_delay(
+    session_factory: SessionFactory,
+    week_start: date,
+    clock: Clock,
+    alert: Callable[[Top5DelayNotice], bool],
+) -> None:
+    """Monday 00:20 KST reached while this process (holding the week lock) still runs a
+    manual recovery: show the held delay notice and alert once, as the reconciler would."""
+    with _bounded_session(session_factory, clock) as session:
+        week = session.get(Top5Week, week_start, with_for_update=True)
+        now = clock()
+        send = week is not None and _publish_due_delay(session, week, now)
+        error = (week.last_error if week else None) or "Automatic selection failed"
+        session.commit()
+    if send:
+        _send_alert(session_factory, week_start, error, now, alert)
+
+
+def _wait_showing_held_delay(
+    done: threading.Event,
+    timeout: float,
+    held: datetime | None,
+    clock: Clock,
+    show: Callable[[], None],
+) -> bool:
+    """`done.wait(timeout)`, publishing a held delay notice when its time comes meanwhile."""
+    limit = monotonic() + timeout
+    while True:
+        left = limit - monotonic()
+        if left <= 0:
+            return done.is_set()
+        if held is not None:
+            until = (held - clock()).total_seconds()
+            if until <= 0:
+                try:
+                    show()
+                except Exception:  # noqa: BLE001 - the reconciler retries after this attempt
+                    logger.exception("TOP 5 %s: held delay notice not shown", held)
+                held = None
+                continue
+            left = min(left, until, HELD_POLL_SECONDS)
+        if done.wait(left):
+            return True
+
+
 def run_attempt(
     trigger: Trigger,
     *,
@@ -750,9 +873,10 @@ def run_attempt(
     week_start = current_kst_week(now).start
     timeout = float(timeout_seconds or settings.top5_attempt_timeout_seconds)
     if trigger == "scheduled":
-        timeout = min(timeout, (retry_slot(week_start) - now).total_seconds() - 10)
+        # The automatic attempt must end by Monday 00:20 KST (publish or delay notice).
+        timeout = min(timeout, (window_end(week_start) - now).total_seconds() - 10)
         if timeout <= 0:
-            return AttemptOutcome("skipped", week_start, message="First automatic slot passed")
+            return AttemptOutcome("skipped", week_start, message="Automatic window passed")
     with session_factory() as session:
         # A Connection (tests) or an Engine; the week lock needs its own connection.
         engine = session.get_bind().engine
@@ -761,9 +885,10 @@ def run_attempt(
         if not acquired:
             return AttemptOutcome("skipped", week_start, message="Another attempt is running")
         with _bounded_session(session_factory, clock) as session:
-            attempt, previous, skip, reap_alert = _start(session, week_start, trigger, now, timeout)
+            attempt, _, skip, reap_alert = _start(session, week_start, trigger, now, timeout)
             attempt_id = attempt.id if attempt else None
             deadline = attempt.deadline_at if attempt else now
+            held = session.get(Top5Week, week_start).next_retry_at if attempt else None
             session.commit()
         if attempt_id is None:
             sent = (
@@ -799,7 +924,10 @@ def run_attempt(
 
         # A daemon thread: a timed-out attempt is abandoned (it can no longer publish).
         threading.Thread(target=work, name=f"top5-attempt-{attempt_id}", daemon=True).start()
-        finished = done.wait(timeout)
+        finished = _wait_showing_held_delay(
+            done, timeout, held, clock,
+            lambda: _show_held_delay(session_factory, week_start, clock, alert),
+        )
         if not finished:
             cancelled.set()
         requests = sum(c.request_count for c in clients)
@@ -825,7 +953,7 @@ def run_attempt(
                 row.evidence = selection.evidence
                 row.llm_output = selection.llm_output
                 if isinstance(selection.llm_output, dict) and selection.llm_output.get("model"):
-                    row.model = selection.llm_output["model"]  # the fallback may have answered
+                    row.model = selection.llm_output["model"]
             elif failure is not None:
                 row.evidence = getattr(failure, "evidence", None)
                 row.llm_output = getattr(failure, "llm_output", None)
@@ -848,36 +976,17 @@ def run_attempt(
         with _bounded_session(session_factory, clock) as session:
             week = session.get(Top5Week, week_start, with_for_update=True)
             row = session.get(Top5Attempt, attempt_id, with_for_update=True)
-            needs_alert = _fail(
-                session, week, row, previous, error, clock(), timed_out=not finished
-            )
-            attempts, next_retry = week.auto_attempts, week.next_retry_at
+            needs_alert = _fail(session, week, row, error, clock(), timed_out=not finished)
             session.commit()
         logger.warning("TOP 5 %s attempt %s failed: %s", week_start, attempt_id, error)
-        if needs_alert:
-            sent = _send_alert(session_factory, week_start, error, finished_at, alert)
-        elif getattr(failure, "all_models_failed", False):
-            # Main and fallback model both failed: tell the operator now, even when an
-            # automatic retry remains. Not counted as the once-per-week delay alert.
-            sent = alert(
-                Top5DelayNotice(
-                    week_start, attempts, error, finished_at,
-                    kind="models_failed", next_retry_at=next_retry,
-                )
-            )
-            if not sent:
-                logger.warning("TOP 5 model failure alert for %s was not delivered", week_start)
-        else:
-            sent = None
+        sent = (
+            _send_alert(session_factory, week_start, error, finished_at, alert)
+            if needs_alert
+            else None
+        )
         return AttemptOutcome(
             "failed", week_start, attempt_id, message=error, api_requests=requests, alert_sent=sent
         )
-
-
-def retry_due(session: Session, now: datetime) -> bool:
-    """00:05 precheck: run only when the 00:00 attempt failed (or never ran)."""
-    week = session.get(Top5Week, current_kst_week(now).start)
-    return week is None or week.status in ("retry_scheduled", "running")
 
 
 def first_attempt_due(session: Session, now: datetime) -> bool:
@@ -886,22 +995,24 @@ def first_attempt_due(session: Session, now: datetime) -> bool:
 
 def _recovery_weeks(session: Session, now: datetime) -> list[date]:
     rows = session.execute(
-        select(Top5Week.week_start, Top5Week.status, Top5Attempt.deadline_at)
+        select(
+            Top5Week.week_start, Top5Week.status, Top5Week.next_retry_at, Top5Attempt.deadline_at
+        )
         .outerjoin(Top5Attempt, Top5Attempt.id == Top5Week.current_attempt_id)
-        .where(Top5Week.status.in_(("running", "retry_scheduled")))
+        .where(Top5Week.status.in_(("running", "delayed")))
     ).all()
     return [
-        week for week, status, deadline in rows
+        week for week, status, due, deadline in rows
         if (status == "running" and (deadline is None or deadline <= now))
-        or (status == "retry_scheduled" and now > retry_slot(week) + RETRY_GRACE)
+        or (due is not None and due <= now)  # a held delay notice is due (any owner state)
     ]
 
 
 def _missed_week(session: Session, now: datetime) -> date | None:
-    """The current week when neither automatic slot ran at all (e.g. the service was down at
-    00:00 and 00:05 KST): once the retry slot and its grace have passed it is a delay."""
+    """The current week when the automatic attempt never started (e.g. the service was down
+    from 00:00 KST): once the 00:20 window and its grace have passed it is a delay."""
     current = current_kst_week(now).start
-    if now <= retry_slot(current) + RETRY_GRACE or session.get(Top5Week, current) is not None:
+    if now < window_end(current) + WINDOW_GRACE or session.get(Top5Week, current) is not None:
         return None
     return current
 
@@ -918,9 +1029,9 @@ def reconcile_attempts(
 ) -> int:
     """Repair interrupted attempts under their week lock, without another model call.
 
-    A first failure can still use the fixed 00:05 slot. If the service missed that slot
-    (including its normal one-minute grace), stop automation and ask for manual recovery.
-    A current week where no automatic attempt ran at all is handled the same way.
+    An expired running attempt is recorded as failed; a failed week's held delay notice is
+    shown at Monday 00:20 KST with one alert. A current week whose automatic attempt never
+    started is delayed from 00:21 KST (window end + one-minute grace).
     An old week is closed internally without publishing or alerting for the new week.
     """
     clock = clock or (lambda: datetime.now(UTC))
@@ -942,7 +1053,7 @@ def reconcile_attempts(
                             Top5Week(
                                 week_start=missed, status="delayed", auto_attempts=0,
                                 needs_manual=True, updated_at=now,
-                                last_error="Automatic attempts at 00:00 and 00:05 KST did not run",
+                                last_error="Automatic attempt in 00:00-00:20 KST did not run",
                             )
                         )
                         session.flush()
@@ -953,7 +1064,7 @@ def reconcile_attempts(
             if send:
                 _send_alert(
                     session_factory, missed,
-                    "Automatic attempts at 00:00 and 00:05 KST did not run", clock(), alert,
+                    "Automatic attempt in 00:00-00:20 KST did not run", clock(), alert,
                 )
     for week_start in targets:
         with week_lock(engine, week_start) as acquired:
@@ -961,30 +1072,34 @@ def reconcile_attempts(
                 continue  # a live owner still holds the lock
             with _bounded_session(session_factory, clock) as session:
                 week = session.get(Top5Week, week_start, with_for_update=True)
-                if week is None or week.status not in ("running", "retry_scheduled"):
+                if week is None or week.status not in ("running", "delayed"):
                     continue
-                attempt = session.get(Top5Attempt, week.current_attempt_id, with_for_update=True)
                 now = clock()
-                send = False
                 if week.status == "running":
-                    if attempt is None or attempt.deadline_at > now:
+                    attempt = session.get(
+                        Top5Attempt, week.current_attempt_id, with_for_update=True
+                    )
+                    if attempt is None:
                         continue
-                    previous = (
-                        "retry_scheduled" if attempt.trigger == "manual" and week.next_retry_at
-                        else None
-                    )
+                    if attempt.deadline_at > now:
+                        # The owner is gone before its deadline: still show a due held delay.
+                        if week.next_retry_at is None or week.next_retry_at > now:
+                            continue
+                        send = _publish_due_delay(session, week, now)
+                        error = week.last_error or "Automatic selection failed"
+                        session.commit()
+                        repaired += 1
+                        if send:
+                            _send_alert(session_factory, week_start, error, clock(), alert)
+                        continue
                     send = _fail(
-                        session, week, attempt, previous, "Attempt interrupted", now, timed_out=True
+                        session, week, attempt, "Attempt interrupted", now, timed_out=True
                     )
-                if week.status == "retry_scheduled" and now > retry_slot(week_start) + RETRY_GRACE:
-                    week.status = "delayed"
-                    week.next_retry_at = None
-                    week.needs_manual = week_start == current_kst_week(now).start
-                    week.last_error = "Automatic retry slot missed after interruption"
-                    week.updated_at = now
-                    if week.needs_manual:
-                        _publish_delay(session, week_start)
-                        send = week.alert_sent_at is None
+                else:
+                    # Decided again under the lock: a manual recovery may have published.
+                    send = _publish_due_delay(session, week, now)
+                    if week.next_retry_at is not None:
+                        continue
                 error = week.last_error or "Attempt interrupted"
                 session.commit()
             repaired += 1

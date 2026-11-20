@@ -1,5 +1,23 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-20 (금) — 04 경기 상세 비회원 전체 검수 개선(양쪽 타임라인·평가 로그인 안내·TOP 5 선정 구조 개편)
+
+브랜치 `feat/04-match-detail`(최신 `dev` d6941fd 병합 후 작업, 2026-11-19 시작)에 커밋·push 후 `dev` 병합. 기준: 기획 문서 PRD·기능 명세서(MAT·REV·TOP)·유저 플로우 최신 Fix(TOP 5 선정 구조는 Codex가 개정), Figma `408:16478`(비회원 평가 안내). 사용자 결정: 최근 5경기 흐름 양식은 06에서 진행, 로그인 안내는 Figma 그대로 두고 동작은 02, 하위 모델(`gemini-3.5-flash-lite`) 대체 폐지·`gemini-3.8-flash` 단일, 월요일 00:00~00:20 KST 자동 1회·시도 안 요청 최대 5회, 실패 시 업데이트 지연 안내 유지, 11/16 주 결과를 3.8 Flash 선정으로 교체. Codex 교차 검증 3회(1차 수정 필요 2 → 2차 선정 구조 변경분 수정 필요 4 + 기획 문서 개정 → 3차 N5 1건 보완 후 통과).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 타임라인 | `frontend/src/features/match/MatchRecords.tsx`(`TIMELINE_GRID` 홈 왼쪽·시간 가운데·원정 오른쪽, sr-only 팀명, 소속 미확인 가운데, 긴 이름 `overflow-wrap:anywhere`), `model.ts`(`eventText(event)` — 팀명 제거) | 두 팀 이벤트를 열로 구분, 임의 팀 배정 없음 |
+| 평가 로그인 안내 | `features/match/ReviewLoginNotice.tsx`(새, '로그인 후 경기 평가를 작성할 수 있습니다.' + primary 전체 폭 '로그인' 버튼, 동작 없음), `ReviewSection.tsx`(안내 삽입, 카드 안쪽 여백 16px) | Figma 최신 `408:16478`, 로그인 동작은 02에서 구현 |
+| TOP 5 이유 | `backend/app/services/top5_selection.py`(`PROMPT_VERSION` `2026-11-19.1`, `domesticPriority`·`formSummary`·`standing.of`, 압축 근거 'W 2-1 H'·'W 2-0', `FORBIDDEN_REASON_WORDS`로 '관심 팀' 등 거부) | 등급 나열 대신 순위·흐름·맞대결 근거의 이유 문장 |
+| TOP 5 선정 구조 | `top5_selection.py`(`window_end()` 00:20, 자동 시도 00:20−10초까지, `gemini_generate` 요청 최대 5회·요청당 600초·남은 180초 확인(첫 요청 포함)·빠른 일시 오류 30·60·120·120초 뒤 재요청·`LlmError.transient`, `_fail`·`_publish_due_delay` 00:20 보류 지연, `_wait_showing_held_delay`·`_show_held_delay`, `_recovery_weeks`·`_missed_week` 00:21:00), `providers/gemini.py`(`TRANSIENT_CODES`, `thinking_level`), `config.py`(`top5_llm_thinking_level` low, 시도 1200초, 하위 모델 설정 삭제), `notifications/discord.py`(지연 알림 한 종류), `sync/top5.py`(`top5_retry` 작업 삭제), `services/top_matches.py`(주석) | 3.8 Flash 503 과부하·504 시간 초과로 하위 모델 결과가 나가던 문제. 낮은 품질 대신 지연 안내 |
+| 이번 주 결과 교체 | 일회성 스크립트(저장소 밖)로 11/16 주 후보(시도 1641 근거)에 3.8 Flash 선정 → 버전 1291·시도 2664 공개 | 사용자 요청 |
+| 테스트 | `backend/tests/test_top5.py`(요청 규칙·창 경계·프롬프트·금지 표현·Gemini 래퍼), `test_top5_db.py`(00:20 보류·00:21 누락·실행 중 수동 복구 00:20 전환 3개 등), `test_review_regressions.py`, `frontend/tests/match-regressions.test.mjs` | Codex N1·N2·2차 4건·N5 회귀 |
+
+- **Codex 보완:** 1차 N1·N2. 2차: 00:20 전 실패는 즉시 지연이 아니라 지난주 결과 유지 후 00:20 공개, 첫 요청도 남은 180초 필요, 누락 주 00:21:00 경계, 가이드 이전 정책 '폐지' 표기, 기획 문서 개정(Codex). 3차 N5: 수동 복구 **시작**이 보류 지연을 지우던 문제 → 성공 때만 취소, 실행 중이면 주 잠금을 가진 실행 주체가 00:20에 지연 공개·알림 1회, 마감 전 죽은 실행은 정리 작업이 공개.
+- **실제 확인:** 3.8 Flash 실제 호출(성공 93~162초, 실패는 503 과부하·504 시간 초과 — 사용량 한도 아님), 11/16 주 교체 공개. 새 컵 7개 경기 상세 실측(기록 1회 호출 후 재호출 없음).
+- **제한:** 실제 월요일 00:00~00:20 경과는 다음 월요일(11/23) 확인 예정. 로그인 버튼 동작·회원 작성 폼은 02. 최근 5경기 흐름 양식은 06.
+- **검사:** ruff, 기본 pytest 324 통과/98 건너뜀, TOP 5 DB pytest 20 통과, alembic check 변경 없음, lint·tsc·프런트 테스트 59·build·`git diff --check` 통과.
+
 ## 2026-11-19 (목) — 03 경기 일정 비회원 전체 검수 개선(대회 21개·공통 경기일 기간·팀 보기 복원)
 
 브랜치 `feat/03-schedule`(최신 `dev` 359f2e9 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.13 Fix·기능 명세서 v1.13 Fix(SCH·CMP·NEWS·FAV 비회원, COM-003 대회명)·유저 플로우 v1.12 Fix, Figma `49:57`·`49:570`·`234:8881`·`234:9750`·`193:12311`·`193:12949`·`187:1946`·`308:4617`. 사용자 결정: 대회명은 DB `name_ko` 기준('리그 1' 유지), 21일 달력 폐기, 팀 선택 시 전체 대회. Codex 교차 검증 3회(1차 수정 필요 6·문서 1 → 2차 수정 필요 2·문서 1(00이 보완, 1차 D·I 포함) → 3차 잔여 N11~N13을 Codex가 보완 후 통과).

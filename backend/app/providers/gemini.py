@@ -5,8 +5,10 @@
   is never logged or included in an error.
 - Structured output: the answer must match a Pydantic model's JSON schema
   (`response_json_schema`), then it is validated again here.
-- One request per call: SDK retries are turned off because the selection has its own
-  fixed retry slot (00:05 KST); the request timeout is in milliseconds.
+- One request per call: SDK retries are turned off; the TOP 5 caller retries transient
+  errors itself inside the attempt (`LlmError.transient`). The timeout is in milliseconds.
+- Thinking can be limited (`thinking_level`, e.g. "low") to keep the answer within the
+  attempt's time limit; empty = the model's default.
 - Free tier: inputs may be used to improve Google products, so callers send public match
   data only. Quota errors (429) and refusals are failures like any other.
 """
@@ -20,8 +22,17 @@ from pydantic import BaseModel, SecretStr, ValidationError
 logger = logging.getLogger(__name__)
 
 
+# Server-side or transport problems worth another try in the same attempt (overloaded 503,
+# internal 500/502, deadline 504). Quota (429), bad requests and bad answers are not.
+TRANSIENT_CODES = frozenset({500, 502, 503, 504})
+
+
 class LlmError(Exception):
     """Safe to store: codes and types only, never the key or the raw answer."""
+
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
 
 
 def generate_structured[ModelT: BaseModel](
@@ -32,6 +43,7 @@ def generate_structured[ModelT: BaseModel](
     api_key: SecretStr,
     timeout_seconds: float,
     temperature: float = 0.2,
+    thinking_level: str = "",
 ) -> tuple[ModelT, dict]:
     """Return the validated answer and its raw JSON (kept with the attempt for review)."""
     key = api_key.get_secret_value()
@@ -50,12 +62,20 @@ def generate_structured[ModelT: BaseModel](
                     response_mime_type="application/json",
                     response_json_schema=schema.model_json_schema(),
                     temperature=temperature,
+                    thinking_config=types.ThinkingConfig(
+                        thinking_level=types.ThinkingLevel(thinking_level.upper())
+                    )
+                    if thinking_level
+                    else None,
                 ),
             )
     except errors.APIError as exc:
-        raise LlmError(f"Gemini API error {exc.code} {exc.status or ''}".strip()) from None
+        raise LlmError(
+            f"Gemini API error {exc.code} {exc.status or ''}".strip(),
+            transient=exc.code in TRANSIENT_CODES,
+        ) from None
     except Exception as exc:  # noqa: BLE001 - network/timeout errors from the SDK's transport
-        raise LlmError(f"Gemini request failed: {type(exc).__name__}") from None
+        raise LlmError(f"Gemini request failed: {type(exc).__name__}", transient=True) from None
     text = response.text
     if not text:
         reason = None
