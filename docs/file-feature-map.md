@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-20 · 05 지난 경기 비회원 전체 검수 개선(Codex 교차 검증 통과·사용자 디자인 수정 반영·`dev` 병합):** 프런트 `components/ui/Pagination.tsx`(Figma `530:21586`·`530:21659` `< 1 2 3 … 420 >` 한 줄 — `pageItems(page, pages, numbers)`·`numbersFor(width)`, 줄 폭 `ResizeObserver` 측정, 옛 `windowOf`·`edge` 삭제, 지난 경기·팀 탐색 공통), `components/common/CompetitionFilter.tsx`(`pickerName` — 클럽 월드컵 연도는 개최 시즌 `available`일 때만), `tests/results.test.mjs`(페이지 항목·폭 계산·렌더, 클럽 월드컵 연도). 백엔드 변경 없음.
+
 **2026-11-20 · 04 경기 상세 비회원 전체 검수 개선(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `services/top5_selection.py`(`PROMPT_VERSION` `2026-11-19.1`·`domesticPriority`·`formSummary`·금지 표현, `window_end()` 월 00:20 KST, `gemini_generate` `gemini-3.8-flash` 단일·요청 최대 5회·요청당 600초·남은 180초 확인, `_fail`·`_publish_due_delay` 00:20 보류 지연(수동 복구 성공 시에만 취소), `_wait_showing_held_delay`·`_show_held_delay`(실행 중 00:20 전환), `_recovery_weeks`·`_missed_week`(00:21:00) — 하위 모델 대체·`AllModelsFailed`·`retry_due` 삭제), `providers/gemini.py`(`LlmError.transient`·`thinking_level`), `config.py`(`top5_llm_thinking_level`, 시도 1200초, `top5_llm_fallback_model` 삭제), `notifications/discord.py`(지연 알림 한 종류, `kind`·`next_retry_at` 삭제), `sync/top5.py`(`top5_retry` 삭제), `services/top_matches.py`(주석), 테스트 `test_top5.py`·`test_top5_db.py`·`test_review_regressions.py`. 프런트 `features/match/MatchRecords.tsx`(양쪽 타임라인 `TIMELINE_GRID`)·`model.ts`(`eventText(event)`)·`ReviewLoginNotice.tsx`(새, Figma `408:16478` 비회원 안내, 동작은 02)·`ReviewSection.tsx`, `tests/match-regressions.test.mjs`. 아래 표의 `top5_selection.py`·`config.py`·`discord.py` 행 중 하위 모델·00:05 재시도·240초 내용은 이 변경이 우선한다.
 
 **2026-11-19 · 03 경기 일정 비회원 전체 검수 개선(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `migrations/versions/20261119_0017_competition_groups.py`(새 — `FIFA` 그룹, downgrade는 FIFA 저장 경기가 있으면 중단)·`seed/competitions.py`(21개 대회, 새 7개 `name_ko`)·`models/reference.py`·`sync/reference.py`·`services/fixtures.py`(공통 경기일 기간 `schedule_period`, `overlaps(..., stored)`·`stored_seasons`, `covered`, `sync_state(window)`의 `relevant_competition_ids`·`all_failed`, `fixture_availability`)·`sync/fixtures.py`·`api/routes/schedule.py`(`/fixtures/availability`, 503 조건)·`schemas/schedule.py`, 테스트 3개. 프런트 `features/schedule/`(`ScheduleSection`·`DateBar`·`queries.ts`·`useScheduleParams.ts`), `components/common/CompetitionFilter.tsx`·`NewsCard.tsx`, `components/ui/Dialog.tsx`(`scrollArea`), `components/layout/StickyPanel.tsx`, `app/page.tsx`(1280px 두 열/미만 단일 열), `lib/format/kst.ts`·`match.ts`, `lib/api`(쿼리 키·생성 타입), `tests/match-regressions.test.mjs`.
@@ -208,7 +210,7 @@
 | 파일 | 역할 | 상태 |
 | --- | --- | --- |
 | `package.json` | 스크립트(`dev`·`build`·`lint`·`test`(04, Node 테스트 실행기)·`gen:api`), 의존성(Next 16.4.3, React 19.3.0, TanStack Query 5.105.0, openapi-typescript 7.13.0) | 완료 |
-| `tests/results.test.mjs` | 05 테스트 7개(시즌 변경·팀 해제·초기화 URL, 미지원 시즌, 잘못된 팀·대회·페이지, 페이지 분할 번호, 시즌 드롭다운 트리거·옵션 '2025-26 시즌' 표기, 공통 관심 팀 버튼 줄) | 완료(05) |
+| `tests/results.test.mjs` | 05 테스트 9개(시즌 변경·팀 해제·초기화 URL, 미지원 시즌, 잘못된 팀·대회·페이지, 페이지 분할 항목(1·마지막 고정·…)·폭별 번호 수·렌더(화살표 비활성·현재 페이지), 클럽 월드컵 연도는 개최 시즌만, 시즌 드롭다운 트리거·옵션 '2025-26 시즌' 표기, 공통 관심 팀 버튼 줄) | 완료(05) |
 | `tests/standings.test.mjs` | 06 URL 기본값·시즌/리그 변경 시 유형 유지·유형은 replace, 미지원 리그·시즌·유형, 표기 규칙, `dataStatus` — 0건 뒤 갱신 실패는 partial, 메인 칩 'BUN', `DataState` `partialAction` 마크업; 06 개선: UEFA 대회·단계 URL(단계 기본·대회 변경 시 단계 삭제), `leagueZone`(리그별 강등·승강 PO, 종료 후 결과), `phaseBands`, 차전 표기 `legRows` |
 | `tests/teams.test.mjs` | 07 테스트 7개(URL 기본값·리그/검색 변경 시 첫 페이지·검색마다 기록 1단계, 잘못된 리그·페이지·검색어·팀(32비트 상한), 고른 팀 조건(리그·단어 대체), `FavoriteToggle` 5개 꽉 참 마크업, 다른 탭 선저장 시 저장소 알림, `DataState` `emptyAction` 마크업) |
 | `tests/team-detail.test.mjs` | 08 테스트(포지션순 기본 정렬, 누락값 두 방향 맨 뒤·같은 선수 집합, 정렬 전환, '—' 표시, 시즌 기록 행, 이적 유형 문구(금액은 완전 이적), 반기 기본값·시작 전 반기 대체, 경기장 표기) |
@@ -241,7 +243,7 @@
 | --- | --- | --- |
 | `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, primary·secondary·ghost | 완료 |
 | `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning·error(04, 최근 흐름 '패'), small 12px·caption 11px) | 완료 |
-| `Pagination.tsx` | 페이지 분할(Figma 53:926: 이전·번호 3개·다음 44px, 640px 이상 첫·마지막 번호와 …) | 완료(05) |
+| `Pagination.tsx` | 페이지 분할(Figma 530:21586·530:21659, 2026-11-20): 한 줄 `< 1 2 3 … 420 >` — 테두리 없는 44px 화살표(양 끝 비활성·35%), 1·마지막 번호 고정, 사이는 현재 페이지 주변 번호와 '…', 번호 수는 줄 폭으로 3~9개(`numbersFor`), 카드 좌우 여백으로 12px씩(`-mx-3`), `aria-current`. 지난 경기·팀 탐색 공통 | 완료(05) |
 | `Tabs.tsx` | 탭(Figma Tab navigation: 44px·선택 굵은 파랑+밑줄·가로 스크롤, ARIA tabs·방향키/Home/End), `tabId`·`tabPanelId` | 완료(04, 06: `value` null = 선택 없음·첫 탭 Tab 순서, 스크롤 막대 숨김, 08: 항목 `disabled`(흐리게·클릭·방향키 건너뜀·`aria-disabled`)·오른쪽 `trailing` 문구) |
 | `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백, 03: `closeButton={false}` 머리말 X 없음·`scrollArea` 내용이 스크롤 영역을 정함), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, 닫힘 전환 동안 내용 유지·`inert`·늦은 close 이벤트 가드(01, 2026-11-10), `BottomSheet` | 완료 |
 | `chip.tsx` | `chipClass()` 필터 칩(관심 팀·뉴스 분류·리그, Figma 49:171/49:173), `<ChipLabel>`(선택 시 굵기가 바뀌어도 폭 고정 — 칩 글자를 감쌈) | 완료 |
@@ -258,7 +260,7 @@
 | `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지, 고정 크기 | 경기 카드·팀 검색 | 완료 |
 | `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크. 01(2026-11-19): 공통 부품 `useMatchScore`(상태 확인 중·—)·`MatchStatus`(배지 + `statusNotes`, `end` 오른쪽 정렬)·`MatchTeams`(이름·엠블럼·스코어·PK, 긴 한 단어는 칸 안 줄바꿈) 분리 — TOP 5 목록도 사용 | 일정·관심 팀(04·05·08 재사용), `Top5List` | 완료 |
 | `components/common/MatchStatusBadge.tsx` | 상태 뱃지(진행 중 `63′`·예정/종료 회색·변경 주황) | `MatchCard`, TOP 5 | 완료 |
-| `components/common/CompetitionFilter.tsx` | 대회 단일 버튼 + 선택창(체크 초안·적용·취소·'전체 대회 보기'·0개 적용 불가), 데스크톱 560px·모바일 시트, 05: `season`(그 시즌 데이터 없음 표기) | 메인·지난 경기 | 완료 |
+| `components/common/CompetitionFilter.tsx` | 대회 단일 버튼 + 선택창(체크 초안·적용·취소·'전체 대회 보기'·0개 적용 불가), 데스크톱 560px·모바일 시트, 05: `season`(그 시즌 데이터 없음 표기, 클럽 월드컵은 개최 시즌만 목록에 두고 연도도 그때만 'FIFA 클럽 월드컵 2025') | 메인·지난 경기 | 완료 |
 | `components/common/TeamSearch.tsx` | 팀 검색 combobox(별칭·여러 후보·일치 없음), ×·전체 삭제 시 선택 해제, 05: `season`(선택 시즌 후보), 라벨 '팀 일정 검색'·`description` 보조 문구 묶음을 메인·지난 경기가 함께 씀(05 개선에서 `placeholder` 옵션 삭제), 07 개선: `label`(팀 탐색 '팀 검색')·`defaultText`(단어 검색 표시)·`onSubmitText`(후보 없는 Enter = 단어 검색, 고른 팀 이름 그대로면 무시) | 메인·지난 경기·메인 관심 팀 '팀 추가'·팀 탐색 | 완료 |
 | `components/common/SeasonSelect.tsx` | 시즌 드롭다운(Figma 93:3198·65:1616, 트리거·옵션 '2025-26 시즌' 표기, listbox 팝오버·키보드·포커스 복귀, 미지원 시즌은 '시즌 선택') | 지난 경기·리그 순위 | 완료(05, 2026-11-16 표기 개선) |
 | `components/common/NewsCard.tsx` | 뉴스 카드(분류·제목·설명·도메인·상대 시각·원문 보기), `NEWS_BADGE_LABELS` | `MainNews`(08 재사용) | 완료(02가 북마크 버튼 추가) |
