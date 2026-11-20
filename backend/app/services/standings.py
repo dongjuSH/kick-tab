@@ -61,6 +61,9 @@ TOP_LISTS: dict[str, tuple[str, tuple[str, str]]] = {
     "red": ("/players/topredcards", ("cards", "red")),
 }
 GOALKEEPER = "Goalkeeper"
+# Failure text of a unit refused for a teamless line that is not a stated outfield one
+# (`parse_player_pages`); `due_leagues` waits for a new result before asking again.
+TEAMLESS_REFUSAL = "without team"
 # Provider positions that are never a goalkeeper (/players `games.position`; stored lines
 # use both "Attacker" and "Forward" — 2026-11-20).
 OUTFIELD_POSITIONS = frozenset({"Defender", "Midfielder", "Attacker", "Forward"})
@@ -605,7 +608,11 @@ def due_leagues(
     kept, not re-collected: only when it was never stored. A recent failure waits for the
     next slot, so a broken provider is not asked every minute. UEFA player lists and records
     (06 개선 2026-11-20, about 90-110 /players pages a competition) are asked again only
-    after a UEFA result since the last success — UEFA plays two or three days a week."""
+    after a UEFA result since the last success — UEFA plays two or three days a week. A UEFA
+    player unit refused for a teamless goalkeeper or unknown-position line (`TEAMLESS_REFUSAL`)
+    waits for the next UEFA result after that refusal: the same provider answer would be
+    refused again, and each try costs 60-110 requests. Other failures (network, quota, a cut
+    answer) are tried again in the next slot as before."""
     due = []
     for league in leagues:
         state = session.get(LeagueSync, (league, season, kind))
@@ -613,6 +620,15 @@ def due_leagues(
         failed = state.failed_at if state else None
         last_try = max((t for t in (synced, failed) if t), default=None)
         if last_try is not None and now - last_try < HOURLY:
+            continue
+        if (
+            league in UEFA_IDS
+            and kind != "standings"
+            and failed is not None
+            and (synced is None or failed > synced)
+            and TEAMLESS_REFUSAL in (state.failure or "")
+            and not _result_since(session, league, season, failed)
+        ):
             continue
         if synced is None:
             due.append(league)
