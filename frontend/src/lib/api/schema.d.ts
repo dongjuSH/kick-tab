@@ -434,10 +434,11 @@ export interface paths {
         };
         /**
          * Read Team Squad
-         * @description TEAM-002 (2026-11-18): the current squad, one row per player, with the sum of the
-         *     player's lines for this team this season in the record competitions (five leagues + three
-         *     UEFA) and each line on its own. Missing values are null (shown as '—'), never 0; a played
-         *     record competition without collected lines makes the totals partial.
+         * @description TEAM-002: the current squad, one row per player, with the sum of the player's lines
+         *     for this team this season in the competitions held this season (`record_competitions`,
+         *     2026-11-20: domestic cups, super cups, UEFA and the Club World Cup included) and each line
+         *     on its own. Missing values are null (shown as '—'), never 0; a played competition without
+         *     collected lines makes the totals partial.
          */
         get: operations["read_team_squad_api_v1_teams__team_id__squad_get"];
         put?: never;
@@ -480,9 +481,10 @@ export interface paths {
         /**
          * Read Team Transfers
          * @description TEAM-006: arrivals and departures of one season in its two halves (by transfer date).
-         *     The provider's repeated entries are merged into one move (`merge_transfers`, D-08-6); the
-         *     moves that matter to this team are shown first (표시 기준 B) and every other move is kept
-         *     in the "other" lists. A half that has not begun is `not_started`.
+         *     The provider's repeated entries are merged into one move (`merge_transfers`, D-08-6); a
+         *     player's moves in one half are one row (`group_moves`). Rows with first-team evidence or
+         *     an undecided move are shown first (`judge_move`, TEAM-006 rule 6); rows confirmed without
+         *     appearances are kept in the "other" lists. A half that has not begun is `not_started`.
          */
         get: operations["read_team_transfers_api_v1_teams__team_id__transfers_get"];
         put?: never;
@@ -1381,8 +1383,9 @@ export interface components {
         };
         /**
          * SquadTotals
-         * @description Sum of the player's lines for this team this season in the record competitions
-         *     (five leagues + three UEFA). null when a line lacks the value (never 0); no combined
+         * @description Sum of the player's lines for this team this season in the competitions held this
+         *     season (leagues, domestic cups, super cups, UEFA, Club World Cup). null when a line lacks
+         *     the value (never 0); no combined
          *     rating exists.
          */
         SquadTotals: {
@@ -1789,6 +1792,19 @@ export interface components {
             /** Name */
             name: string | null;
         };
+        /**
+         * TransferGroup
+         * @description One player's moves within one half as one row (TEAM-006 추가 검수), oldest first. Each
+         *     move keeps its own date, direction, club and type; moves are never merged here.
+         */
+        TransferGroup: {
+            /** Playerid */
+            playerId: number;
+            /** Playername */
+            playerName: string;
+            /** Moves */
+            moves: components["schemas"]["TransferItem"][];
+        };
         /** TransferHalf */
         TransferHalf: {
             /**
@@ -1806,13 +1822,13 @@ export interface components {
              */
             state: "open" | "not_started";
             /** Arrivals */
-            arrivals: components["schemas"]["TransferItem"][];
+            arrivals: components["schemas"]["TransferGroup"][];
             /** Departures */
-            departures: components["schemas"]["TransferItem"][];
+            departures: components["schemas"]["TransferGroup"][];
             /** Otherarrivals */
-            otherArrivals: components["schemas"]["TransferItem"][];
+            otherArrivals: components["schemas"]["TransferGroup"][];
             /** Otherdepartures */
-            otherDepartures: components["schemas"]["TransferItem"][];
+            otherDepartures: components["schemas"]["TransferGroup"][];
         };
         /** TransferItem */
         TransferItem: {
@@ -1821,10 +1837,11 @@ export interface components {
              * Format: date
              */
             transferDate: string;
-            /** Playerid */
-            playerId: number;
-            /** Playername */
-            playerName: string;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "in" | "out";
             counterpart: components["schemas"]["TransferCounterpart"];
             /** Type */
             type: string | null;

@@ -1,5 +1,24 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-20 (금) — 08 팀 상세 비회원 전체 검수 개선
+
+브랜치 `feat/08-team-detail`(최신 `dev` a7ef699 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.14 Fix, 기능 명세서 v1.14 Fix(TEAM-002 규칙 1·6·7, TEAM-006 규칙 1~6과 추가 검수), 유저 플로우 v1.13 Fix, Figma 52:1254·58:738·308:4617. 사용자 결정: 이적료·원화 환산 제외(D-08-10), 최근 5경기는 06 범위. Codex 교차 검증 2회(1차 중요 3·경미 2 → 보완 후 2차 통과).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 선수단 합계 범위 | `services/team_detail.py`(`record_competitions` — 활성 대회 중 그 시즌 `no_data` 아닌 것, `parse_team_players(…, competitions)`, `missing_record_competitions`), 삭제 `RECORD_COMPETITIONS` | TEAM-002 규칙 1·7: 국내 컵·슈퍼컵·개최 클럽 월드컵 포함, 친선·미개최 제외, 제외용 하드코딩 없음 |
+| 출전 근거 수집 | `sync/team_detail.py`(`team_player_stats` 과거 2시즌 1회·`season=` 수동 경로, 새 작업 `transfer_player_checks` 00:40 KST·`PLAYER_CHECKS_PER_RUN`, `_run_units`의 실패 기록 인자), `models/team_detail.py`(`PlayerSeasonCheck`·`PlayerClubSeason`), `migrations/versions/20261120_0018_player_season_checks.py`(새) | 2024 기록을 2025-26 이적 근거로, 새 영입의 이전 팀 1군 출전을 `/players?id=&season=`로 선수·시즌당 1회 |
+| 이적 판정 | `services/team_detail.py`(`NOT_FIRST_TEAM`·`is_first_team`·`parse_player_season`·`evidence_seasons`·`check_season`·`move_evidence`·`is_loan_return`·`judge_move`·`pending_checks`), 삭제 `GROUP_TYPES`·`YOUTH_SIDE`·`TransferContext`·`shown_first` | TEAM-006 규칙 6: 출전 근거로 판정, 근거 부족은 숨기지 않음, 임대 복귀는 이 팀 출전만(Codex '유지 권고') |
+| 같은 선수 묶음 | `services/team_detail.py`(`MoveGroup`·`group_moves`), `schemas/team_detail.py`(`TransferGroup`, `TransferItem.direction`), `api/routes/teams.py`, 프런트 `SeasonRecords.tsx`(묶음 줄), `lib/api`(타입·생성 타입) | TEAM-006 추가 검수: 이동은 그대로 보존하고 한 줄로 표시 |
+| Codex 1차 보완 | `move_evidence`·`judge_move`(`appearances_unknown`), `parse_player_season`(양수 없음 + 빠진 값 = 미확인, 구단·대회 없는 줄은 응답 거부), 프런트 `types.ts`(미사용 `TransferItem` 별칭 삭제), `guide.md`(다음 마이그레이션 0019) | N1~N3 출전 수 미제공을 미출전으로 접던 결함, N4·N5 |
+| 화면 문구 | `SquadTable.tsx`(합계 범위 안내·주석) | 컵·슈퍼컵·클럽 월드컵 포함 |
+| 테스트 | `tests/test_team_detail.py`(대회 마스터 선별, 판정 규칙 4종, 임대 복귀, 1군 기준, NULL 조합, 구단·대회 없는 줄, 묶음), `tests/test_team_detail_db.py`(합계 범위, Akanji 한 줄, 접힘 = not_played만, 영입 확인 작업·재시도, NULL 근거 방출, 작업 단위) | 새 규칙 회귀 |
+| 문서 | `docs/guide.md`(첫 단락·§3 08·§3.1·§6.4·§6.5·D-08-6a·§11), `docs/file-feature-map.md`, 이 문서 | 사용자 요청으로 세 문서 최신화 |
+
+실제 외부 호출(2026-11-20, 이 작업): 응답 표본 2, 선수 기록 재수집 2026 193·2025 247, 2024 316, 영입 이전 팀 확인 1,617(서버 시작 시 자동 실행 117 + 1,500 — 수동 실행과 겹쳐 분당 제한 오류 → 재실행), Codex 1차 보완 후 재확인 222 = 2,597회(그날 전체 약 4,840/7,500). 남은 확인 대상 0, 이후 새 영입만. 저장: 선수 기록 2024 10,066·2025 8,207·2026 5,384줄. 8개 팀(맨시티·레알·맨유·바이에른·PSG·유벤투스·아스널·바르셀로나)×2025·2026 전후: 바로 보이는 514이동 → 400줄, 같은 선수 중복 줄 109 → 0, 출전 0 노출 150 → 73, 접힘 378 → 258, 근거 부족 78. 주요: 로드리·베르나르두 실바 방출, 엘리엇 앤더슨 영입, 아칸지 한 줄, 워커·모드리치(2024 근거) 표시. 선수단 96팀 합계 = 대회별 합(불일치 0), 라리가 11팀 코파 델 레이 부분 집계.
+
+검수: 백엔드 ruff·pytest 333(DB 포함 439)·alembic check(head 0018), 프런트 lint·`tsc --noEmit`·npm test 62·Turbopack 빌드. 브라우저 320·375·640(1280의 200%)·768·1024·1280·1920 이적 영역·모바일 기록 탭 가로 넘침 0, 시즌·반기·URL half·뒤로 가기, 콘솔 오류 0.
+
 ## 2026-11-20 (금) — 06 리그 순위 비회원 전체 검수 개선
 
 브랜치 `feat/06-standings`(최신 `dev` f211ab2 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD·기능 명세서(LEAG-001·002·004, TEAM-001 규칙 3, MAT-005 규칙 4, CMP) v1.14 Fix, 유저 플로우 v1.13 Fix, Figma `49:57`·`49:570`·`234:8881`·`234:9750`·`53:1353`·`53:2047`·`61:1653`·`61:2355`·`567:7275`. Codex 교차 검증 2회(1차 결함 2·개선 2 → 보완 후 통과). 마이그레이션 없음.

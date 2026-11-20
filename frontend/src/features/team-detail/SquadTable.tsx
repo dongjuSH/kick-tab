@@ -42,7 +42,8 @@ const COLUMNS: readonly { key: SortKey; label: string; className: string }[] = [
 /**
  * TEAM-002 (2026-11-18, Figma 52:1483 표 470:6667, 대회별 기록 469:6642, mobile 58:356): the
  * current squad, one row per player, with this season's total for this team in the supported
- * competitions (five leagues + Champions League · Europa League · Conference League). Every
+ * competitions held this season (2026-11-20: the shared master — leagues, domestic cups, super
+ * cups, UEFA, the Club World Cup when held; friendlies never). Every
  * column but the photo and the detail button sorts; position order by default. Ten rows,
  * then "선수 더 보기". A row's detail button opens its per-competition record; ratings exist
  * per competition only (no combined rating). Missing values are "—", never 0; a played
@@ -186,7 +187,7 @@ export function SquadTable({ teamId }: { teamId: number }) {
         )}
       </DataState>
       <p className="text-caption text-fg-muted">
-        제공되지 않은 기록은 —로 표시합니다. 국내 컵·클럽 월드컵·친선 경기는 합계에 넣지 않습니다.
+        제공되지 않은 기록은 —로 표시합니다. 국내 컵·슈퍼컵·클럽 월드컵을 포함하고 친선 경기는 넣지 않습니다.
       </p>
       {detail && (
         <Dialog

@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
 import { cx } from "@/components/ui/cx";
 import { dataStatus } from "@/features/standings/model";
-import type { TransferHalf, TransferItem } from "@/lib/api/types";
+import type { TransferGroup, TransferHalf } from "@/lib/api/types";
 import { MISSING, kstParts, kstTodayIso } from "@/lib/format/kst";
 import { competitionName } from "@/lib/format/match";
 import {
@@ -239,7 +239,10 @@ function Transfers({
   );
 }
 
-/** One half: "26-27 전반기 · 2026년 6~12월", the moves shown first, then "기타 이동 N건". */
+/**
+ * One half: "26-27 전반기 · 2026년 6~12월", the rows shown first, then "기타 이동 N건". A row is
+ * one player's moves in the half (TEAM-006 추가 검수), listed under where he ended up.
+ */
 function Half({ half, teamName }: { half: TransferHalf; teamName: string }) {
   const [othersOpen, setOthersOpen] = useState(false);
   const others = half.otherArrivals.length + half.otherDepartures.length;
@@ -255,8 +258,8 @@ function Half({ half, teamName }: { half: TransferHalf; teamName: string }) {
         <>
           {main > 0 ? (
             <>
-              <MoveList label="영입" items={half.arrivals} teamName={teamName} direction="in" />
-              <MoveList label="방출" items={half.departures} teamName={teamName} direction="out" />
+              <MoveList label="영입" groups={half.arrivals} teamName={teamName} />
+              <MoveList label="방출" groups={half.departures} teamName={teamName} />
             </>
           ) : (
             <p className="text-small text-fg-muted">주요 이적은 아직 없습니다.</p>
@@ -274,8 +277,8 @@ function Half({ half, teamName }: { half: TransferHalf; teamName: string }) {
               </button>
               {othersOpen && (
                 <>
-                  <MoveList label="영입" items={half.otherArrivals} teamName={teamName} direction="in" />
-                  <MoveList label="방출" items={half.otherDepartures} teamName={teamName} direction="out" />
+                  <MoveList label="영입" groups={half.otherArrivals} teamName={teamName} />
+                  <MoveList label="방출" groups={half.otherDepartures} teamName={teamName} />
                 </>
               )}
             </div>
@@ -286,40 +289,38 @@ function Half({ half, teamName }: { half: TransferHalf; teamName: string }) {
   );
 }
 
-function MoveList({
-  label,
-  items,
-  teamName,
-  direction,
-}: {
-  label: string;
-  items: TransferItem[];
-  teamName: string;
-  direction: "in" | "out";
-}) {
-  if (!items.length) return null;
+function MoveList({ label, groups, teamName }: { label: string; groups: TransferGroup[]; teamName: string }) {
+  if (!groups.length) return null;
   return (
     <div className="flex flex-col">
       <h3 className="text-label font-medium text-action">{label}</h3>
       <ul className="flex flex-col">
-        {items.map((item) => {
-          const other = item.counterpart.name ?? MISSING;
-          const route = direction === "in" ? `${other} → ${teamName}` : `${teamName} → ${other}`;
-          return (
-            <li
-              key={`${item.playerId}-${item.transferDate}-${item.counterpart.id ?? item.counterpart.name}`}
-              className="flex items-start justify-between gap-3 border-b border-line py-3 last:border-b-0"
-            >
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-body font-bold text-fg">{item.playerName}</span>
-                <span className="text-caption text-fg-muted">
-                  {dotDate(item.transferDate)} · {route}
-                </span>
-              </div>
-              <span className="shrink-0 text-label font-medium text-action">{transferTypeText(item.type)}</span>
-            </li>
-          );
-        })}
+        {groups.map((group) => (
+          <li
+            key={`${group.playerId}-${group.moves[0].transferDate}`}
+            className="flex flex-col gap-1 border-b border-line py-3 last:border-b-0"
+          >
+            <span className="text-body font-bold break-words text-fg">{group.playerName}</span>
+            {/* Every move keeps its own date, clubs and type, oldest first. */}
+            <ol className="flex flex-col gap-1">
+              {group.moves.map((move) => {
+                const other = move.counterpart.name ?? MISSING;
+                const route = move.direction === "in" ? `${other} → ${teamName}` : `${teamName} → ${other}`;
+                return (
+                  <li
+                    key={`${move.transferDate}-${move.direction}-${move.counterpart.id ?? move.counterpart.name}`}
+                    className="flex items-start justify-between gap-3"
+                  >
+                    <span className="min-w-0 text-caption break-words text-fg-muted">
+                      {dotDate(move.transferDate)} · {route}
+                    </span>
+                    <span className="shrink-0 text-label font-medium text-action">{transferTypeText(move.type)}</span>
+                  </li>
+                );
+              })}
+            </ol>
+          </li>
+        ))}
       </ul>
     </div>
   );

@@ -101,12 +101,15 @@ def test_area_endpoints_answer_codes(client):
     assert client.get("/api/v1/teams/3000000000").status_code == 422
 
 
-def test_squad_rows_are_one_per_player_with_this_teams_line(client):
+def test_squad_rows_are_one_per_player_with_this_teams_line(session, client):
     data = client.get(f"/api/v1/teams/{CITY}/squad").json()["data"]
     players = data["players"]
     ids = [p["player"]["id"] for p in players]
     assert len(ids) == len(set(ids))
-    record = {39, 140, 135, 78, 61, 2, 3, 848}
+    # TEAM-002 rules 1·7 (2026-11-20): the season's competition master — cups and super cups
+    # included, friendlies (667) and competitions not held that season never.
+    record = detail.record_competitions(session, 2026)
+    assert {45, 48, 528, 2}.issubset(record) and 15 not in record and 667 not in record
     for player in players:
         lines = player["competitions"]
         assert {line["competition"]["id"] for line in lines} <= record
@@ -215,13 +218,24 @@ def test_transfer_halves_and_the_not_started_second_half(client):
     assert (second["label"], second["period"]) == ("26-27 후반기", "2027년 1~5월")
     if date.today() < date(2027, 1, 1):
         assert second["state"] == "not_started" and not second["arrivals"]
-    moves = [*first["arrivals"], *first["departures"], *first["otherArrivals"],
-             *first["otherDepartures"]]
-    for item in moves:
-        assert "2026-06-01" <= item["transferDate"] <= "2026-12-31"
-    # One entry per move (D-08-6): Stones once, Akanji and Echeverri shown first.
-    assert [m["playerName"] for m in moves].count("J. Stones") == 1
-    shown = {m["playerName"] for m in [*first["arrivals"], *first["departures"]]}
+    rows = [*first["arrivals"], *first["departures"], *first["otherArrivals"],
+            *first["otherDepartures"]]
+    for row in rows:
+        for move in row["moves"]:
+            assert "2026-06-01" <= move["transferDate"] <= "2026-12-31"
+    # One row per player and half; D-08-6 still merges repeated entries (Stones: one move).
+    names = [r["playerName"] for r in rows]
+    assert len(names) == len(set(names))
+    stones = next(r for r in rows if r["playerName"] == "J. Stones")
+    assert len(stones["moves"]) == 1
+    # Akanji: back from loan and sold to Inter — one row, both moves kept, oldest first.
+    akanji = next(r for r in rows if r["playerName"] == "M. Akanji")
+    assert [(m["direction"], m["type"]) for m in akanji["moves"]] == [
+        ("in", "Return from loan"), ("out", "Transfer"),
+    ]
+    assert akanji in first["departures"]  # listed where he ended up
+    shown = {r["playerName"] for r in [*first["arrivals"], *first["departures"]]}
+    # Departures not in the squad stay shown (they played here); so does the new signing.
     assert {"M. Akanji", "C. Echeverri", "Rodri", "Bernardo Silva", "E. Anderson"} <= shown
     last = client.get(f"/api/v1/teams/{CITY}/transfers?season=2025").json()["data"]
     assert [h["state"] for h in last["halves"]] == ["open", "open"]
@@ -496,6 +510,84 @@ def test_shifted_player_pages_keep_the_stored_lines(session, monkeypatch):
     assert meta[1] is True  # shown as "refresh failed" on the squad
 
 
+def test_folded_rows_are_only_confirmed_non_appearances(session, client):
+    """TEAM-006 rule 6: a row goes under '기타 이동' only when every move is `not_played`;
+    undecided moves stay shown."""
+    for season in (2025, 2026):
+        rows = detail.merge_transfers(detail.read_transfers(session, CITY, season))
+        evidence = detail.move_evidence(session, CITY, season, rows)
+        for group in detail.group_moves(rows, evidence):
+            reasons = {detail.judge_move(m, evidence)[1] for m in group.moves}
+            assert group.shown == (reasons != {"not_played"})
+
+
+def test_counts_left_out_here_keep_a_departure_shown(session):
+    """Codex 1차 N1: with every count of a departing player left out (NULL), his move is not
+    a confirmed non-appearance — it stays shown as `appearances_unknown`."""
+    from app.models.team_detail import TeamPlayerStat
+
+    rows = detail.merge_transfers(detail.read_transfers(session, CITY, 2026))
+    rodri = next(r for r in rows if r.player_name == "Rodri" and r.direction == "out")
+    session.execute(
+        update(TeamPlayerStat)
+        .where(TeamPlayerStat.team_id == CITY, TeamPlayerStat.player_id == rodri.player_id)
+        .values(appearances=None)
+    )
+    evidence = detail.move_evidence(session, CITY, 2026, rows)
+    assert detail.judge_move(rodri, evidence) == (True, "appearances_unknown")
+
+
+def test_signing_checks_store_first_team_clubs_and_retry_failures(session, monkeypatch):
+    """transfer_player_checks: one /players?id=&season= per pending signing; youth lines are
+    not first-team; a failed answer is marked and asked again later."""
+    from app.models.team_detail import PlayerClubSeason, PlayerSeasonCheck
+    from app.sync import team_detail as job
+
+    session.execute(PlayerSeasonCheck.__table__.delete())
+    session.execute(PlayerClubSeason.__table__.delete())
+    pending = detail.pending_checks(session, [CITY])
+    assert pending
+    (good_player, good_season), (bad_player, bad_season) = pending[0], pending[1]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        player = int(request.url.params["id"])
+        if player == bad_player:
+            return httpx.Response(200, json={"errors": [], "paging": {"current": 1, "total": 1},
+                                             "response": [{"player": {"id": 1}, "statistics": []}]})
+        stats = [
+            {"team": {"id": 4242}, "league": {"name": "Eredivisie", "season": good_season},
+             "games": {"appearences": 20}},
+            {"team": {"id": 4243}, "league": {"name": "Premier League 2", "season": good_season},
+             "games": {"appearences": 9}},
+        ]
+        return httpx.Response(200, json={"errors": [], "paging": {"current": 1, "total": 1},
+                                         "response": [{"player": {"id": player},
+                                                       "statistics": stats}]})
+
+    def fake_client(self, **_):
+        client = ApiFootballClient(
+            SecretStr("test"), transport=httpx.MockTransport(handler),
+            limiter=MinuteRateLimiter(1000), budget=DailyBudget(1000),
+        )
+        self._clients.append(client)
+        return client
+
+    monkeypatch.setattr(JobContext, "api_football", fake_client)
+    ctx = JobContext(session=session, params={"team": CITY, "limit": "2"})
+    with pytest.raises(JobPartialFailure):
+        job.sync_transfer_player_checks(ctx)
+    assert ctx.api_requests == 2
+    good = session.get(PlayerSeasonCheck, (good_player, good_season))
+    assert good.checked_at is not None
+    clubs = {c.team_id: c.appearances for c in session.scalars(
+        select(PlayerClubSeason).where(PlayerClubSeason.player_id == good_player)
+    )}
+    assert clubs == {4242: 20}  # the youth side's Premier League 2 line is not first-team
+    bad = session.get(PlayerSeasonCheck, (bad_player, bad_season))
+    assert bad.checked_at is None and bad.failed_at is not None
+    assert (bad_player, bad_season) in detail.pending_checks(session, [CITY])  # asked again
+
+
 def test_player_record_units_current_daily_and_past_until_stored(session):
     """team_player_stats: the current season once a KST day; the past season only until it
     has been stored once (then fixed)."""
@@ -508,10 +600,18 @@ def test_player_record_units_current_daily_and_past_until_stored(session):
     )
     now = datetime(2026, 11, 18, 7, tzinfo=UTC)  # 16:00 KST
     labels = [u[3] for u in job._player_units(session, {"team": CITY}, now)]
-    assert labels == [f"player_stats:{CITY}", f"player_stats:{CITY}:2025"]
-    detail.mark_success(session, CITY, 2026, "player_stats", now, 1)
-    detail.mark_success(session, CITY, 2025, "player_stats", now, 1)
+    # The season before last (2024) is kept once too, as move evidence (2026-11-20).
+    assert labels == [
+        f"player_stats:{CITY}", f"player_stats:{CITY}:2025", f"player_stats:{CITY}:2024",
+    ]
+    for season in (2026, 2025, 2024):
+        detail.mark_success(session, CITY, season, "player_stats", now, 1)
     assert job._player_units(session, {"team": CITY}, now) == []
+    # season= with force=1 fetches a stored past season again (competition scope change).
+    forced = job._player_units(session, {"team": CITY, "season": 2025, "force": "1"}, now)
+    assert [u[3] for u in forced] == [f"player_stats:{CITY}:2025"]
+    with pytest.raises(ValueError):
+        job._player_units(session, {"team": CITY, "season": 2023}, now)
     tomorrow = now + timedelta(days=1)
     labels = [u[3] for u in job._player_units(session, {"team": CITY}, tomorrow)]
     assert labels == [f"player_stats:{CITY}"]  # the stored past season is not asked again

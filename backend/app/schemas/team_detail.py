@@ -108,8 +108,9 @@ class SquadPlayerRef(ApiModel):
 
 
 class SquadTotals(ApiModel):
-    """Sum of the player's lines for this team this season in the record competitions
-    (five leagues + three UEFA). null when a line lacks the value (never 0); no combined
+    """Sum of the player's lines for this team this season in the competitions held this
+    season (leagues, domestic cups, super cups, UEFA, Club World Cup). null when a line lacks
+    the value (never 0); no combined
     rating exists."""
 
     appearances: int | None
@@ -135,7 +136,7 @@ class SquadPlayer(ApiModel):
     nationality: str | None
     # The country's flag (null = no flag known or image rights not cleared: text only).
     flag_url: str | None
-    # null = no line for this team this season in the record competitions.
+    # null = no line for this team this season in the competitions held this season.
     totals: SquadTotals | None
     competitions: list[SquadCompetitionLine]
 
@@ -199,12 +200,21 @@ class TransferCounterpart(ApiModel):
 
 class TransferItem(ApiModel):
     transfer_date: date
-    player_id: int
-    player_name: str
-    # Arrivals: the club the player came from. Departures: the club the player went to.
+    # in = the player joined this team (counterpart = the club he came from),
+    # out = the player left (counterpart = the club he went to).
+    direction: Literal["in", "out"]
     counterpart: TransferCounterpart
     # Provider type text ("Loan", "Free", "€ 10M"); null = not given.
     type: str | None
+
+
+class TransferGroup(ApiModel):
+    """One player's moves within one half as one row (TEAM-006 추가 검수), oldest first. Each
+    move keeps its own date, direction, club and type; moves are never merged here."""
+
+    player_id: int
+    player_name: str
+    moves: list[TransferItem]
 
 
 class TransferHalf(ApiModel):
@@ -215,11 +225,13 @@ class TransferHalf(ApiModel):
     period: str
     # not_started = the half has not begun (its tab is disabled).
     state: Literal["open", "not_started"]
-    # Shown first (표시 기준 B); every other move is in the "other" lists ("기타 이동").
-    arrivals: list[TransferItem]
-    departures: list[TransferItem]
-    other_arrivals: list[TransferItem]
-    other_departures: list[TransferItem]
+    # Rows by the player's last move in the half (arrival / departure). Shown first when
+    # any move has evidence or cannot be decided (TEAM-006 rule 6); the "other" lists
+    # ("기타 이동") hold rows whose every move is confirmed without appearances.
+    arrivals: list[TransferGroup]
+    departures: list[TransferGroup]
+    other_arrivals: list[TransferGroup]
+    other_departures: list[TransferGroup]
 
 
 class TeamTransfers(ApiModel):
