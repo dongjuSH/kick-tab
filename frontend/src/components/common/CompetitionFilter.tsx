@@ -34,7 +34,9 @@ function seasonInfo(competition: CompetitionItem, season?: number) {
 function pickerName(competition: CompetitionItem, season?: number) {
   const name = competitionName(competition);
   const held = seasonInfo(competition, season);
-  return competition.group === "FIFA" && held ? `${name} ${held.season}` : name;
+  // Only a tournament that was held carries its year: a selection kept into a season without
+  // one (2026-27) must not read as a "2026" edition (HIST-001, 05 2026-11-20).
+  return competition.group === "FIFA" && held?.availability === "available" ? `${name} ${held.season}` : name;
 }
 
 /** "전체 대회", "FA컵", "FA컵 외 1개" (first selected in list order + the rest). */
