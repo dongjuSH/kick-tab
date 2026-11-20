@@ -572,6 +572,32 @@ def test_uefa_player_lists_wait_for_a_uefa_result(session):
         assert (2 in result) is due and 39 in result
 
 
+def test_a_teamless_refusal_waits_for_the_next_uefa_result(session):
+    """A UEFA player unit refused for a teamless goalkeeper / unknown-position line is not
+    asked again (60-110 requests) until a UEFA result after that refusal; other failures are
+    tried again in the next daily slot."""
+    from app.services.standings import due_leagues
+
+    season = settings.current_season
+    latest = session.scalar(select(func.max(Fixture.kickoff_at)).where(
+        Fixture.competition_id == 2, Fixture.season == season, Fixture.status == "finished"))
+    row = session.get(LeagueSync, (2, season, "player_stats"))
+    row.synced_at = latest - timedelta(days=2)  # a result since the last success: due
+    cases = (
+        (latest + timedelta(hours=4), "IncompleteData: players: player 7 without team "
+                                      "(position None)", False),
+        (latest + timedelta(hours=4), "ApiFootballUnavailable", True),
+        (latest + timedelta(hours=2), "IncompleteData: players: player 7 without team "
+                                      "(position Goalkeeper)", True),  # result after it
+    )
+    for failed, reason, due in cases:
+        row.failed_at, row.failure = failed, reason
+        session.flush()
+        result = due_leagues(session, season, "player_stats", failed + timedelta(days=1),
+                             matchday_hourly=False, leagues=(2,))
+        assert (2 in result) is due, reason
+
+
 def _ko(client, league, stage, season=2025):
     return client.get(
         "/api/v1/knockouts", params={"league": league, "season": season, "stage": stage}
