@@ -10,9 +10,12 @@ Collection (pure parsing + replace-on-success, like chat 06):
 - profiles: /players/profiles?player= — once per squad player whose nationality is missing
   (TEAM-002 "한 번 보완"); a still missing value stays NULL (never the birth country).
 - team player records (2026-11-18): /players?team=&season= — every page, one listing per
-  player, this team's lines in the record competitions (five leagues + three UEFA) only, in
+  player, this team's lines in the competitions held that season (`record_competitions`,
+  2026-11-20: leagues, domestic cups, super cups, UEFA, Club World Cup), in
   `team_player_stats` (08's own table; chat 06's league-wide `player_season_stats` has its
-  own writer). The current season daily, the past season until stored once.
+  own writer). The current season daily; the last two seasons until stored once.
+- signing checks (2026-11-20): /players?id=&season= once per signing still without evidence
+  (`pending_checks`) — the first-team clubs of the season he came from.
 - transfers: /transfers?team= — entries involving the team, stored as given and classified by
   date: season S is S-06-01 .. (S+1)-05-31, first half June-December, second half
   January-May. Repeated entries are merged when answering (`merge_transfers`). Future-dated
@@ -29,7 +32,7 @@ cannot be confirmed MEMBERSHIP_UNKNOWN (never "relegated").
 import html
 import json
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -48,6 +51,8 @@ from app.models.match_detail import TeamForm
 from app.models.reference import Competition, CompetitionSeason, Team, TeamCompetitionSeason
 from app.models.standings import LeagueSync, Player, Standing
 from app.models.team_detail import (
+    PlayerClubSeason,
+    PlayerSeasonCheck,
     SquadMember,
     TeamCoach,
     TeamPlayerStat,
@@ -56,7 +61,7 @@ from app.models.team_detail import (
     Transfer,
 )
 from app.schemas.match import MatchSummary
-from app.seed.competitions import LEAGUE_IDS, UEFA_IDS
+from app.seed.competitions import LEAGUE_IDS
 from app.services.fixtures import LIVE_LAG, to_summary
 from app.services.reference import managed_seasons, team_detail_lookup
 from app.services.standings import IncompleteData
@@ -527,10 +532,6 @@ def save_nationality(
 
 # ------------------------------------------------- team player records (2026-11-18)
 
-# The competitions a player's season total counts: the five leagues and the three UEFA
-# competitions. Domestic cups, the Club World Cup, friendlies and super cups are left out
-# until the overall review decides on them (D-08-7).
-RECORD_COMPETITIONS = (*LEAGUE_IDS, *UEFA_IDS)
 TEAM_PAGE_SIZE = 20
 TEAM_LINES_SHRINK_TOLERANCE = 0.1
 
@@ -541,17 +542,37 @@ class ParsedTeamPlayers:
     players: list[dict[str, Any]]
 
 
+def record_competitions(session: Session, season: int) -> frozenset[int]:
+    """The competitions a team's season total counts (TEAM-002 rules 1·7, 2026-11-20): every
+    active competition of the shared master (leagues, domestic cups, super cups, UEFA, Club
+    World Cup) except those the provider says were not held that season (`no_data`, e.g. the
+    Club World Cup of 2026). No list of excluded competitions is kept: friendlies and other
+    competitions are not in the master. A season without a master row (2024, kept as move
+    evidence only) counts every active competition."""
+    not_held = select(CompetitionSeason.competition_id).where(
+        CompetitionSeason.season == season, CompetitionSeason.availability == "no_data"
+    )
+    return frozenset(
+        session.scalars(
+            select(Competition.id).where(Competition.active, Competition.id.not_in(not_held))
+        )
+    )
+
+
 def parse_team_players(
-    pages: Sequence[Mapping[str, Any]], team_id: int, season: int
+    pages: Sequence[Mapping[str, Any]],
+    team_id: int,
+    season: int,
+    competitions: Collection[int],
 ) -> ParsedTeamPlayers:
     """Every page of /players?team=&season= (each page's `response` and `paging`).
 
     The set must be complete: pages 1..total with one total, TEAM_PAGE_SIZE entries on every
     page but the last (1..TEAM_PAGE_SIZE there). The provider lists each player once, so a
     player listed again (pages shifted: someone else is missing) refuses the set. Only this
-    team's lines in the record competitions of this season are kept; other clubs' lines and
-    other competitions (domestic cups, Club World Cup, friendlies) are dropped. Missing values
-    stay None."""
+    team's lines in `competitions` (`record_competitions` of the season) are kept; other
+    clubs' lines and competitions outside the master (friendlies, youth competitions) are
+    dropped. Missing values stay None."""
     if not pages:
         raise IncompleteData("team players: no page")
     total = _int((pages[0].get("paging") or {}).get("total"))
@@ -593,7 +614,7 @@ def parse_team_players(
                 league = stats.get("league") or {}
                 if (stats.get("team") or {}).get("id") != team_id:
                     continue
-                if league.get("id") not in RECORD_COMPETITIONS:
+                if league.get("id") not in competitions:
                     continue
                 if league.get("season") not in (season, None):
                     raise IncompleteData(f"team players: season {league.get('season')}")
@@ -987,7 +1008,7 @@ def season_fixture_failures(session: Session, team_id: int) -> list[int]:
 class SquadRow:
     member: SquadMember
     player: Player
-    # This team's lines of the current season in the record competitions (one per competition).
+    # This team's lines of the current season, one per competition held this season.
     lines: list[tuple[TeamPlayerStat, Competition]]
 
 
@@ -1022,7 +1043,7 @@ def missing_record_competitions(session: Session, team_id: int) -> list[int]:
             .where(
                 Fixture.season == season,
                 Fixture.status == "finished",
-                Fixture.competition_id.in_(RECORD_COMPETITIONS),
+                Fixture.competition_id.in_(record_competitions(session, season)),
                 or_(Fixture.home_team_id == team_id, Fixture.away_team_id == team_id),
             )
             .distinct()
@@ -1038,31 +1059,125 @@ def missing_record_competitions(session: Session, team_id: int) -> list[int]:
     return sorted(played - covered)
 
 
-# ------------------------------------------------- transfers shown first (표시 기준 B)
+# ------------------------------- moves shown first (TEAM-006 rule 6, 2026-11-20)
 
-GROUP_TYPES = frozenset({"transfer", "free agent", "free transfer", "free"})
-# Second / youth / reserve sides: a signing from one is not a first-team signing.
-YOUTH_SIDE = re.compile(
-    r"\bU-?\d{2}\b|\bII\b|\bB\b$|youth|reserve|academy|primavera|juvenil|jong\s|"
-    r"castilla|\bamateur|\bsub-?\d{2}",
+# Competitions whose appearances are not first-team appearances: youth competitions and
+# friendlies, by the provider's competition names in /players?id=&season= answers (seen
+# 2026-11-20: "U18 Premier League - South", "Premier League 2 Division One", "UEFA U19
+# Championship", "UEFA Youth League", "Friendlies Clubs"; Primavera, reserve and junior
+# leagues by name).
+NOT_FIRST_TEAM = re.compile(
+    r"\bU-?\d{2}\b|premier league 2|youth|primavera|reserve|junior|juvenil|friendl",
     re.IGNORECASE,
 )
 
 
-@dataclass(frozen=True)
-class TransferContext:
-    """What decides whether a move is shown first (2026-11-18 표시 기준 B)."""
-
-    players: frozenset[int]  # squad now, or played for the team in the record competitions
-    clubs: frozenset[int]  # five-league / UEFA participants of this or last season
+def is_first_team(competition_name: str | None) -> bool:
+    return bool(competition_name) and not NOT_FIRST_TEAM.search(competition_name or "")
 
 
-def transfer_context(session: Session, team_id: int) -> TransferContext:
-    seasons = (settings.current_season, settings.current_season - 1)
-    squad = set(
-        session.scalars(select(SquadMember.player_id).where(SquadMember.team_id == team_id))
+def parse_player_season(
+    response: Any, player_id: int, season: int
+) -> dict[int, int | None]:
+    """/players?id=&season= → first-team official appearances per club. A club's value is
+    the sum of `games.appearences` over its first-team competitions when it has a positive
+    count; None when no positive count is given and a line leaves the count out (unknown,
+    never 0 — Codex 1차 N2); 0 only when every line gives 0. Clubs with youth / friendly
+    lines only are left out. A line that could count (count given above 0, or no count) but
+    names no club or no competition cannot be judged: the answer is refused and asked again
+    (Codex 1차 N3). An empty answer is "no appearances"; another player's answer or another
+    season is refused."""
+    if not isinstance(response, list):
+        raise IncompleteData("player season: no response list")
+    known: dict[int, int] = {}
+    unknown: set[int] = set()
+    for entry in response:
+        if ((entry or {}).get("player") or {}).get("id") != player_id:
+            raise IncompleteData(f"player season: answer for another player than {player_id}")
+        for stats in entry.get("statistics") or []:
+            league, team = stats.get("league") or {}, stats.get("team") or {}
+            if league.get("season") not in (season, None):
+                raise IncompleteData(f"player season: season {league.get('season')}")
+            apps = _int((stats.get("games") or {}).get("appearences"))
+            if not team.get("id") or not league.get("name"):
+                if apps == 0:
+                    continue  # no appearance whatever the club or competition
+                raise IncompleteData("player season: a line without club or competition")
+            if not is_first_team(league.get("name")):
+                continue
+            if apps is None:
+                unknown.add(team["id"])
+            else:
+                known[team["id"]] = known.get(team["id"], 0) + apps
+    clubs: dict[int, int | None] = {}
+    for club in known.keys() | unknown:
+        total = known.get(club, 0)
+        clubs[club] = total if total > 0 or club not in unknown else None
+    return clubs
+
+
+def save_player_season(
+    session: Session, player_id: int, season: int, clubs: Mapping[int, int | None],
+    now: datetime,
+) -> None:
+    session.execute(
+        delete(PlayerClubSeason).where(
+            PlayerClubSeason.player_id == player_id, PlayerClubSeason.season == season
+        )
     )
-    played = set(
+    if clubs:
+        session.execute(
+            insert(PlayerClubSeason).values([
+                {"player_id": player_id, "season": season, "team_id": t, "appearances": a}
+                for t, a in clubs.items()
+            ])
+        )
+    row = session.get(PlayerSeasonCheck, (player_id, season))
+    if row is None:
+        row = PlayerSeasonCheck(player_id=player_id, season=season)
+        session.add(row)
+    row.checked_at, row.failure = now, None
+
+
+def mark_player_season_failure(
+    session: Session, player_id: int, season: int, now: datetime, reason: str
+) -> None:
+    row = session.get(PlayerSeasonCheck, (player_id, season))
+    if row is None:
+        row = PlayerSeasonCheck(player_id=player_id, season=season)
+        session.add(row)
+    row.failed_at, row.failure = now, reason[:500]
+
+
+def evidence_seasons(season: int) -> list[int]:
+    """This team's seasons whose appearances back a move of `season`: the one before, the
+    season itself and the one after (when it has begun)."""
+    return [s for s in (season - 1, season, season + 1) if s <= settings.current_season]
+
+
+def check_season(row: Transfer) -> int:
+    """The season of the club a signing came from: a June-December move follows the
+    previous season; a January-May move comes in the middle of its own season."""
+    return row.season - 1 if row.half == 1 else row.season
+
+
+@dataclass(frozen=True)
+class MoveEvidence:
+    """What decides whether a move of one team and season is shown first."""
+
+    played: frozenset[int]  # players with this team's official appearances (evidence seasons)
+    # players with a line here whose count is not given and no positive count (Codex 1차 N1)
+    unknown: frozenset[int]
+    complete: bool  # every evidence season of this team's records was collected
+    # (player, season) → club appearances, for checked signings only
+    prior: Mapping[tuple[int, int], Mapping[int, int | None]]
+
+
+def move_evidence(
+    session: Session, team_id: int, season: int, rows: Sequence[Transfer]
+) -> MoveEvidence:
+    seasons = evidence_seasons(season)
+    played = frozenset(
         session.scalars(
             select(TeamPlayerStat.player_id).where(
                 TeamPlayerStat.team_id == team_id,
@@ -1071,31 +1186,138 @@ def transfer_context(session: Session, team_id: int) -> TransferContext:
             )
         )
     )
-    clubs = set(
+    unknown = frozenset(
         session.scalars(
-            select(TeamCompetitionSeason.team_id).where(
-                TeamCompetitionSeason.season.in_(seasons),
-                TeamCompetitionSeason.competition_id.in_(RECORD_COMPETITIONS),
+            select(TeamPlayerStat.player_id).where(
+                TeamPlayerStat.team_id == team_id,
+                TeamPlayerStat.season.in_(seasons),
+                TeamPlayerStat.appearances.is_(None),
+            )
+        )
+    ) - played
+    collected = set(
+        session.scalars(
+            select(TeamSync.season).where(
+                TeamSync.team_id == team_id,
+                TeamSync.kind == "player_stats",
+                TeamSync.season.in_(seasons),
+                TeamSync.synced_at.is_not(None),
             )
         )
     )
-    return TransferContext(frozenset(squad | played), frozenset(clubs))
+    wanted = {
+        (r.player_id, check_season(r))
+        for r in rows
+        if r.direction == "in" and not is_loan_return(r)
+    }
+    prior: dict[tuple[int, int], dict[int, int | None]] = {}
+    if wanted:
+        checked = session.execute(
+            select(PlayerSeasonCheck.player_id, PlayerSeasonCheck.season).where(
+                PlayerSeasonCheck.player_id.in_({p for p, _ in wanted}),
+                PlayerSeasonCheck.checked_at.is_not(None),
+            )
+        ).all()
+        prior = {(p, s): {} for p, s in checked if (p, s) in wanted}
+        for club in session.scalars(
+            select(PlayerClubSeason).where(
+                PlayerClubSeason.player_id.in_({p for p, _ in prior})
+            )
+        ):
+            if (club.player_id, club.season) in prior:
+                prior[(club.player_id, club.season)][club.team_id] = club.appearances
+    return MoveEvidence(played, unknown, collected >= set(seasons), prior)
 
 
-def shown_first(row: Transfer, context: TransferContext) -> bool:
-    """① a player of this squad or one who played for the team (this or last season, record
-    competitions) ② a first-team signing (in, permanent/free type, not from a youth/reserve
-    side) ③ the other club plays the five leagues or UEFA (this or last season). Every other
-    move goes under "기타 이동" — never removed."""
-    if row.player_id in context.players:
-        return True
-    if (
-        row.direction == "in"
-        and (row.type_raw or "").strip().lower() in GROUP_TYPES
-        and not YOUTH_SIDE.search(row.counterpart_name or "")
-    ):
-        return True
-    return row.counterpart_id is not None and row.counterpart_id in context.clubs
+LOAN_RETURNS = frozenset({"return from loan", "back from loan"})
+
+
+def is_loan_return(row: Transfer) -> bool:
+    return row.direction == "in" and (row.type_raw or "").strip().lower() in LOAN_RETURNS
+
+
+def judge_move(row: Transfer, evidence: MoveEvidence) -> tuple[bool, str]:
+    """(shown first, reason). Shown: the player has official appearances for this team in
+    the evidence seasons (`played_here`), or a signing with first-team appearances for the
+    club he came from (`played_before`). Folded ("기타 이동"): only when the team's records
+    are complete and show no appearance, and — for a signing — the club he came from is
+    confirmed without first-team appearances (`not_played`). Anything that cannot be decided
+    stays shown with its reason (not "not played"): `records_incomplete`,
+    `appearances_unknown` (a line here leaves the count out), `check_pending`
+    (signing not asked yet or not answered), `club_unknown` (no club id),
+    `club_appearances_unknown` (the club's lines give no count). The squad, the other
+    club's league, age or youth-sounding names never decide.
+
+    A loan return is the team's own player coming back, not a new signing (TEAM-006 rule 6
+    asks the previous club for new signings only): like a departure it is decided by this
+    team's appearances alone, so a youth back from a lower-league loan is folded when he
+    never played here. The type only tells a return from a signing; it never shows a move."""
+    if row.player_id in evidence.played:
+        return True, "played_here"
+    if not evidence.complete:
+        return True, "records_incomplete"
+    if row.player_id in evidence.unknown:
+        return True, "appearances_unknown"
+    if row.direction == "out" or is_loan_return(row):
+        return False, "not_played"
+    clubs = evidence.prior.get((row.player_id, check_season(row)))
+    if clubs is None:
+        return True, "check_pending"
+    if row.counterpart_id is None:
+        return True, "club_unknown"
+    apps = clubs.get(row.counterpart_id, 0)  # not listed: no first-team line for that club
+    if apps is None:
+        return True, "club_appearances_unknown"
+    return (True, "played_before") if apps > 0 else (False, "not_played")
+
+
+def pending_checks(session: Session, team_ids: Iterable[int]) -> list[tuple[int, int]]:
+    """(player, season) still to ask: signings of the managed seasons whose move waits for
+    the club they came from (`check_pending`). Never-asked first, then failed ones."""
+    wanted: set[tuple[int, int]] = set()
+    for team in team_ids:
+        for season in managed_seasons():
+            rows = merge_transfers(read_transfers(session, team, season))
+            evidence = move_evidence(session, team, season, rows)
+            for row in rows:
+                if judge_move(row, evidence)[1] == "check_pending":
+                    wanted.add((row.player_id, check_season(row)))
+    failed = {
+        (player, season)
+        for player, season in session.execute(
+            select(PlayerSeasonCheck.player_id, PlayerSeasonCheck.season).where(
+                PlayerSeasonCheck.checked_at.is_(None)
+            )
+        )
+    }
+    return sorted(wanted - failed) + sorted(wanted & failed)
+
+
+@dataclass
+class MoveGroup:
+    """One player's moves within one half, shown as one row (TEAM-006 추가 검수): every move
+    keeps its own date, type and club; the row is shown first when any of them is."""
+
+    player_id: int
+    moves: list[Transfer]
+    shown: bool
+
+    @property
+    def direction(self) -> str:
+        return self.moves[-1].direction  # where the player ended up within the half
+
+
+def group_moves(rows: Sequence[Transfer], evidence: MoveEvidence) -> list[MoveGroup]:
+    groups: dict[tuple[int, int], MoveGroup] = {}
+    for row in sorted(rows, key=lambda r: (r.transfer_date, r.id or 0)):
+        shown = judge_move(row, evidence)[0]
+        group = groups.get((row.half, row.player_id))
+        if group is None:
+            groups[(row.half, row.player_id)] = MoveGroup(row.player_id, [row], shown)
+        else:
+            group.moves.append(row)
+            group.shown = group.shown or shown
+    return list(groups.values())
 
 
 def read_season_stat(

@@ -9,6 +9,9 @@
   Names come from the provider answer (counterpart clubs may not be stored teams).
 - team_syncs: last success / failure per team, season and kind, so screens can tell
   "never collected" from "refresh failed, stored data shown" (CMP-004).
+- player_season_checks / player_club_seasons (2026-11-20, TEAM-006 rule 6): a signing's
+  first-team appearances per club in one season from /players?id=&season=, asked once per
+  player and season; the evidence that a new arrival is a first-team move.
 Values the provider leaves empty stay NULL; a failed or cut answer never replaces stored rows.
 """
 
@@ -72,8 +75,10 @@ class SquadMember(Base):
 
 
 class TeamPlayerStat(Base):
-    """One player's line for this team in one of the record competitions (the five leagues
-    and the three UEFA competitions) and season, from /players?team=&season= (2026-11-18).
+    """One player's line for this team in one supported competition held that season (the
+    shared competition master: leagues, domestic cups, super cups, UEFA, Club World Cup —
+    2026-11-20) and season, from /players?team=&season=. Kept for the current season, the
+    last season (squad) and the season before (move evidence, D-08-6).
 
     Written only by the `team_player_stats` job, a whole team season at a time. Chat 06's
     `player_season_stats` (league-wide pages, `player_stats` job) is a separate table with
@@ -176,3 +181,32 @@ class TeamSync(Base):
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     failure: Mapped[str | None] = mapped_column(Text)
     row_count: Mapped[int | None] = mapped_column(Integer)
+
+
+class PlayerSeasonCheck(Base):
+    """A player's season asked with /players?id=&season= (2026-11-20). `checked_at` = the
+    answer was complete and its first-team appearances are stored in `player_club_seasons`
+    (an empty answer is "no appearances"); `failed_at` alone = asked but not answered yet
+    (asked again the next day). Kept: never asked again once checked."""
+
+    __tablename__ = "player_season_checks"
+
+    player_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    season: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure: Mapped[str | None] = mapped_column(Text)
+
+
+class PlayerClubSeason(Base):
+    """First-team official appearances of a checked player for one club in one season: the
+    sum over the club's lines outside youth competitions and friendlies (`is_first_team`).
+    NULL = the club's lines give no appearance count. Clubs are provider ids (no foreign key:
+    most are outside the stored teams)."""
+
+    __tablename__ = "player_club_seasons"
+
+    player_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    season: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    team_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    appearances: Mapped[int | None] = mapped_column(Integer)

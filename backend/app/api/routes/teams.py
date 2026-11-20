@@ -43,6 +43,7 @@ from app.schemas.team_detail import (
     TeamTransfers,
     TeamTransfersResponse,
     TransferCounterpart,
+    TransferGroup,
     TransferHalf,
     TransferItem,
     VenueBlock,
@@ -259,10 +260,11 @@ def read_team_fixtures(db: Db, team_id: TeamId) -> TeamFixturesResponse:
 
 @router.get("/teams/{team_id}/squad")
 def read_team_squad(db: Db, team_id: TeamId) -> TeamSquadResponse:
-    """TEAM-002 (2026-11-18): the current squad, one row per player, with the sum of the
-    player's lines for this team this season in the record competitions (five leagues + three
-    UEFA) and each line on its own. Missing values are null (shown as '—'), never 0; a played
-    record competition without collected lines makes the totals partial."""
+    """TEAM-002: the current squad, one row per player, with the sum of the player's lines
+    for this team this season in the competitions held this season (`record_competitions`,
+    2026-11-20: domestic cups, super cups, UEFA and the Club World Cup included) and each line
+    on its own. Missing values are null (shown as '—'), never 0; a played competition without
+    collected lines makes the totals partial."""
     _access(db, team_id)
     season = settings.current_season
     synced, squad_failed = detail.sync_meta(db, team_id, season, "squad")
@@ -307,7 +309,7 @@ def read_team_squad(db: Db, team_id: TeamId) -> TeamSquadResponse:
 
 
 def _totals(lines: list[Any]) -> SquadTotals:
-    """Sum per value over the record competitions; a missing value in any line makes that
+    """Sum per value over the player's competition lines; a missing value in any line makes that
     total unknown (null), never a smaller number."""
 
     def total(key: str) -> int | None:
@@ -392,9 +394,10 @@ def read_team_transfers(
     db: Db, team_id: TeamId, season: SeasonParam = None
 ) -> TeamTransfersResponse:
     """TEAM-006: arrivals and departures of one season in its two halves (by transfer date).
-    The provider's repeated entries are merged into one move (`merge_transfers`, D-08-6); the
-    moves that matter to this team are shown first (표시 기준 B) and every other move is kept
-    in the "other" lists. A half that has not begun is `not_started`."""
+    The provider's repeated entries are merged into one move (`merge_transfers`, D-08-6); a
+    player's moves in one half are one row (`group_moves`). Rows with first-team evidence or
+    an undecided move are shown first (`judge_move`, TEAM-006 rule 6); rows confirmed without
+    appearances are kept in the "other" lists. A half that has not begun is `not_started`."""
     _access(db, team_id)
     season = _season(season)
     synced, refresh_failed = detail.sync_meta(db, team_id, season, "transfers")
@@ -402,7 +405,7 @@ def read_team_transfers(
         raise _not_collected("이적")
     today = kst_today()
     rows = detail.merge_transfers(detail.read_transfers(db, team_id, season))
-    context = detail.transfer_context(db, team_id)
+    evidence = detail.move_evidence(db, team_id, season, rows)
     known = detail.counterpart_names(db, (r.counterpart_id for r in rows))
     short = f"{season % 100:02d}-{(season + 1) % 100:02d}"
 
@@ -410,8 +413,7 @@ def read_team_transfers(
         club = known.get(r.counterpart_id) if r.counterpart_id else None
         return TransferItem(
             transfer_date=r.transfer_date,
-            player_id=r.player_id,
-            player_name=detail.display_text(r.player_name),
+            direction=r.direction,
             counterpart=TransferCounterpart(
                 id=r.counterpart_id,
                 name=(
@@ -426,12 +428,17 @@ def read_team_transfers(
     for half in (1, 2):
         start, _ = detail.half_range(season, half)
         key, word, months = HALF_NAMES[half]
-        groups: dict[tuple[bool, str], list[TransferItem]] = {
+        groups: dict[tuple[bool, str], list[TransferGroup]] = {
             (shown, direction): [] for shown in (True, False) for direction in ("in", "out")
         }
-        for r in rows:
-            if r.half == half:
-                groups[(detail.shown_first(r, context), r.direction)].append(item(r))
+        for group in detail.group_moves([r for r in rows if r.half == half], evidence):
+            groups[(group.shown, group.direction)].append(
+                TransferGroup(
+                    player_id=group.player_id,
+                    player_name=detail.display_text(group.moves[-1].player_name),
+                    moves=[item(m) for m in group.moves],
+                )
+            )
         halves.append(
             TransferHalf(
                 half=key,

@@ -11,14 +11,19 @@ from app.models.team_detail import TeamSync, Transfer
 from app.services.standings import IncompleteData
 from app.services.team_detail import (
     NO_COACH,
-    TransferContext,
+    MoveEvidence,
+    check_season,
     check_squad,
     check_transfers,
+    group_moves,
     half_range,
     is_due,
+    is_first_team,
+    judge_move,
     last_refresh_day,
     match_result,
     merge_transfers,
+    parse_player_season,
     parse_profile_nationality,
     parse_squad,
     parse_statistics,
@@ -26,7 +31,6 @@ from app.services.team_detail import (
     parse_transfers,
     pick_coach,
     season_of,
-    shown_first,
 )
 
 TEAM = 77
@@ -302,19 +306,147 @@ def test_same_day_moves_to_two_unnamed_id_clubs_are_two_rows():
     ]
 
 
-def test_moves_shown_first_follow_rule_b():
-    context = TransferContext(players=frozenset({1}), clubs=frozenset({500}))
+def row_move(player, direction, club, half=1, season=2026, day=None, kind="Transfer", mid=None):
+    return Transfer(
+        id=mid, player_id=player, direction=direction, counterpart_id=club,
+        counterpart_name=f"C{club}", type_raw=kind, season=season, half=half,
+        transfer_date=day or (date(season, 8, 1) if half == 1 else date(season + 1, 2, 1)),
+    )
 
-    def row(player, direction, kind, club_id, club_name):
-        return Transfer(player_id=player, direction=direction, type_raw=kind,
-                        counterpart_id=club_id, counterpart_name=club_name)
 
-    assert shown_first(row(1, "out", "Loan", 900, "Lower"), context)  # ① squad player
-    assert shown_first(row(2, "in", "Free agent", 900, "Lower"), context)  # ② signing
-    assert not shown_first(row(2, "in", "Transfer", 901, "Tottenham Hotspur U21"), context)
-    assert not shown_first(row(2, "in", "Return from loan", 900, "Lower"), context)
-    assert shown_first(row(3, "out", "Loan", 500, "Benfica"), context)  # ③ league/UEFA club
-    assert not shown_first(row(3, "out", "Loan", 900, "Watford"), context)
+def evidence(played=(), complete=True, prior=None, unknown=()):
+    return MoveEvidence(frozenset(played), frozenset(unknown), complete, prior or {})
+
+
+def test_moves_with_appearances_here_are_shown_whatever_their_type_or_club():
+    ev = evidence(played={1})
+    # A departure not in the squad (e.g. Rodri) and a loan out are shown: he played here.
+    assert judge_move(row_move(1, "out", 529, kind="Transfer"), ev) == (True, "played_here")
+    assert judge_move(row_move(1, "out", 38, kind="Loan"), ev) == (True, "played_here")
+
+
+def test_moves_are_folded_only_when_complete_records_show_no_appearance():
+    youth_loan = row_move(2, "out", 38, kind="Loan")
+    assert judge_move(youth_loan, evidence()) == (False, "not_played")
+    # Records of an evidence season missing: not decided, so shown (never "not played").
+    assert judge_move(youth_loan, evidence(complete=False)) == (True, "records_incomplete")
+
+
+def test_a_signing_needs_the_club_he_came_from():
+    arrival = row_move(3, "in", 211, half=1, season=2026)  # summer 2026: club season 2025
+    assert judge_move(arrival, evidence()) == (True, "check_pending")
+    played = evidence(prior={(3, 2025): {211: 30, 999: 0}})
+    assert judge_move(arrival, played) == (True, "played_before")
+    youth = evidence(prior={(3, 2025): {}})  # checked: no first-team line at all
+    assert judge_move(arrival, youth) == (False, "not_played")
+    unknown = evidence(prior={(3, 2025): {211: None}})
+    assert judge_move(arrival, unknown) == (True, "club_appearances_unknown")
+    no_club = row_move(3, "in", None)
+    assert judge_move(no_club, played) == (True, "club_unknown")
+    # A January move comes from the club's current season.
+    winter = row_move(3, "in", 211, half=2, season=2026)
+    assert check_season(winter) == 2026
+    assert judge_move(winter, played) == (True, "check_pending")
+
+
+def test_a_loan_return_is_judged_by_this_team_only():
+    # Back from a lower-league loan with 30 games there, never played here: folded.
+    back = row_move(6, "in", 38, kind="Return from loan")
+    loaned = evidence(prior={(6, 2025): {38: 30}})
+    assert judge_move(back, loaned) == (False, "not_played")
+    assert judge_move(row_move(6, "in", 38, kind="Back from Loan"), loaned)[0] is False
+    # The same player with appearances here is shown; undecided records keep it shown.
+    assert judge_move(back, evidence(played={6})) == (True, "played_here")
+    assert judge_move(back, evidence(complete=False)) == (True, "records_incomplete")
+    # A permanent signing from that club is a new signing: the club decides.
+    assert judge_move(row_move(6, "in", 38, kind="Transfer"), loaned) == (True, "played_before")
+
+
+def test_youth_competitions_and_friendlies_are_not_first_team():
+    answer = [{"player": {"id": 9}, "statistics": [
+        {"team": {"id": 7197}, "league": {"name": "Premier League 2 Division One", "season": 2025},
+         "games": {"appearences": 12}},
+        {"team": {"id": 15381}, "league": {"name": "U18 Premier League - South", "season": 2025},
+         "games": {"appearences": 5}},
+        {"team": {"id": 50}, "league": {"name": "UEFA Youth League", "season": 2025},
+         "games": {"appearences": 4}},
+        {"team": {"id": 50}, "league": {"name": "Friendlies Clubs", "season": 2025},
+         "games": {"appearences": 3}},
+        {"team": {"id": 50}, "league": {"name": "Premier League", "season": 2025},
+         "games": {"appearences": 0}},
+        {"team": {"id": 50}, "league": {"name": "FA Cup", "season": 2025},
+         "games": {"appearences": 1}},
+        {"team": {"id": 38}, "league": {"name": "Championship", "season": 2025},
+         "games": {"appearences": 8}},
+        {"team": {"id": 40}, "league": {"name": "Serie B", "season": 2025},
+         "games": {"appearences": None}},
+    ]}]
+    assert parse_player_season(answer, 9, 2025) == {50: 1, 38: 8, 40: None}
+    assert parse_player_season([], 9, 2025) == {}  # no answer: no appearances anywhere
+    with pytest.raises(IncompleteData):
+        parse_player_season([{"player": {"id": 8}, "statistics": []}], 9, 2025)
+    assert is_first_team("Primavera 1") is False and is_first_team("Serie A") is True
+
+
+def line_of(team, league, apps):
+    return {"team": {"id": team}, "league": {"name": league, "season": 2025},
+            "games": {"appearences": apps}}
+
+
+def test_a_missing_count_is_unknown_never_zero():
+    # Codex 1차 N2: [0, None] and [None, 0] are unknown like [None]; a positive count decides.
+    for lines in ([0, None], [None, 0], [None]):
+        stats = [line_of(38, "Championship", a) for a in lines]
+        answer = [{"player": {"id": 9}, "statistics": stats}]
+        assert parse_player_season(answer, 9, 2025) == {38: None}
+    answer = [{"player": {"id": 9}, "statistics": [
+        line_of(38, "Championship", None), line_of(38, "FA Cup", 2)]}]
+    assert parse_player_season(answer, 9, 2025) == {38: 2}
+    zeros = [{"player": {"id": 9}, "statistics": [
+        line_of(38, "Championship", 0), line_of(38, "FA Cup", 0)]}]
+    assert parse_player_season(zeros, 9, 2025) == {38: 0}  # every count given as 0
+
+
+def test_a_line_without_club_or_competition_is_refused_unless_it_counts_nothing():
+    # Codex 1차 N3: 10 games with no club or no competition name cannot be judged.
+    for broken in (line_of(None, "Championship", 10), line_of(38, None, 10),
+                   line_of(38, None, None)):
+        with pytest.raises(IncompleteData):
+            parse_player_season([{"player": {"id": 9}, "statistics": [broken]}], 9, 2025)
+    harmless = [{"player": {"id": 9}, "statistics": [line_of(None, None, 0)]}]
+    assert parse_player_season(harmless, 9, 2025) == {}
+
+
+def test_a_count_left_out_here_is_not_a_confirmed_non_appearance():
+    # Codex 1차 N1: a departure / loan return whose line here gives no count stays shown.
+    ev = evidence(unknown={7})
+    assert judge_move(row_move(7, "out", 38, kind="Loan"), ev) == (True, "appearances_unknown")
+    back = row_move(7, "in", 38, kind="Return from loan")
+    assert judge_move(back, ev) == (True, "appearances_unknown")
+    assert judge_move(row_move(7, "out", 38), evidence(played={7}, unknown=set())) == (
+        True, "played_here",
+    )
+
+
+def test_one_row_per_player_and_half_keeps_every_move():
+    # Akanji: back from loan at Inter, then sold to Inter — two moves, one row, both kept.
+    back = row_move(4, "in", 505, day=date(2026, 6, 29), kind="Return from loan", mid=1)
+    sold = row_move(4, "out", 505, day=date(2026, 6, 30), kind="Transfer", mid=2)
+    youth_in = row_move(5, "in", 38, day=date(2026, 7, 1), mid=3)
+    youth_out = row_move(5, "out", 39, day=date(2026, 8, 1), mid=4)
+    winter = row_move(4, "in", 506, half=2, day=date(2027, 1, 10), mid=5)
+    ev = evidence(played={4}, prior={(5, 2025): {38: 0}})
+    groups = group_moves([sold, youth_out, back, winter, youth_in], ev)
+    rows = [(g.player_id, g.direction, g.shown, [m.id for m in g.moves]) for g in groups]
+    assert rows == [
+        (4, "out", True, [1, 2]),  # oldest first; the row goes where he ended up
+        (5, "out", False, [3, 4]),  # folded: every move confirmed without appearances
+        (4, "in", True, [5]),  # another half is another row
+    ]
+    # One shown move shows the whole row.
+    mixed = group_moves([youth_in, row_move(5, "out", 39, day=date(2026, 8, 1), mid=6)],
+                        evidence(complete=True, prior={(5, 2025): {38: 2}}))
+    assert [(g.shown, len(g.moves)) for g in mixed] == [(True, 2)]
 
 
 def players_page(current, total, entries):
@@ -332,29 +464,38 @@ def line(team, league, apps, goals=0, rating="7.1"):
             "goals": {"total": goals, "assists": None}}
 
 
-def test_team_player_lines_keep_only_this_team_in_record_competitions():
+# The season's competition master (`record_competitions`): leagues, domestic cups, super
+# cups, UEFA and the Club World Cup when held — friendlies (667) are not in it.
+SCOPE = frozenset({39, 45, 48, 528, 2, 848, 531, 15})
+
+
+def test_team_player_lines_keep_this_team_in_the_season_competition_master():
     page = players_page(1, 1, [
         entry(1, line(TEAM, 39, 10, 9), line(TEAM, 2, 3, 5, None), line(TEAM, 45, 2, 1),
-              line(TEAM, 15, 3), line(TEAM, 667, 4), line(600, 39, 5)),
+              line(TEAM, 528, 1), line(TEAM, 15, 3), line(TEAM, 667, 4), line(600, 39, 5)),
         entry(2, line(TEAM, 848, 1, 0, "0")),
     ])
-    parsed = parse_team_players([page], TEAM, 2026)
+    parsed = parse_team_players([page], TEAM, 2026, SCOPE)
     kept = sorted((x["player_id"], x["competition_id"], x["appearances"], x["goals"],
                    x["assists"], x["rating"]) for x in parsed.lines)
-    assert kept == [
-        (1, 2, 3, 5, None, None), (1, 39, 10, 9, None, Decimal("7.1")),
-        (2, 848, 1, 0, None, None),
+    assert kept == [  # domestic cup, super cup and Club World Cup kept; friendly, other club out
+        (1, 2, 3, 5, None, None), (1, 15, 3, 0, None, Decimal("7.1")),
+        (1, 39, 10, 9, None, Decimal("7.1")), (1, 45, 2, 1, None, Decimal("7.1")),
+        (1, 528, 1, 0, None, Decimal("7.1")), (2, 848, 1, 0, None, None),
     ]
     assert len(parsed.players) == 2
+    # A season the Club World Cup was not held: its master leaves it out.
+    without = parse_team_players([page], TEAM, 2026, SCOPE - {15})
+    assert 15 not in {x["competition_id"] for x in without.lines}
 
 
 def test_a_missing_or_short_page_is_refused():
     full = [entry(i, line(TEAM, 39, 1)) for i in range(1, 21)]
     with pytest.raises(IncompleteData):
-        parse_team_players([players_page(1, 2, full)], TEAM, 2026)
+        parse_team_players([players_page(1, 2, full)], TEAM, 2026, SCOPE)
     with pytest.raises(IncompleteData):
         parse_team_players(
-            [players_page(1, 2, full[:19]), players_page(2, 2, [entry(30)])], TEAM, 2026
+            [players_page(1, 2, full[:19]), players_page(2, 2, [entry(30)])], TEAM, 2026, SCOPE
         )
 
 
@@ -364,13 +505,13 @@ def test_a_player_listed_twice_refuses_the_whole_set():
     full = [entry(i, line(TEAM, 39, 1)) for i in range(1, 21)]
     shifted = [players_page(1, 2, full), players_page(2, 2, [entry(20, line(TEAM, 39, 1))])]
     with pytest.raises(IncompleteData, match="listed twice"):
-        parse_team_players(shifted, TEAM, 2026)
+        parse_team_players(shifted, TEAM, 2026, SCOPE)
     conflicting = [players_page(1, 2, full), players_page(2, 2, [entry(20, line(TEAM, 39, 5))])]
     with pytest.raises(IncompleteData, match="listed twice"):
-        parse_team_players(conflicting, TEAM, 2026)
+        parse_team_players(conflicting, TEAM, 2026, SCOPE)
     same_page = [players_page(1, 1, [entry(1, line(TEAM, 39, 1)), entry(1, line(TEAM, 2, 1))])]
     with pytest.raises(IncompleteData, match="listed twice"):
-        parse_team_players(same_page, TEAM, 2026)
+        parse_team_players(same_page, TEAM, 2026, SCOPE)
 
 
 def fixture(home, away, gh, ga, finish=None, pen=None):
