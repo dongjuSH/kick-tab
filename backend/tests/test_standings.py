@@ -58,15 +58,44 @@ def test_uefa_tables_count_league_phase_matches_only():
     assert "fixtures.round LIKE" in uefa[2]
 
 
-def test_standings_job_covers_uefa_but_player_jobs_do_not():
+def test_every_standings_job_covers_the_leagues_and_uefa():
+    """06 개선 2026-11-20 (LEAG-004): player lists and records include the UEFA competitions."""
     from app.sync.standings import _targets
 
     forced = {"force": "1", "season": "2025"}
-    tables = _targets(_Session({}), forced, "standings", hourly=True)
-    assert tables == [39, 140, 135, 78, 61, 2, 3, 848]
-    assert _targets(_Session({}), forced, "goals", hourly=False) == [39, 140, 135, 78, 61]
-    with pytest.raises(JobPartialFailure):
-        _targets(_Session({}), {**forced, "league": "2"}, "player_stats", hourly=False)
+    every = [39, 140, 135, 78, 61, 2, 3, 848]
+    for kind in ("standings", "goals", "player_stats"):
+        assert _targets(_Session({}), forced, kind, hourly=kind == "standings") == every
+    one = {**forced, "league": "848"}
+    assert _targets(_Session({}), one, "player_stats", hourly=False) == [848]
+    with pytest.raises(JobPartialFailure):  # a domestic cup has none
+        _targets(_Session({}), {**forced, "league": "45"}, "player_stats", hourly=False)
+
+
+def test_only_a_stated_outfield_teamless_line_is_left_out():
+    """UCL 2025 /players pages carry lines with matches but team null (players 1324, 1330):
+    a line of a stated outfield position is left out (only goalkeeper lines are read, for
+    saves). A goalkeeper's — or one without a known position (Codex 1차 지적 1) — would make
+    saves incomplete, so the unit is refused."""
+    outfield = player_entry(2, 10, None, position="Midfielder", apps=13)
+    teamless = {**outfield["statistics"][0], "team": {"id": None, "name": None}}
+    outfield["statistics"].append(teamless)
+    parsed = parse_player_pages([page(1, 1, [player_entry(1, 10, 5), outfield])], 39, 2025)
+    kept = sorted((line["player_id"], line["team_id"]) for line in parsed.lines)
+    assert kept == [(1, 10), (2, 10)] and parsed.teamless == 1
+    keeper = player_entry(3, 10, 4)
+    keeper["statistics"][0]["team"] = {"id": None, "name": None}
+    with pytest.raises(IncompleteData, match="player 3 without team"):
+        parse_player_pages([page(1, 1, [player_entry(1, 10, 5), keeper])], 39, 2025)
+    # Codex's case: a keeper's normal line (saves 5) next to a teamless line of no position.
+    for position in (None, "Unknown"):
+        mixed = player_entry(4, 10, 5)
+        mixed["statistics"].append({
+            **mixed["statistics"][0], "team": {"id": None, "name": None},
+            "games": {"position": position, "appearences": 3}, "goals": {"saves": None},
+        })
+        with pytest.raises(IncompleteData, match="player 4 without team"):
+            parse_player_pages([page(1, 1, [mixed])], 39, 2025)
 
 
 def top_entry(pid, team, red, yellowred, league=61):

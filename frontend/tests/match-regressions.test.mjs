@@ -186,17 +186,19 @@ test("player ratings show one card per team, home first, with missing ratings as
   assert.doesNotMatch(html, /<table/);
 });
 
-test("recent-form preview reads home team, score, away team (MAT-005)", () => {
-  const { formPreview } = loader()("@/features/match/model");
-  assert.deepEqual(
-    { ...formPreview("도르트문트", { opponentName: "라이프치히", venue: "home", goalsFor: 2, goalsAgainst: 1 }) },
-    { home: "도르트문트", away: "라이프치히", score: "2 : 1" },
+test("recent form uses the shared row: oldest first, home and away sides from the venue (MAT-005)", () => {
+  const { formItems } = loader()("@/features/match/model");
+  const items = formItems("도르트문트", [
+    { kickoffDateKst: "2026-11-08", competition: "분데스리가", opponentName: "바이에른", venue: "away", goalsFor: 0, goalsAgainst: 3, result: "L" },
+    { kickoffDateKst: "2026-11-01", competition: "DFB 포칼", opponentName: "라이프치히", venue: "home", goalsFor: 2, goalsAgainst: null, result: "W" },
+  ]);
+  assert.equal(
+    JSON.stringify(items.map((i) => [i.date, i.competition, i.home, i.goalsHome, i.goalsAway, i.away, i.result])),
+    JSON.stringify([
+      ["2026-11-01", "DFB 포칼", "도르트문트", 2, null, "라이프치히", "W"],
+      ["2026-11-08", "분데스리가", "바이에른", 3, 0, "도르트문트", "L"],
+    ]),
   );
-  assert.deepEqual(
-    { ...formPreview("도르트문트", { opponentName: "바이에른", venue: "away", goalsFor: 0, goalsAgainst: 3 }) },
-    { home: "바이에른", away: "도르트문트", score: "3 : 0" },
-  );
-  assert.equal(formPreview("A", { opponentName: "B", venue: "home", goalsFor: null, goalsAgainst: 1 }).score, "— : 1");
 });
 
 test("match reviews show the count only: no star rating or average", () => {

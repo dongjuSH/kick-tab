@@ -1,5 +1,21 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-20 (금) — 06 리그 순위 비회원 전체 검수 개선
+
+브랜치 `feat/06-standings`(최신 `dev` f211ab2 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD·기능 명세서(LEAG-001·002·004, TEAM-001 규칙 3, MAT-005 규칙 4, CMP) v1.14 Fix, 유저 플로우 v1.13 Fix, Figma `49:57`·`49:570`·`234:8881`·`234:9750`·`53:1353`·`53:2047`·`61:1653`·`61:2355`·`567:7275`. Codex 교차 검증 2회(1차 결함 2·개선 2 → 보완 후 통과). 마이그레이션 없음.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 메인 리그 순위 | `features/standings/MainStandings.tsx`, `ChipRow.tsx`, 백엔드 `services/standings.py`(`league_competitions`) | LEAG-001: 제목 '리그 순위', 5대 리그 + UEFA 3개 리그 페이즈 상위 6팀, 링크 '전체 순위 보기'/'전체 순위·대진 보기'(현재 시즌), PC 화살표(넘칠 때만·끝 비활성)·모바일 스와이프+가장자리 흐림, 옛 휠·끌기 코드 삭제 |
+| 대회명 | `features/standings/useCompetitionLabel.ts`(새), `model.ts`(`LEAGUES`·`UEFA`·`COMPETITIONS`) | DB `name_ko` 기준(guide §3.1), 영문 칩 삭제 |
+| 공통 최근 5경기 | `components/common/RecentForm.tsx`(새, `FormItem`·`formItem`), 삭제 `features/standings/RecentForm.tsx`, 04 `HeadToHeadSection.tsx`·`match/model.ts`(`formItems`, 삭제 `formPreview`·`RESULT_LABEL`), 08 `TeamDetail.tsx` | LEAG-002 규칙 4·MAT-005 규칙 4: 네 화면 같은 표현(오래된 순·최신만 테두리·화면 '최신' 글자 삭제·팝업 '날짜 · 대회'+'홈 – 스코어 – 원정'), 팝업은 실제 높이로 위/아래/화면 안 배치(낮은 창) |
+| 최근 경기 데이터 | 백엔드 `schemas/standings.py`(`RecentMatch.competition`), `routes/standings.py`, `routes/teams.py`(`_recent`), `services/team_detail.py`(`official_form`, `RecentResult.competition`) | 팀 상세 = 친선 제외 전체 공식 경기(04 `team_forms` 재사용, 열 때 `ensure_form` — 새 종료 경기·7일 경과 때만 1~2회, 실패 시 기존 유지), 한 번도 받지 않은 팀은 저장 경기로 대체 |
+| 순위 구간 | `features/standings/model.ts`(`tableBands`·`bandOf`·`rangeText`, 삭제 `leagueZone`·`phaseBands`), `StandingsTable.tsx`(`bandRowClass`·`BandLegend`·`BasisNote`, `TeamCell` 이름 폭 제한), `LeaguePhaseTable.tsx` | LEAG-002 규칙 5·6: 행 배지 → 행 왼쪽 테두리 + 범례 한 번, 접근성 이름에 구간, '현재 순위 기준'/'확정 결과', 1024px 긴 팀명 말줄임 |
+| UEFA 선수 순위 | 백엔드 `routes/standings.py`(UEFA 허용·이름 HTML 엔티티 해제), `sync/standings.py`(UEFA 포함·제외 줄 로그), `services/standings.py`(`due_leagues` UEFA 결과 후에만, `OUTFIELD_POSITIONS`·`teamless`), 프런트 `StandingsSection.tsx`·`PlayerRankings.tsx`·`KnockoutStage.tsx` | LEAG-004: 예선 포함 대회·시즌 전체(실제 API로 예선 포함 확인), 리그 페이즈·토너먼트 화면 모두 오른쪽 선수 순위. 공급사 페이지 응답의 팀 빈 줄은 명확한 필드 선수만 빼고 골키퍼·포지션 미확인은 단위 거부 |
+| 테스트 | 백엔드 `test_standings.py`·`test_standings_db.py`·`test_team_detail_db.py`, 프런트 `standings.test.mjs`·`match-regressions.test.mjs` | 구간 판정, 최근 5경기 범위·대체·실패 보존, UEFA 선방(누락 제외·공동 순위), UEFA 갱신 조건, 팀 빈 줄 규칙, 공통 RecentForm 마크업 |
+
+검수: ruff, pytest 325(+DB 427), alembic check(head 0017), lint, tsc, npm test 62, 빌드(Next 16.4.6) 통과. 브라우저 320·375·768·1023·1024·1280·1920, 1280×560, 640×450(200% 대용), 640×285(낮은 창 팝업) — 페이지 가로 넘침·헤더 가림·팝업 잘림 없음, 콘솔 오류 0. 메인 8개 대회·화살표, 2025-26/2026-27 국내·UEFA 구간(분데스리가 16위 승강 PO), UEFA 3대회 × 2시즌 × 5분류, 최근 5경기 4개 화면, 지난 경기 페이지 분할 폭 변화. 실제 API 호출: UEFA 선수 첫 적재 532 + 사전 확인 7, 챔스 2025 원인 확인·재시도 528 + 중단 실행 1회(기록 없음, 최대 83), Codex 지적 후 UEFA 2025 재적재 337 — 화면 확인 0. 슈퍼컵·클럽 월드컵 등이 팀 상세에 반영되는 실제 화면 예시는 현재 허용 96팀 최근 공식 10경기에 해당 경기가 없어 DB 테스트로만 고정.
+
 ## 2026-11-20 (금) — 05 지난 경기 비회원 전체 검수 개선(페이지 분할·새 대회 확인)
 
 브랜치 `feat/05-results`(최신 `dev` 5186d6b 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD·기능 명세서(HIST-001~003, CMP) v1.14 Fix, 유저 플로우 v1.13 Fix, Figma `53:593`·`53:995`·`187:1946`. Codex 교차 검증 통과(지적 없음) 후, 페이지 분할이 사용자 구상(기존 `< 1 2 3 … 400 >` 양식에서 보이는 번호만 늘리기)과 달라 사용자가 Figma를 수정(`530:21586` PC·`530:21659` 모바일)했고 그대로 다시 구현했다.

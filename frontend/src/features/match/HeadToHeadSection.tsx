@@ -1,16 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState } from "react";
+import { RecentForm } from "@/components/common/RecentForm";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataState, StateMessage } from "@/components/ui/DataState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { cx } from "@/components/ui/cx";
 import type { FormBlock, MatchInfo, PastMeeting } from "@/lib/api/types";
-import { MISSING, formatShortDate } from "@/lib/format/kst";
+import { MISSING } from "@/lib/format/kst";
 import { competitionName, teamName } from "@/lib/format/match";
-import { RESULT_LABEL, formPreview } from "./model";
+import { formItems } from "./model";
 import { headToHeadQuery } from "./queries";
 
 const CARD = "flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6";
@@ -25,94 +24,13 @@ function score(meeting: PastMeeting): string {
   return penalty ? `${base} (PK ${penalty.replaceAll(" ", "")})` : base;
 }
 
-type Active = { row: "home" | "away"; index: number; pinned: boolean } | null;
-// Time to cross the gap between a badge and its preview without the preview closing.
-const HOVER_CLOSE_MS = 150;
-
-interface Hover {
-  enter: (row: "home" | "away", index: number) => void;
-  leave: () => void;
-}
-
-function FormRow({
-  row,
-  name,
-  block,
-  active,
-  setActive,
-  hover,
-  onRetry,
-}: {
-  row: "home" | "away";
-  name: string;
-  block: FormBlock;
-  active: Active;
-  setActive: (next: Active) => void;
-  hover: Hover;
-  onRetry: () => void;
-}) {
-  const id = useId();
+function FormRow({ name, block, onRetry }: { name: string; block: FormBlock; onRetry: () => void }) {
   return (
     <div className="flex flex-col gap-2">
       <span className="text-body font-bold text-fg">{name}</span>
       {block.status === "available" && block.data ? (
-        <ol className="relative flex flex-wrap gap-1" aria-label={`${name} 최근 경기 결과, 최신순`}>
-          {block.data.map((match, index) => {
-            const result = RESULT_LABEL[match.result];
-            const preview = formPreview(name, match);
-            const open = active?.row === row && active.index === index;
-            const date = formatShortDate(match.kickoffDateKst);
-            const competition = competitionName({ nameKo: match.competition, shortName: match.competition });
-            const tipId = `${id}-${index}`;
-            return (
-              <li
-                key={index}
-                // The badge and its preview are one hover area (WCAG 1.4.13): moving onto
-                // the preview keeps it open; leaving both closes it after a short delay.
-                onPointerEnter={(event) => {
-                  if (event.pointerType === "mouse") hover.enter(row, index);
-                }}
-                onPointerLeave={(event) => {
-                  if (event.pointerType === "mouse") hover.leave();
-                }}
-              >
-                {/* MAT-005: hover or keyboard focus (PC) and tap (mobile) preview the match
-                    as "홈팀 스코어 원정팀" (Figma 63:1909 · 63:2116). */}
-                <button
-                  type="button"
-                  aria-describedby={open ? tipId : undefined}
-                  className={cx(
-                    "cursor-pointer rounded-badge outline-offset-2",
-                    open && "ring-2 ring-action",
-                  )}
-                  onFocus={() => {
-                    if (!open) setActive({ row, index, pinned: false });
-                  }}
-                  onBlur={() => {
-                    if (open) setActive(null);
-                  }}
-                  onClick={() => setActive(open && active?.pinned ? null : { row, index, pinned: true })}
-                >
-                  <Badge tone={result.tone} className="min-w-[31px] justify-center">
-                    {result.label}
-                    <span className="sr-only">{` (${date} ${competition})`}</span>
-                  </Badge>
-                </button>
-                {open && (
-                  <span
-                    id={tipId}
-                    role="tooltip"
-                    className="absolute bottom-full left-0 z-10 mb-2 flex max-w-full flex-wrap items-center gap-x-3 rounded-control border border-line bg-surface px-3 py-2 text-label font-bold text-fg shadow-md"
-                  >
-                    <span>{preview.home}</span>
-                    <span className="whitespace-nowrap text-action">{preview.score}</span>
-                    <span>{preview.away}</span>
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
+        // MAT-005 rule 4: the shared recent-five row, oldest first like every other screen.
+        <RecentForm matches={formItems(name, block.data)} teamName={name} />
       ) : (
         <span className="text-small text-fg-muted">
           {block.status === "unavailable" ? "최근 경기 정보를 불러오지 못했습니다." : "최근 공식 경기 기록이 없습니다."}
@@ -129,54 +47,15 @@ function FormCard({ info, homeForm, awayForm, onRetry }: {
   awayForm: FormBlock;
   onRetry: () => void;
 }) {
-  const [active, setActive] = useState<Active>(null);
-  const card = useRef<HTMLElement>(null);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const hover: Hover = {
-    enter(row, index) {
-      clearTimeout(closeTimer.current);
-      setActive((current) =>
-        current?.pinned || (current?.row === row && current.index === index)
-          ? current
-          : { row, index, pinned: false },
-      );
-    },
-    leave() {
-      clearTimeout(closeTimer.current);
-      closeTimer.current = setTimeout(
-        () => setActive((current) => (current?.pinned ? current : null)),
-        HOVER_CLOSE_MS,
-      );
-    },
-  };
-  useEffect(() => () => clearTimeout(closeTimer.current), []);
-  useEffect(() => {
-    if (!active) return;
-    const outside = (event: PointerEvent) => {
-      if (event.target instanceof Node && card.current?.contains(event.target)) return;
-      setActive(null);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setActive(null);
-    };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [active]);
-  const shared = { active, setActive, hover, onRetry };
   return (
-    <section ref={card} className={CARD} aria-labelledby="form-title">
+    <section className={CARD} aria-labelledby="form-title">
       <div className="flex flex-col gap-1">
         <h2 id="form-title" className="text-subtitle font-bold">최근 5경기 흐름</h2>
         <p className="text-small text-fg-secondary">공식 경기 기준</p>
       </div>
-      {/* Room above the first row for its preview. */}
-      <div className="flex flex-col gap-4 pt-6">
-        <FormRow row="home" name={teamName(info.match.home)} block={homeForm} {...shared} />
-        <FormRow row="away" name={teamName(info.match.away)} block={awayForm} {...shared} />
+      <div className="flex flex-col gap-4">
+        <FormRow name={teamName(info.match.home)} block={homeForm} onRetry={onRetry} />
+        <FormRow name={teamName(info.match.away)} block={awayForm} onRetry={onRetry} />
       </div>
     </section>
   );

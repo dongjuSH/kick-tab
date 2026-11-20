@@ -89,28 +89,29 @@ test("display rules: signed goal difference, missing values, shared ranks", () =
   assert.equal(model.rankText(3, false), "3");
 });
 
-test("relegation marks come from the position: bottom three, or 16th play-off and 17th-18th", () => {
-  const { leagueZone } = loader()("@/features/standings/model");
-  const marks = (league, size, complete) =>
-    Array.from({ length: size }, (_, i) => leagueZone(league, i + 1, size, complete))
-      .map((z, i) => (z ? `${i + 1}:${z.label}:${z.tone}` : null))
-      .filter(Boolean)
-      .join(" ");
+test("table bands by position: bottom three, or 16th play-off and 17th-18th; UEFA 1-8 / 9-24 / 25-36", () => {
+  const { tableBands, bandOf, rangeText } = loader()("@/features/standings/model");
+  const text = (league, size, complete) =>
+    tableBands(league, size, complete).map((b) => `${rangeText(b)} ${b.label} ${b.tone}`).join(" / ");
   for (const league of [39, 140, 135]) {
-    assert.equal(marks(league, 20, false), "18:강등권:error 19:강등권:error 20:강등권:error");
-    assert.equal(marks(league, 20, true), "18:강등:error 19:강등:error 20:강등:error");
+    assert.equal(text(league, 20, false), "18–20위 강등권 error");
+    assert.equal(text(league, 20, true), "18–20위 강등 error");
   }
   for (const league of [78, 61]) {
-    assert.equal(marks(league, 18, false), "16:승강 플레이오프권:warning 17:강등권:error 18:강등권:error");
-    assert.equal(marks(league, 18, true), "16:승강 플레이오프:warning 17:강등:error 18:강등:error");
+    assert.equal(text(league, 18, false), "16위 승강 플레이오프권 warning / 17–18위 강등권 error");
+    assert.equal(text(league, 18, true), "16위 승강 플레이오프 warning / 17–18위 강등 error");
   }
-});
-
-test("UEFA league-phase bands: zones while it runs, results once it is over", () => {
-  const { phaseBands } = loader()("@/features/standings/model");
-  const text = (complete) => phaseBands(complete).map((b) => `${b.label} ${b.from}-${b.to}`).join(" / ");
-  assert.equal(text(false), "16강 직행권 1-8 / 플레이오프권 9-24 / 탈락권 25-36");
-  assert.equal(text(true), "16강 직행 1-8 / 플레이오프 진출 9-24 / 탈락 25-36");
+  for (const league of [2, 3, 848]) {
+    assert.equal(text(league, 36, false), "1–8위 16강 직행권 live / 9–24위 플레이오프권 warning / 25–36위 탈락권 error");
+    assert.equal(text(league, 36, true), "1–8위 16강 직행 live / 9–24위 플레이오프 진출 warning / 25–36위 탈락 error");
+  }
+  const bundesliga = tableBands(78, 18, false);
+  assert.equal(
+    [15, 16, 17, 18].map((rank) => bandOf(bundesliga, rank)?.key ?? "-").join(" "),
+    "- promotion-playoff relegation relegation",
+  );
+  assert.equal(bandOf(tableBands(2, 36, false), 24)?.key, "playoff");
+  assert.equal(bandOf(tableBands(2, 36, false), 25)?.key, "out");
 });
 
 test("UEFA: league phase by default, stage changes are history steps, a new competition resets the stage", () => {
@@ -148,10 +149,28 @@ test("0 rows then a failed refresh is partial, never a normal empty result (Code
   assert.equal(dataStatus({ isPending: false, isError: false, data: {} }, true, false), "empty");
 });
 
-test("main chips follow Figma 49:57 / 306:6221 (EPL·LaLiga·Serie A·Bundesliga·Ligue 1); standings tabs keep full names", () => {
-  const { LEAGUES } = loader()("@/features/standings/model");
-  assert.equal(LEAGUES.map((l) => l.chip).join("|"), "EPL|LaLiga|Serie A|Bundesliga|Ligue 1");
-  assert.equal(LEAGUES.map((l) => l.label).join("|"), "Premier League|LaLiga|Serie A|Bundesliga|Ligue 1");
+test("competition names are the DB name_ko (seeded fallback): five leagues, then UEFA", () => {
+  const { COMPETITIONS } = loader()("@/features/standings/model");
+  assert.equal(
+    COMPETITIONS.map((c) => c.label).join("|"),
+    "프리미어리그|라리가|세리에 A|분데스리가|리그 1|UEFA 챔피언스리그|UEFA 유로파리그|UEFA 컨퍼런스리그",
+  );
+});
+
+test("shared recent five: oldest first, only a border marks the latest, no visible '최신'", () => {
+  const { RecentForm, formItem } = loader()("@/components/common/RecentForm");
+  const match = (id, result) => ({
+    fixtureId: id, kickoffAt: "", kickoffDateKst: `2026-11-0${id}`, competition: "프리미어리그",
+    home: { id: 1, nameKo: "아스널", nameEn: "Arsenal" }, away: { id: 2, nameKo: null, nameEn: "Fulham" },
+    goalsHome: 2, goalsAway: 1, result,
+  });
+  const html = renderToStaticMarkup(
+    React.createElement(RecentForm, { matches: [match(1, "W"), match(2, "L")].map(formItem), teamName: "아스널" }),
+  );
+  assert.ok(!html.includes(">최신<"));
+  assert.match(html, /aria-label="승: 2026\.11\.01 프리미어리그 아스널 2 대 1 Fulham"/);
+  assert.match(html, /aria-label="최신 경기 패: 2026\.11\.02 프리미어리그 아스널 2 대 1 Fulham"/);
+  assert.equal((html.match(/ring-1/g) ?? []).length, 1);
 });
 
 test("DataState partial: an action sits next to the notice; without one the markup is unchanged", () => {

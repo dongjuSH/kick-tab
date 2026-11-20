@@ -44,6 +44,7 @@ from sqlalchemy.orm import Session, aliased
 from app.config import settings
 from app.core.kst import kst_date
 from app.models.fixture import Fixture
+from app.models.match_detail import TeamForm
 from app.models.reference import Competition, CompetitionSeason, Team, TeamCompetitionSeason
 from app.models.standings import LeagueSync, Player, Standing
 from app.models.team_detail import (
@@ -840,6 +841,7 @@ def standings_collected(session: Session, league: int, season: int) -> bool:
 @dataclass(frozen=True)
 class RecentResult:
     fixture: Fixture
+    competition: Competition
     home: Team
     away: Team
     result: str  # W / D / L for this team
@@ -861,13 +863,32 @@ def match_result(fixture: Fixture, team_id: int) -> str:
     return "W" if mine > theirs else "L" if mine < theirs else "D"
 
 
+def official_form(session: Session, team_id: int) -> list[dict[str, Any]] | None:
+    """The team's last RECENT official results (TEAM-001 rule 3, 06 개선 2026-11-20), oldest
+    first: the 04 head-to-head source — `/fixtures?team=&last=10` without friendlies, cached
+    per team in `team_forms` (`head_to_head.ensure_form`), so unsupported official matches
+    (super cups, Club World Cup, other cups) count too. None while the team was never read
+    (the caller then falls back to the stored match list); a failed refresh keeps the last
+    stored list. Normalised rows without a score are skipped."""
+    row = session.get(TeamForm, team_id)
+    if row is None or row.fetched_at is None:
+        return None
+    scored = [
+        r
+        for r in row.payload or []
+        if r.get("goalsHome") is not None and r.get("goalsAway") is not None
+    ]
+    return list(reversed(scored[:RECENT]))
+
+
 def recent_results(session: Session, team_id: int) -> list[RecentResult]:
-    """The team's last RECENT finished matches in the supported competitions (stored match
-    list: leagues, domestic cups and UEFA), oldest first — the last one is the latest. A
-    match without a score is skipped. Read from the DB only: no provider request."""
+    """Fallback of `official_form`: the team's last RECENT finished matches in the supported
+    competitions (stored match list: leagues, cups, super cups, UEFA, Club World Cup),
+    oldest first — the last one is the latest. A match without a score is skipped. Read from
+    the DB only: no provider request."""
     home, away = aliased(Team), aliased(Team)
     rows = session.execute(
-        select(Fixture, home, away)
+        select(Fixture, Competition, home, away)
         .join(Competition, Competition.id == Fixture.competition_id)
         .join(home, home.id == Fixture.home_team_id)
         .join(away, away.id == Fixture.away_team_id)
@@ -881,7 +902,9 @@ def recent_results(session: Session, team_id: int) -> list[RecentResult]:
         .order_by(Fixture.kickoff_at.desc(), Fixture.id.desc())
         .limit(RECENT)
     ).all()
-    return [RecentResult(f, h, a, match_result(f, team_id)) for f, h, a in reversed(rows)]
+    return [
+        RecentResult(f, c, h, a, match_result(f, team_id)) for f, c, h, a in reversed(rows)
+    ]
 
 
 def team_fixtures(

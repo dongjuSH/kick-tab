@@ -12,7 +12,7 @@ import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
 import { cx } from "@/components/ui/cx";
 import { FavoriteToggle } from "@/features/favorites/FavoriteToggle";
 import { useFavorites } from "@/features/favorites/useFavorites";
-import { RecentForm } from "@/features/standings/RecentForm";
+import { RecentForm, formItem } from "@/components/common/RecentForm";
 import { isApiError } from "@/lib/api/errors";
 import type { TeamOverview } from "@/lib/api/types";
 import { teamName } from "@/lib/format/match";
@@ -225,7 +225,7 @@ function TeamHeader({
       <div className="flex flex-wrap items-center gap-3 [&_li]:flex">
         <span className="text-small text-fg-muted">최근 5경기</span>
         {recent.length ? (
-          <RecentForm matches={recent} teamName={name} />
+          <RecentForm matches={recent.map(formItem)} teamName={name} />
         ) : (
           <span className="text-small text-fg-muted">최근 공식 경기 기록이 없습니다.</span>
         )}

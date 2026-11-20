@@ -18,8 +18,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.main import app
+from app.models.match_detail import TeamForm
 from app.models.news import NewsArticle, NewsArticleTeam
-from app.models.reference import CompetitionSeason, Team
+from app.models.reference import Competition, CompetitionSeason, Team
 from app.models.team_detail import SquadMember, TeamSync, Transfer
 from app.providers.api_football import ApiFootballClient, DailyBudget, MinuteRateLimiter
 from app.services import team_detail as detail
@@ -117,14 +118,84 @@ def test_squad_rows_are_one_per_player_with_this_teams_line(client):
                 assert totals[key] == sum(line[key] for line in lines)
 
 
-def test_recent_matches_come_from_stored_fixtures_oldest_first(client):
+def _form_row(n, league, name, home, away, goals, winner):
+    """A normalised official result as `head_to_head` stores it (newest first in the list)."""
+    kickoff = datetime.now(UTC) - timedelta(hours=n)
+    return {
+        "fixtureId": 990_000 + n, "kickoffAt": kickoff.isoformat(), "leagueId": league,
+        "leagueName": name, "round": "R", "homeId": home, "homeName": f"T{home}", "awayId": away,
+        "awayName": f"T{away}", "goalsHome": goals[0], "goalsAway": goals[1],
+        "penaltyHome": None, "penaltyAway": None, "homeWinner": winner == "home",
+        "awayWinner": winner == "away", "status": "FT",
+    }
+
+
+def _failing_provider(monkeypatch):
+    from app.api.routes import teams
+
+    def factory():
+        return ApiFootballClient(
+            SecretStr("test"),
+            transport=httpx.MockTransport(lambda request: httpx.Response(500)),
+            limiter=MinuteRateLimiter(1000),
+            budget=DailyBudget(1000),
+            max_retries=0,
+        )
+
+    monkeypatch.setattr(teams, "ApiFootballClient", factory)
+
+
+def test_recent_five_are_the_teams_official_matches_oldest_first(session, client):
+    """06 개선 2026-11-20 (TEAM-001 rule 3): the head-to-head source — official matches of
+    every competition, a super cup (531) and one outside the supported list (provider name)
+    included. A fresh list is read without a request (real HTTP is refused in tests)."""
+    payload = [
+        _form_row(1, 39, "Premier League", CITY, 42, (2, 1), "home"),
+        _form_row(30, 9999, "Some Official Cup", 1000, CITY, (0, 0), None),
+        _form_row(60, 531, "UEFA Super Cup", CITY, 541, (1, 1), "away"),
+        _form_row(90, 2, "UEFA Champions League", 541, CITY, (3, 0), "home"),
+        _form_row(120, 45, "FA Cup", CITY, 33, (4, 0), "home"),
+        _form_row(150, 39, "Premier League", 40, CITY, (1, 0), "home"),
+    ]
+    session.merge(TeamForm(team_id=CITY, payload=payload, fetched_at=datetime.now(UTC)))
+    session.flush()
+    recent = client.get(f"/api/v1/teams/{CITY}").json()["data"]["recent"]
+    assert [m["fixtureId"] for m in recent] == [990_120, 990_090, 990_060, 990_030, 990_001]
+    names = {c.id: c.name_ko for c in session.scalars(select(Competition))}
+    assert [m["competition"] for m in recent] == [
+        names[45], names[2], names[531], "Some Official Cup", names[39]
+    ]
+    # Winner flags decide (a shoot-out win reads as a win); otherwise a draw.
+    assert [m["result"] for m in recent] == ["W", "L", "L", "D", "W"]
+
+
+def test_a_failed_refresh_keeps_the_last_official_list(session, client, monkeypatch):
+    payload = [_form_row(1, 39, "Premier League", CITY, 42, (2, 1), "home")]
+    stale = datetime.now(UTC) - timedelta(days=8)
+    session.merge(TeamForm(team_id=CITY, payload=payload, fetched_at=stale))
+    session.flush()
+    _failing_provider(monkeypatch)
+    recent = client.get(f"/api/v1/teams/{CITY}").json()["data"]["recent"]
+    assert [m["fixtureId"] for m in recent] == [990_001]
+    row = session.get(TeamForm, CITY)
+    assert row.fetched_at == stale and row.last_failed_at is not None
+
+
+def test_never_read_falls_back_to_stored_matches_oldest_first(session, client, monkeypatch):
+    row = session.get(TeamForm, CITY)
+    if row is not None:
+        session.delete(row)
+        session.flush()
+    _failing_provider(monkeypatch)
     recent = client.get(f"/api/v1/teams/{CITY}").json()["data"]["recent"]
     assert 0 < len(recent) <= 5
     days = [m["kickoffAt"] for m in recent]
     assert days == sorted(days)
+    names = set(session.scalars(select(Competition.name_ko)))
     for match in recent:
         assert CITY in (match["home"]["id"], match["away"]["id"])
         assert match["result"] in ("W", "D", "L")
+        assert match["competition"] in names
 
 
 def test_promoted_team_has_no_last_season_record(client):

@@ -6,7 +6,7 @@ Needs `reference`, `fixtures_season`, `standings`, `player_rankings` and `player
 """
 
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -15,6 +15,7 @@ from pydantic import SecretStr
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db.session import get_db
 from app.main import app
 from app.models.fixture import Fixture
@@ -96,17 +97,19 @@ def test_tables_of_both_seasons_are_served_as_given(client):
 def test_cups_and_unsupported_seasons_are_refused(client):
     assert client.get("/api/v1/standings", params={"league": 45}).status_code == 404
     assert client.get("/api/v1/standings", params={"league": 2}).status_code == 200  # UEFA
-    uefa_players = client.get("/api/v1/player-rankings", params={"league": 2, "type": "goals"})
-    assert uefa_players.status_code == 404  # player rankings: five leagues only
+    cup_players = client.get("/api/v1/player-rankings", params={"league": 45, "type": "goals"})
+    assert cup_players.status_code == 404  # player rankings: five leagues and UEFA only
     assert client.get("/api/v1/standings", params={"league": 39, "season": 2019}).status_code == 404
     bad_type = client.get("/api/v1/player-rankings", params={"league": 39, "type": "fouls"})
     assert bad_type.status_code == 422
 
 
-def test_summary_has_five_leagues_with_six_rows(client):
+def test_summary_has_the_leagues_and_uefa_with_six_rows(client):
+    """LEAG-001 (06 개선 2026-11-20): five leagues, then the UEFA league phases."""
     body = client.get("/api/v1/standings/summary").json()["data"]
     assert body["season"]["current"] is True
-    assert [item["league"]["id"] for item in body["leagues"]] == [39, 140, 135, 78, 61]
+    ids = [item["league"]["id"] for item in body["leagues"]]
+    assert ids == [39, 140, 135, 78, 61, 2, 3, 848]
     assert all(item["status"] == "available" and len(item["rows"]) == 6 for item in body["leagues"])
 
 
@@ -518,6 +521,55 @@ def test_uefa_table_must_be_one_group_ranked_1_to_36(session, monkeypatch):
     assert len(stored) == 36 and len({r.group_name for r in stored}) == 1
     assert sorted(r.rank for r in stored) == list(range(1, 37))
     assert session.get(LeagueSync, (2, 2025, "standings")).synced_at == synced_before
+
+
+def test_uefa_saves_exclude_missing_keepers_and_share_ranks(client, session):
+    """06 개선 2026-11-20 (LEAG-004): UEFA saves come from every player line of the whole
+    competition — a goalkeeper with any missing value is excluded (never counted as 0) and
+    equal totals share a rank. The four provider lists keep their order, 20 at most."""
+    for league in (2, 3, 848):
+        for season in (2025, 2026):
+            body = client.get("/api/v1/player-rankings",
+                              params={"league": league, "season": season, "type": "saves"}).json()
+            items = body["data"]["items"]
+            lines = session.execute(select(
+                PlayerSeasonStat.player_id, PlayerSeasonStat.saves, PlayerSeasonStat.appearances,
+            ).where(
+                PlayerSeasonStat.competition_id == league, PlayerSeasonStat.season == season,
+                PlayerSeasonStat.position == "Goalkeeper",
+            )).all()
+            missing = {p for p, saves, _ in lines if saves is None}
+            assert body["data"]["excluded"] == len(missing)
+            assert not missing & {i["player"]["id"] for i in items}
+            values = [i["value"] for i in items]
+            assert values == sorted(values, reverse=True)
+            for item in items:
+                assert item["rank"] == 1 + sum(v > item["value"] for v in values)
+                assert item["tied"] == (values.count(item["value"]) > 1)
+            for kind in ("goals", "assists", "yellow", "red"):
+                listed = client.get("/api/v1/player-rankings",
+                                    params={"league": league, "season": season, "type": kind})
+                assert listed.status_code == 200 and len(listed.json()["data"]["items"]) <= 20
+
+
+def test_uefa_player_lists_wait_for_a_uefa_result(session):
+    """UEFA player lists (about 90-110 pages a competition) are read again only after a UEFA
+    result since the last success; the leagues keep the daily rule."""
+    from app.services.standings import due_leagues
+
+    season = settings.current_season
+    latest = session.scalar(select(func.max(Fixture.kickoff_at)).where(
+        Fixture.competition_id == 2, Fixture.season == season, Fixture.status == "finished"))
+    assert latest is not None
+    for synced, due in ((latest + timedelta(hours=4), False), (latest + timedelta(hours=2), True)):
+        for league in (2, 39):
+            row = session.get(LeagueSync, (league, season, "player_stats"))
+            row.synced_at, row.failed_at = synced, None
+        session.flush()
+        now = synced + timedelta(days=1)
+        result = due_leagues(session, season, "player_stats", now, matchday_hourly=False,
+                             leagues=(39, 2))
+        assert (2 in result) is due and 39 in result
 
 
 def _ko(client, league, stage, season=2025):

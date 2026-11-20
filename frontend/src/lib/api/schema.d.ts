@@ -295,8 +295,9 @@ export interface paths {
         };
         /**
          * Read Standings Summary
-         * @description LEAG-001: the top rows of each five-league table, current season. One league that was
-         *     never collected does not hide the others.
+         * @description LEAG-001: the top rows of each table of the current season — the five leagues and
+         *     the UEFA league phases (the last stored league-phase table stays after the knockouts
+         *     begin). One competition never collected does not hide the others.
          */
         get: operations["read_standings_summary_api_v1_standings_summary_get"];
         put?: never;
@@ -319,7 +320,8 @@ export interface paths {
          * @description LEAG-004: goals / assists / yellow / red are the provider's top lists in its order (not
          *     a full ranking); red counts direct red cards only. Saves are aggregated from every
          *     player line: goalkeepers with a missing value are excluded (`excluded`), ties share a
-         *     rank.
+         *     rank. UEFA competitions (06 개선 2026-11-20): the whole competition and season,
+         *     qualifiers included — never re-counted by stage.
          */
         get: operations["read_player_rankings_api_v1_player_rankings_get"];
         put?: never;
@@ -386,9 +388,12 @@ export interface paths {
         };
         /**
          * Read Team
-         * @description TEAM-001: identity, league standing, coach, venue and the last five finished matches
-         *     (stored match list: no provider request). A missing part is marked on its own and never
-         *     hides the rest of the page.
+         * @description TEAM-001: identity, league standing, coach, venue and the last five official results.
+         *     The results come from the team's official matches cached for head-to-head (`team_forms`,
+         *     friendlies excluded, 06 개선 2026-11-20): read again from the provider only when a newer
+         *     stored result exists or the list is 7 days old (1 request, 2 when widened; a failure keeps
+         *     the last list and waits 5 minutes). Never read → the stored supported-competition matches.
+         *     A missing part is marked on its own and never hides the rest of the page.
          */
         get: operations["read_team_api_v1_teams__team_id__get"];
         put?: never;
@@ -1199,8 +1204,9 @@ export interface components {
         };
         /**
          * RecentMatch
-         * @description One finished match of the table (stored fixtures): the preview shows its date and
-         *     "home – score – away" without asking the provider.
+         * @description One finished match of the recent five (LEAG-002 rule 4, TEAM-001 rule 3): the preview
+         *     shows "date · competition" and "home – score – away" without asking the provider.
+         *     Tables use their own stored matches; team detail the team's official matches.
          */
         RecentMatch: {
             /** Fixtureid */
@@ -1215,6 +1221,8 @@ export interface components {
              * Format: date
              */
             kickoffDateKst: string;
+            /** Competition */
+            competition: string;
             home: components["schemas"]["TeamName"];
             away: components["schemas"]["TeamName"];
             /** Goalshome */
@@ -2462,7 +2470,7 @@ export interface operations {
     read_player_rankings_api_v1_player_rankings_get: {
         parameters: {
             query: {
-                /** @description League id (five leagues only) */
+                /** @description Five leagues or UEFA 2·3·848 */
                 league: number;
                 /** @description Ranking type */
                 type: "goals" | "assists" | "yellow" | "red" | "saves";

@@ -36,7 +36,7 @@ from app.schemas.standings import (
     TeamName,
 )
 from app.schemas.standings import RecentMatch as RecentMatchItem
-from app.seed.competitions import LEAGUE_IDS, UEFA_IDS
+from app.seed.competitions import UEFA_IDS
 from app.services.fixtures import _score
 from app.services.knockouts import Slot, Tie, build_stage
 from app.services.match_status import map_status
@@ -57,13 +57,14 @@ from app.services.standings import (
     sync_state,
     table_complete,
 )
+from app.services.team_detail import display_text
 
 router = APIRouter(tags=["standings"])
 Db = Annotated[Session, Depends(get_db)]
 
 NOT_A_LEAGUE = "순위를 제공하지 않는 대회입니다. 5대 리그나 UEFA 대회 중에서 선택해 주세요."
 NOT_UEFA = "토너먼트 대진은 UEFA 대회만 제공합니다."
-NO_PLAYER_RANKINGS = "선수 순위는 5대 리그만 제공합니다."
+NO_PLAYER_RANKINGS = "선수 순위는 5대 리그와 UEFA 대회만 제공합니다."
 FIXTURES_NOT_COLLECTED = "대진을 아직 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."
 NO_SEASON_DATA = "선택한 시즌에는 이 리그의 순위 데이터가 없습니다."
 STANDINGS_NOT_COLLECTED = "리그 순위를 아직 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."
@@ -105,12 +106,13 @@ def _name(team: Team) -> TeamName:
     return TeamName(id=team.id, name_ko=team.name_ko, name_en=team.name_en)
 
 
-def _recent(match: RecentMatch) -> RecentMatchItem:
+def _recent(match: RecentMatch, competition: str) -> RecentMatchItem:
     f = match.fixture
     return RecentMatchItem(
         fixture_id=f.id,
         kickoff_at=f.kickoff_at,
         kickoff_date_kst=f.kickoff_date_kst,
+        competition=competition,
         home=_name(match.home),
         away=_name(match.away),
         goals_home=f.goals_home,
@@ -120,7 +122,10 @@ def _recent(match: RecentMatch) -> RecentMatchItem:
 
 
 def _groups(
-    groups: list[StandingGroupData], lookup: DetailLookup, recent: dict[int, list[RecentMatch]]
+    groups: list[StandingGroupData],
+    lookup: DetailLookup,
+    recent: dict[int, list[RecentMatch]],
+    competition: str,
 ) -> list[StandingGroup]:
     return [
         StandingGroup(
@@ -128,7 +133,7 @@ def _groups(
             rows=[
                 TableRow(
                     **_row(s, team, lookup).model_dump(),
-                    recent=[_recent(m) for m in recent.get(team.id, [])],
+                    recent=[_recent(m, competition) for m in recent.get(team.id, [])],
                 )
                 for s, team in group.rows
             ],
@@ -161,6 +166,7 @@ def read_league_standings(
         read_standings(db, league, season),
         team_detail_lookup(db),
         recent_matches(db, league, season),
+        competition.name_ko or competition.short_name,
     )
     return StandingsResponse(
         data=LeagueStandings(
@@ -175,8 +181,9 @@ def read_league_standings(
 
 @router.get("/standings/summary")
 def read_standings_summary(db: Db) -> StandingsSummaryResponse:
-    """LEAG-001: the top rows of each five-league table, current season. One league that was
-    never collected does not hide the others."""
+    """LEAG-001: the top rows of each table of the current season — the five leagues and
+    the UEFA league phases (the last stored league-phase table stays after the knockouts
+    begin). One competition never collected does not hide the others."""
     season = settings.current_season
     lookup = team_detail_lookup(db)
     leagues = []
@@ -205,7 +212,10 @@ def _item(entry: RankedPlayer, lookup: DetailLookup) -> PlayerRankItem:
         rank=entry.rank,
         tied=entry.tied,
         player=PlayerRef(
-            id=entry.player.id, name=entry.player.name, photo_url=player_photo(entry.player)
+            id=entry.player.id,
+            # Provider names may carry HTML entities ("O&apos;Reilly"): shown decoded.
+            name=display_text(entry.player.name) or entry.player.name,
+            photo_url=player_photo(entry.player),
         ),
         team=team_ref(entry.team, lookup) if entry.team is not None else None,
         value=entry.value,
@@ -216,16 +226,17 @@ def _item(entry: RankedPlayer, lookup: DetailLookup) -> PlayerRankItem:
 @router.get("/player-rankings")
 def read_player_rankings(
     db: Db,
-    league: Annotated[int, Query(gt=0, description="League id (five leagues only)")],
+    league: Annotated[int, Query(gt=0, description="Five leagues or UEFA 2·3·848")],
     type: Annotated[RankingType, Query(description="Ranking type")],  # noqa: A002
     season: Annotated[int | None, Query(ge=1, description="API season; default current")] = None,
 ) -> PlayerRankingsResponse:
     """LEAG-004: goals / assists / yellow / red are the provider's top lists in its order (not
     a full ranking); red counts direct red cards only. Saves are aggregated from every
     player line: goalkeepers with a missing value are excluded (`excluded`), ties share a
-    rank."""
+    rank. UEFA competitions (06 개선 2026-11-20): the whole competition and season,
+    qualifiers included — never re-counted by stage."""
     season = season or settings.current_season
-    competition = _league(db, league, season, LEAGUE_IDS, NO_PLAYER_RANKINGS)
+    competition = _league(db, league, season, STANDINGS_IDS, NO_PLAYER_RANKINGS)
     kind = "player_stats" if type == "saves" else type
     state = sync_state(db, league, season, kind)
     if not state.collected:

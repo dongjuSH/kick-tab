@@ -13,10 +13,11 @@ from sqlalchemy.orm import Session
 
 from app.api.errors import ApiError
 from app.config import settings
-from app.core.kst import kst_today
+from app.core.kst import kst_date, kst_today
 from app.db.session import get_db
 from app.models.reference import Competition, Team
 from app.models.team_detail import TeamCoach, Transfer
+from app.providers.api_football import ApiFootballClient
 from app.schemas.standings import RecentMatch, TeamName
 from app.schemas.team_detail import (
     CoachBlock,
@@ -50,6 +51,7 @@ from app.schemas.team_detail import (
 from app.schemas.teams import BrowseTeam, TeamsMeta, TeamsResponse
 from app.seed.competitions import LEAGUE_IDS
 from app.services import team_detail as detail
+from app.services.head_to_head import competition_names, ensure_form, result_for, team_names
 from app.services.reference import competition_ref, crest, team_detail_lookup, team_ref
 from app.services.results import season_item
 from app.services.team_browse import PAGE_SIZE, MembershipUnknown, browse_teams
@@ -142,9 +144,12 @@ def _not_collected(area: str) -> ApiError:
 
 @router.get("/teams/{team_id}")
 def read_team(db: Db, team_id: TeamId) -> TeamOverviewResponse:
-    """TEAM-001: identity, league standing, coach, venue and the last five finished matches
-    (stored match list: no provider request). A missing part is marked on its own and never
-    hides the rest of the page."""
+    """TEAM-001: identity, league standing, coach, venue and the last five official results.
+    The results come from the team's official matches cached for head-to-head (`team_forms`,
+    friendlies excluded, 06 개선 2026-11-20): read again from the provider only when a newer
+    stored result exists or the list is 7 days old (1 request, 2 when widened; a failure keeps
+    the last list and waits 5 minutes). Never read → the stored supported-competition matches.
+    A missing part is marked on its own and never hides the rest of the page."""
     access = _access(db, team_id)
     league_id = access.league.id
     team, season = access.team, settings.current_season
@@ -185,25 +190,56 @@ def read_team(db: Db, team_id: TeamId) -> TeamOverviewResponse:
             standing=standing,
             coach=coach,
             venue=venue,
-            recent=[
-                RecentMatch(
-                    fixture_id=r.fixture.id,
-                    kickoff_at=r.fixture.kickoff_at,
-                    kickoff_date_kst=r.fixture.kickoff_date_kst,
-                    home=_team_name(r.home),
-                    away=_team_name(r.away),
-                    goals_home=r.fixture.goals_home,
-                    goals_away=r.fixture.goals_away,
-                    result=r.result,
-                )
-                for r in detail.recent_results(db, team_id)
-            ],
+            recent=_recent(db, team_id),
         )
     )
 
 
 def _team_name(team: Team) -> TeamName:
     return TeamName(id=team.id, name_ko=team.name_ko, name_en=team.name_en)
+
+
+def _recent(db: Session, team_id: int) -> list[RecentMatch]:
+    """The last five official results, oldest first (see `read_team`)."""
+    ensure_form(db, team_id, datetime.now(UTC), ApiFootballClient)
+    form = detail.official_form(db, team_id)
+    if form is None:
+        return [
+            RecentMatch(
+                fixture_id=r.fixture.id,
+                kickoff_at=r.fixture.kickoff_at,
+                kickoff_date_kst=r.fixture.kickoff_date_kst,
+                competition=r.competition.name_ko or r.competition.short_name,
+                home=_team_name(r.home),
+                away=_team_name(r.away),
+                goals_home=r.fixture.goals_home,
+                goals_away=r.fixture.goals_away,
+                result=r.result,
+            )
+            for r in detail.recent_results(db, team_id)
+        ]
+    leagues, names = competition_names(db), team_names(db, [form])
+    items = []
+    for r in form:
+        kickoff = datetime.fromisoformat(r["kickoffAt"])
+        items.append(
+            RecentMatch(
+                fixture_id=r["fixtureId"],
+                kickoff_at=kickoff,
+                kickoff_date_kst=kst_date(kickoff),
+                competition=leagues.get(r.get("leagueId")) or r.get("leagueName") or "—",
+                home=TeamName(
+                    id=r["homeId"], name_ko=names.get(r["homeId"]), name_en=r["homeName"] or "—"
+                ),
+                away=TeamName(
+                    id=r["awayId"], name_ko=names.get(r["awayId"]), name_en=r["awayName"] or "—"
+                ),
+                goals_home=r["goalsHome"],
+                goals_away=r["goalsAway"],
+                result=result_for(r, team_id),
+            )
+        )
+    return items
 
 
 @router.get("/teams/{team_id}/fixtures")
