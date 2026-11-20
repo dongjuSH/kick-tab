@@ -10,8 +10,9 @@ import { isApiError } from "@/lib/api/errors";
 import type { KnockoutLeg, KnockoutStage as Stage, KnockoutTeamSlot, KnockoutTie } from "@/lib/api/types";
 import { formatKstMonthDayTime } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
-import { UEFA, dataStatus, legRows, stageLabel } from "./model";
+import { dataStatus, legRows, stageLabel } from "./model";
 import { knockoutsQuery } from "./queries";
+import { useCompetitionLabel } from "./useCompetitionLabel";
 
 const STATE: Record<KnockoutTie["state"], { label: string; tone: BadgeTone }> = {
   finished: { label: "종료", tone: "accent" },
@@ -30,13 +31,13 @@ const STATE: Record<KnockoutTie["state"], { label: string; tone: BadgeTone }> = 
 export function KnockoutStage({ league, season, stage }: { league: number; season: number | null; stage: Stage }) {
   const round = useQuery(knockoutsQuery(league, season, stage));
   const ties = round.data?.data.ties ?? [];
-  const short = UEFA.find((c) => c.id === league)?.short ?? "";
+  const label = useCompetitionLabel();
   const failed = Boolean(round.data?.meta.refreshFailed || round.isError);
 
   return (
     <section aria-labelledby="knockout-title" className="flex min-w-0 flex-col gap-4">
       <h2 id="knockout-title" className="text-subtitle font-bold">
-        {short} {stageLabel(stage)} 대진
+        {label(league)} {stageLabel(stage)} 대진
       </h2>
       <DataState
         status={dataStatus(round, ties.length === 0, failed)}

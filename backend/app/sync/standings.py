@@ -1,4 +1,5 @@
-"""Standings and player data of the five leagues (chat 06, guide §6.5).
+"""Standings and player data of the five leagues and the UEFA competitions (chat 06,
+guide §6.5).
 
 - standings (hourly check): one /standings?league=&season= per due table — the five leagues
   and, since 2026-11-17, the UEFA league phases (2, 3, 848; one 36-team group each). Current
@@ -6,10 +7,13 @@
   the last 4 hours; UEFA counts league-phase matches only), otherwise once a day. The hourly
   precheck reads only the DB, so idle hours leave no sync_runs row. Past seasons are kept:
   collected only when never stored or with force=1.
-- player_rankings (daily 14:00 KST): the four provider top lists per league
-  (/players/topscorers, topassists, topyellowcards, topredcards) = 20 requests a season.
-- player_stats (daily 14:20 KST): every /players?league=&season=&page= page of each league
-  (about 25-45 pages a league) into player_season_stats; saves are aggregated from it.
+- player_rankings (daily 14:00 KST): the four provider top lists per competition
+  (/players/topscorers, topassists, topyellowcards, topredcards) = 32 requests a season.
+- player_stats (daily 14:20 KST): every /players?league=&season=&page= page of each
+  competition (leagues about 25-45 pages, UEFA 62-108 — qualifiers included) into
+  player_season_stats; saves are aggregated from it.
+  UEFA lists (06 개선 2026-11-20) are refreshed only after a UEFA result since their last
+  success (`due_leagues`), so UEFA adds about 270 requests on the day after a matchday.
 
 Params: season=2025, league=61 (one league, to split a long run), force=1 (ignore the
 schedule). Every unit (league × kind) is stored only when its answer is complete; a failed
@@ -27,7 +31,6 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.providers.api_football import ApiFootballClient, ApiFootballError
-from app.seed.competitions import LEAGUE_IDS
 from app.services.reference import managed_seasons
 from app.services.standings import (
     STANDINGS_IDS,
@@ -56,10 +59,10 @@ def _season(params: Mapping[str, Any]) -> int:
 
 
 def _targets(session: Session, params: Mapping[str, Any], kind: str, *, hourly: bool) -> list[int]:
-    """Tables cover the five leagues and the UEFA league phases; player lists and records
-    the five leagues only (LEAG-004)."""
+    """Tables, player lists and records cover the five leagues and the three UEFA
+    competitions (LEAG-002·004; UEFA players: the whole competition, qualifiers included)."""
     season = _season(params)
-    scope = STANDINGS_IDS if kind == "standings" else LEAGUE_IDS
+    scope = STANDINGS_IDS
     if params.get("league") is not None:
         league = int(params["league"])
         if league not in scope:
@@ -146,7 +149,7 @@ def sync_standings(ctx: JobContext) -> None:
 
 @register_job(
     "player_rankings",
-    description="Provider top lists: goals, assists, yellow, red (4 requests per league)",
+    description="Provider top lists: goals, assists, yellow, red (4 per competition)",
     schedule={"trigger": "cron", "hour": 5, "minute": 0},  # 14:00 KST
 )
 def sync_player_rankings(ctx: JobContext) -> None:
@@ -156,7 +159,7 @@ def sync_player_rankings(ctx: JobContext) -> None:
         for kind in TOP_LISTS
         for league in _targets(ctx.session, ctx.params, kind, hourly=False)
     ]
-    units.sort(key=lambda unit: LEAGUE_IDS.index(unit[0]))
+    units.sort(key=lambda unit: STANDINGS_IDS.index(unit[0]))
 
     def fetch(client: ApiFootballClient, league: int, kind: str):
         result = client.get(TOP_LISTS[kind][0], {"league": league, "season": season})
@@ -168,7 +171,7 @@ def sync_player_rankings(ctx: JobContext) -> None:
 
 @register_job(
     "player_stats",
-    description="Every player season line of the five leagues (all /players pages)",
+    description="Every player season line of the leagues and UEFA (all /players pages)",
     schedule={"trigger": "cron", "hour": 5, "minute": 20},  # 14:20 KST
 )
 def sync_player_stats(ctx: JobContext) -> None:
@@ -185,7 +188,8 @@ def sync_player_stats(ctx: JobContext) -> None:
             pages.append({"response": result.response, "paging": result.paging})
         parsed = parse_player_pages(pages, league, season)
         logger.info(
-            "player_stats %s/%s: %d pages, %d lines", league, season, total, len(parsed.lines)
+            "player_stats %s/%s: %d pages, %d lines, %d outfield lines without a team left out",
+            league, season, total, len(parsed.lines), parsed.teamless,
         )
         return lambda session, now: save_player_stats(session, league, season, parsed, now)
 

@@ -1,4 +1,4 @@
-import type { BadgeTone } from "@/components/ui/Badge";
+import type { FormItem } from "@/components/common/RecentForm";
 import type { FormMatch, MatchEvent, MatchInfo, StatRow } from "@/lib/api/types";
 import { MISSING } from "@/lib/format/kst";
 
@@ -118,12 +118,6 @@ export function positionText(position: string | null): string {
   return position ? (POSITIONS[position] ?? position) : MISSING;
 }
 
-export const RESULT_LABEL: Record<FormMatch["result"], { label: string; tone: BadgeTone }> = {
-  W: { label: "승", tone: "live" },
-  D: { label: "무", tone: "neutral" },
-  L: { label: "패", tone: "error" },
-};
-
 /** Normal results and rulings (awarded / walkover). */
 export function isRuling(info: MatchInfo): boolean {
   return info.match.finishType === "awarded" || info.match.finishType === "walkover";
@@ -146,18 +140,24 @@ export function areasOf(info: MatchInfo) {
   };
 }
 
-/** "도르트문트 2 : 1 라이프치히" preview of a recent-form match (MAT-005): home first. */
-export function formPreview(
-  teamName: string,
-  match: Pick<FormMatch, "opponentName" | "venue" | "goalsFor" | "goalsAgainst">,
-): { home: string; away: string; score: string } {
-  const goal = (value: number | null) => (value === null ? MISSING : String(value));
-  const home = match.venue === "home";
-  return {
-    home: home ? teamName : match.opponentName,
-    away: home ? match.opponentName : teamName,
-    score: home
-      ? `${goal(match.goalsFor)} : ${goal(match.goalsAgainst)}`
-      : `${goal(match.goalsAgainst)} : ${goal(match.goalsFor)}`,
-  };
+/**
+ * A team's recent official results (MAT-005, newest first from the API) as the shared
+ * recent-five row: oldest first, each with its home and away side (06 개선 2026-11-20).
+ */
+export function formItems(teamName: string, matches: readonly FormMatch[]): FormItem[] {
+  return matches
+    .map((match, index): FormItem => {
+      const home = match.venue === "home";
+      return {
+        key: `${match.kickoffDateKst}-${index}`,
+        date: match.kickoffDateKst,
+        competition: match.competition,
+        home: home ? teamName : match.opponentName,
+        away: home ? match.opponentName : teamName,
+        goalsHome: home ? match.goalsFor : match.goalsAgainst,
+        goalsAway: home ? match.goalsAgainst : match.goalsFor,
+        result: match.result,
+      };
+    })
+    .reverse();
 }

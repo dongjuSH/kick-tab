@@ -1,28 +1,28 @@
-import type { BadgeTone } from "@/components/ui/Badge";
 import type { DataStatus } from "@/components/ui/DataState";
-import type { KnockoutLeg, KnockoutStage, KnockoutTie, RankingType, RecentMatch } from "@/lib/api/types";
+import type { KnockoutLeg, KnockoutStage, KnockoutTie, RankingType } from "@/lib/api/types";
 
 /**
- * The five leagues with a table (CMP-002: domestic cups have none), in the order of the
- * league chips (Figma 53:1353) and the main chips (Figma 49:368, "EPL").
+ * The five leagues with a table (CMP-002: domestic cups have none), in chip order (Figma
+ * 53:1353, main 234:8881). Names are the DB `name_ko` (06 개선 2026-11-20, guide §3.1 —
+ * `useCompetitionLabel` reads them; these are the same seeded values while that loads).
  */
 export const LEAGUES = [
-  { id: 39, label: "Premier League", chip: "EPL" },
-  { id: 140, label: "LaLiga", chip: "LaLiga" },
-  { id: 135, label: "Serie A", chip: "Serie A" },
-  { id: 78, label: "Bundesliga", chip: "Bundesliga" },
-  { id: 61, label: "Ligue 1", chip: "Ligue 1" },
+  { id: 39, label: "프리미어리그" },
+  { id: 140, label: "라리가" },
+  { id: 135, label: "세리에 A" },
+  { id: 78, label: "분데스리가" },
+  { id: 61, label: "리그 1" },
 ] as const;
 
-/**
- * UEFA competitions next to the leagues (LEAG-002 rule 2, Figma 61:1653): the chip shows the
- * full name, headings the short one ("챔스 리그 페이즈 순위", "챔스 16강 대진").
- */
+/** UEFA competitions after the leagues (LEAG-001·002, Figma 61:1653). */
 export const UEFA = [
-  { id: 2, label: "Champions League", short: "챔스" },
-  { id: 3, label: "Europa League", short: "유로파" },
-  { id: 848, label: "Conference League", short: "컨퍼런스" },
+  { id: 2, label: "UEFA 챔피언스리그" },
+  { id: 3, label: "UEFA 유로파리그" },
+  { id: 848, label: "UEFA 컨퍼런스리그" },
 ] as const;
+
+/** Every competition with a table, in chip order. */
+export const COMPETITIONS = [...LEAGUES, ...UEFA] as const;
 
 export const DEFAULT_LEAGUE = 39;
 
@@ -31,7 +31,7 @@ export function isUefa(id: number): boolean {
 }
 
 export function competitionLabel(id: number): string {
-  return [...LEAGUES, ...UEFA].find((c) => c.id === id)?.label ?? "";
+  return COMPETITIONS.find((c) => c.id === id)?.label ?? "";
 }
 
 /** UEFA stages, always all shown (rule 6); "league" is the league-phase table. */
@@ -75,50 +75,53 @@ export function numberText(value: number | null): string {
   return value === null ? "—" : String(value);
 }
 
-export interface Zone {
+/** A band of table places marked by one border colour and named once in the legend. */
+export interface Band {
+  key: "direct" | "playoff" | "out" | "promotion-playoff" | "relegation";
   label: string;
-  tone: BadgeTone;
-}
-
-/**
- * Relegation marks drawn from the row's position (LEAG-002 rule 5, Figma 449:6462): the
- * bottom three of the Premier League, LaLiga and Serie A; 17th-18th of the Bundesliga and
- * Ligue 1, and their 16th as the relegation play-off place. While the season runs the mark is
- * a zone ("강등권", "승강 플레이오프권"); once every match is over (`complete`) it is the result
- * ("강등", "승강 플레이오프"). The provider's order decides who sits there.
- */
-export function leagueZone(league: number, rank: number, size: number, complete: boolean): Zone | null {
-  const playoff = league === 78 || league === 61;
-  const relegated = playoff ? rank >= size - 1 : rank >= size - 2;
-  if (relegated) return { label: complete ? "강등" : "강등권", tone: "error" };
-  if (playoff && rank === size - 2) {
-    return { label: complete ? "승강 플레이오프" : "승강 플레이오프권", tone: "warning" };
-  }
-  return null;
-}
-
-export interface PhaseBand {
-  key: "direct" | "playoff" | "out";
-  label: string;
-  range: string;
-  tone: BadgeTone;
   from: number;
   to: number;
+  tone: "live" | "warning" | "error";
 }
 
 /**
- * UEFA league-phase bands (rule 6, Figma 61:1653 / 61:2355): 1–8 straight to the round of
- * 16, 9–24 the play-offs, 25–36 out — "…권" while the phase runs, the result once it is over.
+ * Table bands by position (LEAG-002 rules 5·6, Figma 53:1353 / 61:1653): UEFA league phase
+ * 1–8 straight to the round of 16, 9–24 the play-offs, 25–36 out; the bottom three of the
+ * Premier League, LaLiga and Serie A relegated; 17th–18th of the Bundesliga and Ligue 1
+ * relegated and their 16th to the relegation play-off. While matches remain a band is a zone
+ * ("강등권", "16강 직행권"); once the table is complete it is the result ("강등", "16강 직행").
+ * The provider's order decides who sits there.
  */
-export function phaseBands(complete: boolean): PhaseBand[] {
-  return [
-    { key: "direct", label: complete ? "16강 직행" : "16강 직행권", range: "1–8위", tone: "live", from: 1, to: 8 },
-    { key: "playoff", label: complete ? "플레이오프 진출" : "플레이오프권", range: "9–24위", tone: "warning", from: 9, to: 24 },
-    { key: "out", label: complete ? "탈락" : "탈락권", range: "25–36위", tone: "error", from: 25, to: 36 },
-  ];
+export function tableBands(league: number, size: number, complete: boolean): Band[] {
+  if (isUefa(league)) {
+    return [
+      { key: "direct", label: complete ? "16강 직행" : "16강 직행권", from: 1, to: 8, tone: "live" },
+      { key: "playoff", label: complete ? "플레이오프 진출" : "플레이오프권", from: 9, to: 24, tone: "warning" },
+      { key: "out", label: complete ? "탈락" : "탈락권", from: 25, to: 36, tone: "error" },
+    ];
+  }
+  if (size < 4) return [];
+  const playoff = league === 78 || league === 61;
+  const relegation: Band = {
+    key: "relegation",
+    label: complete ? "강등" : "강등권",
+    from: playoff ? size - 1 : size - 2,
+    to: size,
+    tone: "error",
+  };
+  if (!playoff) return [relegation];
+  const label = complete ? "승강 플레이오프" : "승강 플레이오프권";
+  return [{ key: "promotion-playoff", label, from: size - 2, to: size - 2, tone: "warning" }, relegation];
 }
 
-export const RESULT_LABEL: Record<RecentMatch["result"], string> = { W: "승", D: "무", L: "패" };
+export function bandOf(bands: readonly Band[], rank: number): Band | null {
+  return bands.find((band) => rank >= band.from && rank <= band.to) ?? null;
+}
+
+/** "18–20위", "16위". */
+export function rangeText(band: Pick<Band, "from" | "to">): string {
+  return band.from === band.to ? `${band.from}위` : `${band.from}–${band.to}위`;
+}
 
 /**
  * DataState status of one query (guide §6.6): a failure with data already on screen keeps the

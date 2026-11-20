@@ -12,7 +12,7 @@ import { ListSkeleton } from "@/features/schedule/ScheduleSection";
 import { isApiError } from "@/lib/api/errors";
 import type { PlayerRankItem, RankingType } from "@/lib/api/types";
 import { teamName } from "@/lib/format/match";
-import { RANKING_TYPES, dataStatus, numberText, rankText } from "./model";
+import { RANKING_TYPES, dataStatus, isUefa, numberText, rankText } from "./model";
 import { playerRankingsQuery } from "./queries";
 
 const SHOWN = 10;
@@ -20,8 +20,8 @@ const ID_BASE = "player-ranking";
 const HEAD = "h-10 px-2.5 text-left text-small font-medium text-fg-secondary";
 
 /**
- * Player rankings of the selected league season (LEAG-004; Figma 53:1353 right card, states
- * 57:599). Goals / assists / yellow / red are the provider's top 20 in its order — not a full
+ * Player rankings of the selected league or UEFA competition season (LEAG-004; Figma 53:1353
+ * / 61:1653 right column, states 57:599). Goals / assists / yellow / red are the provider's top 20 in its order — not a full
  * ranking; red counts direct reds only. Saves are aggregated from every player record:
  * goalkeepers with a missing value are excluded and counted, equal totals share a rank.
  * Ten rows first, "더 보기" shows the rest; a new league, season or type starts at ten
@@ -126,9 +126,15 @@ export function PlayerRankings({
       />
       <div role="tabpanel" id={tabPanelId(ID_BASE, type)} aria-labelledby={tabId(ID_BASE, type)} className="flex flex-col gap-3">
         <p className="text-small text-fg-muted">
-          {type === "saves"
-            ? "리그 전체 선수 기록으로 집계한 골키퍼 선방 순위입니다."
-            : "리그별 제공 상위 20명"}
+          {/* UEFA (LEAG-004, Figma 61:1653): the whole competition season, qualifiers
+              included, never re-counted by the stage chosen above. */}
+          {isUefa(league)
+            ? type === "saves"
+              ? "예선 포함 대회 전체 선수 기록으로 집계한 골키퍼 선방 순위입니다."
+              : "예선 포함 대회 전체 · 제공 상위 20명"
+            : type === "saves"
+              ? "리그 전체 선수 기록으로 집계한 골키퍼 선방 순위입니다."
+              : "리그별 제공 상위 20명"}
           {type === "red" && " 직접 퇴장만 집계하며 경고 누적 퇴장은 합산하지 않습니다."}
         </p>
         {body}

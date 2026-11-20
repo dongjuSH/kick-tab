@@ -8,32 +8,30 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { seasonsQuery } from "@/features/results/queries";
 import { SectionSkeleton } from "@/features/schedule/ScheduleSection";
 import { useHydrated } from "@/lib/hooks/useHydrated";
-import { ChipRow, type ChipItem } from "./ChipRow";
+import { ChipRow } from "./ChipRow";
 import { KnockoutStage } from "./KnockoutStage";
 import { LeaguePhaseTable } from "./LeaguePhaseTable";
 import { LEAGUES, STAGES, UEFA, type UefaStage } from "./model";
 import { PlayerRankings } from "./PlayerRankings";
 import { StandingsTable } from "./StandingsTable";
+import { useCompetitionLabel } from "./useCompetitionLabel";
 import { useStandingsParams } from "./useStandingsParams";
-
-const COMPETITION_CHIPS: ChipItem<string>[] = [
-  ...LEAGUES.map((l) => ({ value: String(l.id), label: l.label })),
-  ...UEFA.map((c, index) => ({ value: String(c.id), label: c.label, groupStart: index === 0 })),
-];
 
 /**
  * League standings page (LEAG-002·004, UF-10; Figma 53:1353 / 53:2047, UEFA 61:1653 / 61:2355,
  * knockouts 451:20753 / 451:20778): one white area holding the season dropdown, the
- * competition chips (five leagues | UEFA), the UEFA stage chips and the content. Five leagues
- * show the team table beside (PC) or above (mobile) the player rankings; a UEFA competition
- * opens on its league phase and every stage stays selectable. A new season or competition
- * keeps the ranking type and starts the player list at ten again. An unsupported competition,
- * season or stage is reported and never replaced by another one.
+ * competition chips (five leagues | UEFA, DB names), the UEFA stage chips and the content.
+ * The table — or the UEFA league phase / knockout stage — sits beside (PC) or above (mobile)
+ * the player rankings; UEFA player rankings cover the whole competition season whatever stage
+ * is chosen (LEAG-004). A UEFA competition opens on its league phase and every stage stays
+ * selectable. A new season or competition keeps the ranking type and starts the player list
+ * at ten again. An unsupported competition, season or stage is reported and never replaced.
  */
 export function StandingsSection() {
   const hydrated = useHydrated();
   const params = useStandingsParams();
   const seasons = useQuery(seasonsQuery);
+  const label = useCompetitionLabel();
 
   if (!hydrated) return <SectionSkeleton />;
 
@@ -69,20 +67,18 @@ export function StandingsSection() {
         description="주소의 단계가 올바르지 않습니다. 위에서 단계를 골라 주세요."
       />
     );
-  } else if (params.uefa) {
-    content =
-      params.stage === "league" ? (
-        <LeaguePhaseTable key={`${params.league}-${params.season}`} league={params.league} season={params.season} />
-      ) : (
-        <KnockoutStage league={params.league} season={params.season} stage={params.stage} />
-      );
   } else {
-    // Remounted per league and season: the player list starts at ten again (UF-10).
+    const main = !params.uefa ? (
+      <StandingsTable league={params.league} season={params.season} />
+    ) : params.stage === "league" ? (
+      <LeaguePhaseTable league={params.league} season={params.season} />
+    ) : (
+      <KnockoutStage league={params.league} season={params.season} stage={params.stage} />
+    );
+    // Remounted per competition and season: the player list starts at ten again (UF-10).
     content = (
       <div key={`${params.league}-${params.season}`} className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_292px] lg:gap-0">
-        <div className="min-w-0 lg:pr-6">
-          <StandingsTable league={params.league} season={params.season} />
-        </div>
+        <div className="min-w-0 lg:pr-6">{main}</div>
         <div className="min-w-0 border-t border-line pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
           <PlayerRankings
             league={params.league}
@@ -111,7 +107,10 @@ export function StandingsSection() {
         <Skeleton className="h-11 w-full sm:w-[220px]" />
       )}
       <ChipRow
-        items={COMPETITION_CHIPS}
+        items={[
+          ...LEAGUES.map((l) => ({ value: String(l.id), label: label(l.id) })),
+          ...UEFA.map((c, index) => ({ value: String(c.id), label: label(c.id), groupStart: index === 0 })),
+        ]}
         value={params.league === null ? null : String(params.league)}
         onChange={(league) => params.select({ league: Number(league) })}
         label="대회"

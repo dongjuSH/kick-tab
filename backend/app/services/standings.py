@@ -61,6 +61,9 @@ TOP_LISTS: dict[str, tuple[str, tuple[str, str]]] = {
     "red": ("/players/topredcards", ("cards", "red")),
 }
 GOALKEEPER = "Goalkeeper"
+# Provider positions that are never a goalkeeper (/players `games.position`; stored lines
+# use both "Attacker" and "Forward" — 2026-11-20).
+OUTFIELD_POSITIONS = frozenset({"Defender", "Midfielder", "Attacker", "Forward"})
 # /players answers 20 entries a page (all 188 pages of 2025-26: every page but the last).
 PLAYER_PAGE_SIZE = 20
 # A league team has 34-38 fixtures a season; a relegation play-off opponent has 2.
@@ -251,6 +254,8 @@ class ParsedPlayerStats:
     lines: list[dict[str, Any]]
     players: list[dict[str, Any]]
     teams: list[dict[str, Any]]
+    # Outfield lines left out for a missing team (logged by the job).
+    teamless: int = 0
 
 
 def parse_player_pages(
@@ -291,6 +296,7 @@ def parse_player_pages(
     players: dict[int, dict[str, Any]] = {}
     teams: dict[int, dict[str, Any]] = {}
     seen: dict[int, int | None] = {}
+    teamless = 0
     for page, current in zip(pages, currents, strict=True):
         for entry in page.get("response") or []:
             player = (entry or {}).get("player") or {}
@@ -304,9 +310,22 @@ def parse_player_pages(
             seen[player["id"]] = current
             for stats in _league_lines(entry, league, season):
                 team = stats.get("team") or {}
-                if not team.get("id") or not team.get("name"):
-                    raise IncompleteData(f"players: player {player['id']} without team")
                 games = stats.get("games") or {}
+                if not team.get("id") or not team.get("name"):
+                    # The provider may not know one club of a player (UCL 2025: players
+                    # 1324, 1330 of Pafos have a line with matches but team null, 06 개선
+                    # 2026-11-20). Such a line cannot be stored (the club is part of the key)
+                    # and only goalkeeper lines are read (saves): a line of a stated outfield
+                    # position is left out. A goalkeeper's, or one whose position is missing
+                    # or unknown (it may be a goalkeeper's — Codex 1차 지적 1), would make
+                    # saves incomplete: the unit is refused and the stored lines stay.
+                    position = games.get("position")
+                    if position in OUTFIELD_POSITIONS:
+                        teamless += 1
+                        continue
+                    raise IncompleteData(
+                        f"players: player {player['id']} without team (position {position})"
+                    )
                 goals = stats.get("goals") or {}
                 cards = stats.get("cards") or {}
                 line = {
@@ -335,7 +354,9 @@ def parse_player_pages(
                 lines[key] = line
                 players[player["id"]] = _player(player)
                 teams[team["id"]] = team
-    return ParsedPlayerStats(list(lines.values()), list(players.values()), list(teams.values()))
+    return ParsedPlayerStats(
+        list(lines.values()), list(players.values()), list(teams.values()), teamless
+    )
 
 
 # ---------------------------------------------------------------------------- saving
@@ -550,6 +571,25 @@ def is_matchday(session: Session, league: int, season: int, now: datetime) -> bo
     )
 
 
+# A UEFA result counts for the player lists once its match is over: kicked off this long
+# before the last successful collection at the latest (extra time and penalties included).
+RESULT_WINDOW = timedelta(hours=3)
+
+
+def _result_since(session: Session, league: int, season: int, since: datetime) -> bool:
+    """A finished match of the competition kicked off after `since - RESULT_WINDOW`."""
+    return session.scalar(
+        select(Fixture.id)
+        .where(
+            Fixture.competition_id == league,
+            Fixture.season == season,
+            Fixture.status == "finished",
+            Fixture.kickoff_at >= since - RESULT_WINDOW,
+        )
+        .limit(1)
+    ) is not None
+
+
 def due_leagues(
     session: Session,
     season: int,
@@ -563,7 +603,9 @@ def due_leagues(
 
     Current season: daily, or hourly on a matchday when `matchday_hourly`. A past season is
     kept, not re-collected: only when it was never stored. A recent failure waits for the
-    next slot, so a broken provider is not asked every minute."""
+    next slot, so a broken provider is not asked every minute. UEFA player lists and records
+    (06 개선 2026-11-20, about 90-110 /players pages a competition) are asked again only
+    after a UEFA result since the last success — UEFA plays two or three days a week."""
     due = []
     for league in leagues:
         state = session.get(LeagueSync, (league, season, kind))
@@ -575,6 +617,12 @@ def due_leagues(
         if synced is None:
             due.append(league)
         elif season != settings.current_season:
+            continue
+        elif (
+            league in UEFA_IDS
+            and kind != "standings"
+            and not _result_since(session, league, season, synced)
+        ):
             continue
         elif now - synced >= DAILY or (
             matchday_hourly and is_matchday(session, league, season, now)
@@ -721,13 +769,12 @@ def read_standings(session: Session, league: int, season: int) -> list[StandingG
 
 
 def league_competitions(session: Session) -> list[Competition]:
-    return list(
-        session.scalars(
-            select(Competition)
-            .where(Competition.id.in_(LEAGUE_IDS), Competition.active)
-            .order_by(Competition.sort_order)
-        )
+    """The competitions with a table — five leagues, then the three UEFA league phases
+    (06 개선 2026-11-20: the main page offers all eight)."""
+    rows = session.scalars(
+        select(Competition).where(Competition.id.in_(STANDINGS_IDS), Competition.active)
     )
+    return sorted(rows, key=lambda c: STANDINGS_IDS.index(c.id))
 
 
 @dataclass(frozen=True)

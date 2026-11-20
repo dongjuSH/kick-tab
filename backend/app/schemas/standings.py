@@ -33,12 +33,15 @@ class TeamName(ApiModel):
 
 
 class RecentMatch(ApiModel):
-    """One finished match of the table (stored fixtures): the preview shows its date and
-    "home – score – away" without asking the provider."""
+    """One finished match of the recent five (LEAG-002 rule 4, TEAM-001 rule 3): the preview
+    shows "date · competition" and "home – score – away" without asking the provider.
+    Tables use their own stored matches; team detail the team's official matches."""
 
     fixture_id: int
     kickoff_at: datetime
     kickoff_date_kst: date
+    # name_ko of a supported competition, the provider's name for any other official one.
+    competition: str
     home: TeamName
     away: TeamName
     goals_home: int
