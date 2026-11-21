@@ -82,7 +82,7 @@ function TieCard({ tie, final }: { tie: KnockoutTie; final: boolean }) {
       </Badge>
       {home && away && (
         <p className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 text-body font-bold">
-          <SlotTitle slot={tie.home} name={home} />
+          <SlotTitle slot={tie.home} name={home} home />
           <span className="text-small font-normal text-fg-muted">vs</span>
           <SlotTitle slot={tie.away} name={away} />
         </p>
@@ -107,9 +107,20 @@ function TieCard({ tie, final }: { tie: KnockoutTie; final: boolean }) {
   );
 }
 
-function SlotTitle({ slot, name }: { slot: KnockoutTeamSlot; name: string }) {
+/**
+ * One side of the tie title (Figma 451:20753 PC / 451:20778 mobile): phones read "로고 팀 vs
+ * 로고 팀"; PC centres the pair on "vs" as "팀 로고 vs 로고 팀" — the home crest sits next to
+ * "vs" (visual order only; the DOM keeps crest then name).
+ */
+function SlotTitle({ slot, name, home = false }: { slot: KnockoutTeamSlot; name: string; home?: boolean }) {
   return (
-    <span className={cx("flex min-w-0 items-center gap-2", !slot.team && "text-fg-secondary")}>
+    <span
+      className={cx(
+        "flex min-w-0 items-center gap-2",
+        home && "lg:flex-row-reverse lg:text-right",
+        !slot.team && "text-fg-secondary",
+      )}
+    >
       {slot.team && <TeamCrest src={slot.team.crestUrl} name={name} size={20} />}
       <span className="min-w-0 break-keep">{name}</span>
     </span>
