@@ -1078,19 +1078,17 @@ def is_first_team(competition_name: str | None) -> bool:
 
 def parse_player_season(
     response: Any, player_id: int, season: int
-) -> dict[int, int | None]:
-    """/players?id=&season= → first-team official appearances per club. A club's value is
-    the sum of `games.appearences` over its first-team competitions when it has a positive
-    count; None when no positive count is given and a line leaves the count out (unknown,
-    never 0 — Codex 1차 N2); 0 only when every line gives 0. Clubs with youth / friendly
-    lines only are left out. A line that could count (count given above 0, or no count) but
-    names no club or no competition cannot be judged: the answer is refused and asked again
-    (Codex 1차 N3). An empty answer is "no appearances"; another player's answer or another
-    season is refused."""
+) -> dict[int, int]:
+    """Official club appearance evidence (user decision B, 2026-11-21).
+
+    Empty NULL lines count as zero. A NULL count with goals, assists or a non-placeholder
+    rating proves at least one appearance: store 1 as a lower bound, never an exact count.
+    This internal cache is only used to decide whether appearances exist, not for totals.
+    Other-player/season answers and unidentifiable non-empty lines are refused.
+    """
     if not isinstance(response, list):
         raise IncompleteData("player season: no response list")
-    known: dict[int, int] = {}
-    unknown: set[int] = set()
+    clubs: dict[int, int] = {}
     for entry in response:
         if ((entry or {}).get("player") or {}).get("id") != player_id:
             raise IncompleteData(f"player season: answer for another player than {player_id}")
@@ -1098,26 +1096,26 @@ def parse_player_season(
             league, team = stats.get("league") or {}, stats.get("team") or {}
             if league.get("season") not in (season, None):
                 raise IncompleteData(f"player season: season {league.get('season')}")
-            apps = _int((stats.get("games") or {}).get("appearences"))
+            games, goals = stats.get("games") or {}, stats.get("goals") or {}
+            apps = _int(games.get("appearences"))
+            if apps is None:
+                has_value = any(v is not None for v in (
+                    _int(goals.get("total")), _int(goals.get("assists")),
+                    _rating(games.get("rating")),
+                ))
+                apps = 1 if has_value else 0
             if not team.get("id") or not league.get("name"):
                 if apps == 0:
-                    continue  # no appearance whatever the club or competition
+                    continue
                 raise IncompleteData("player season: a line without club or competition")
             if not is_first_team(league.get("name")):
                 continue
-            if apps is None:
-                unknown.add(team["id"])
-            else:
-                known[team["id"]] = known.get(team["id"], 0) + apps
-    clubs: dict[int, int | None] = {}
-    for club in known.keys() | unknown:
-        total = known.get(club, 0)
-        clubs[club] = total if total > 0 or club not in unknown else None
+            clubs[team["id"]] = clubs.get(team["id"], 0) + apps
     return clubs
 
 
 def save_player_season(
-    session: Session, player_id: int, season: int, clubs: Mapping[int, int | None],
+    session: Session, player_id: int, season: int, clubs: Mapping[int, int],
     now: datetime,
 ) -> None:
     session.execute(
@@ -1166,11 +1164,9 @@ class MoveEvidence:
     """What decides whether a move of one team and season is shown first."""
 
     played: frozenset[int]  # players with this team's official appearances (evidence seasons)
-    # players with a line here whose count is not given and no positive count (Codex 1차 N1)
-    unknown: frozenset[int]
     complete: bool  # every evidence season of this team's records was collected
     # (player, season) → club appearances, for checked signings only
-    prior: Mapping[tuple[int, int], Mapping[int, int | None]]
+    prior: Mapping[tuple[int, int], Mapping[int, int]]
 
 
 def move_evidence(
@@ -1182,19 +1178,17 @@ def move_evidence(
             select(TeamPlayerStat.player_id).where(
                 TeamPlayerStat.team_id == team_id,
                 TeamPlayerStat.season.in_(seasons),
-                TeamPlayerStat.appearances > 0,
+                or_(
+                    TeamPlayerStat.appearances > 0,
+                    TeamPlayerStat.appearances.is_(None) & or_(
+                        TeamPlayerStat.goals.is_not(None),
+                        TeamPlayerStat.assists.is_not(None),
+                        TeamPlayerStat.rating.is_not(None),
+                    ),
+                ),
             )
         )
     )
-    unknown = frozenset(
-        session.scalars(
-            select(TeamPlayerStat.player_id).where(
-                TeamPlayerStat.team_id == team_id,
-                TeamPlayerStat.season.in_(seasons),
-                TeamPlayerStat.appearances.is_(None),
-            )
-        )
-    ) - played
     collected = set(
         session.scalars(
             select(TeamSync.season).where(
@@ -1210,7 +1204,7 @@ def move_evidence(
         for r in rows
         if r.direction == "in" and not is_loan_return(r)
     }
-    prior: dict[tuple[int, int], dict[int, int | None]] = {}
+    prior: dict[tuple[int, int], dict[int, int]] = {}
     if wanted:
         checked = session.execute(
             select(PlayerSeasonCheck.player_id, PlayerSeasonCheck.season).where(
@@ -1224,9 +1218,16 @@ def move_evidence(
                 PlayerClubSeason.player_id.in_({p for p, _ in prior})
             )
         ):
-            if (club.player_id, club.season) in prior:
-                prior[(club.player_id, club.season)][club.team_id] = club.appearances
-    return MoveEvidence(played, unknown, collected >= set(seasons), prior)
+            key = (club.player_id, club.season)
+            if key not in prior:
+                continue
+            if club.appearances is None:
+                # Not written since decision B (2026-11-21); a stray old row means the
+                # check is not usable, so the signing waits as `check_pending`.
+                del prior[key]
+            else:
+                prior[key][club.team_id] = club.appearances
+    return MoveEvidence(played, collected >= set(seasons), prior)
 
 
 LOAN_RETURNS = frozenset({"return from loan", "back from loan"})
@@ -1242,32 +1243,26 @@ def judge_move(row: Transfer, evidence: MoveEvidence) -> tuple[bool, str]:
     club he came from (`played_before`). Folded ("기타 이동"): only when the team's records
     are complete and show no appearance, and — for a signing — the club he came from is
     confirmed without first-team appearances (`not_played`). Anything that cannot be decided
-    stays shown with its reason (not "not played"): `records_incomplete`,
-    `appearances_unknown` (a line here leaves the count out), `check_pending`
-    (signing not asked yet or not answered), `club_unknown` (no club id),
-    `club_appearances_unknown` (the club's lines give no count). The squad, the other
-    club's league, age or youth-sounding names never decide.
+    stays shown with its reason (not "not played"): `records_incomplete`, `check_pending`
+    (signing not asked yet or not answered), `club_unknown` (no club id). The squad, the
+    other club's league, age or youth-sounding names never decide.
 
     A loan return is the team's own player coming back, not a new signing (TEAM-006 rule 6
     asks the previous club for new signings only): like a departure it is decided by this
     team's appearances alone, so a youth back from a lower-league loan is folded when he
     never played here. The type only tells a return from a signing; it never shows a move."""
-    if row.player_id in evidence.played:
-        return True, "played_here"
     if not evidence.complete:
         return True, "records_incomplete"
-    if row.player_id in evidence.unknown:
-        return True, "appearances_unknown"
+    if row.player_id in evidence.played:
+        return True, "played_here"
     if row.direction == "out" or is_loan_return(row):
         return False, "not_played"
+    if row.counterpart_id is None:
+        return True, "club_unknown"
     clubs = evidence.prior.get((row.player_id, check_season(row)))
     if clubs is None:
         return True, "check_pending"
-    if row.counterpart_id is None:
-        return True, "club_unknown"
     apps = clubs.get(row.counterpart_id, 0)  # not listed: no first-team line for that club
-    if apps is None:
-        return True, "club_appearances_unknown"
     return (True, "played_before") if apps > 0 else (False, "not_played")
 
 

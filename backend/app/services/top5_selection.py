@@ -51,6 +51,8 @@ from app.services.head_to_head import (
     recent_form,
     result_for,
 )
+from app.services.standings import read_standings
+from app.services.standings import sync_state as standings_sync_state
 from app.services.top_matches import current_kst_week
 
 logger = logging.getLogger(__name__)
@@ -302,6 +304,27 @@ def fetch_standings(client: ApiFootballClient, competition_id: int, season: int)
     return table
 
 
+def stored_standings(
+    session: Session, competition_id: int, season: int
+) -> dict[int, dict[str, Any]] | None:
+    """The same shape as `fetch_standings`, read from the table 06 keeps in `standings`
+    (hourly on match days, daily otherwise). None when that table was never collected, so
+    the caller asks the provider instead; a collected table that is empty stays empty."""
+    if not standings_sync_state(session, competition_id, season, "standings").collected:
+        return None
+    table: dict[int, dict[str, Any]] = {}
+    for group in read_standings(session, competition_id, season):
+        for row, _team in group.rows:
+            table[row.team_id] = {
+                "rank": row.rank,
+                "of": len(group.rows),
+                "points": row.points,
+                "played": row.played,
+                "group": row.group_name,
+            }
+    return table
+
+
 def _form_summary(lines: list[str]) -> str | None:
     """"3승 1무 1패" from the compact lines (counted here so the model does not miscount)."""
     if not lines:
@@ -422,18 +445,25 @@ def select_week(
         tabled = sorted(
             {(c.id, f.season) for f, c, _, _ in rows if c.type in ("league", "uefa")}
         )
-
-    standings: dict[int, dict[int, dict[str, Any]]] = {}
-    client = client_factory()
-    try:
+        # Tables 06 already stores are read from the DB; only the others cost a request.
+        standings: dict[int, dict[int, dict[str, Any]]] = {}
         for competition_id, season in tabled:
-            if cancelled.is_set() or clock() >= deadline:
-                raise SelectionError("Cancelled after the attempt deadline")
-            standings[competition_id] = fetch_standings(client, competition_id, season)
-    except ApiFootballError as exc:
-        raise SelectionError(f"Standings failed: {type(exc).__name__}") from None
-    finally:
-        client.close()
+            table = stored_standings(session, competition_id, season)
+            if table is not None:
+                standings[competition_id] = table
+
+    missing = [(c, s) for c, s in tabled if c not in standings]
+    if missing:
+        client = client_factory()
+        try:
+            for competition_id, season in missing:
+                if cancelled.is_set() or clock() >= deadline:
+                    raise SelectionError("Cancelled after the attempt deadline")
+                standings[competition_id] = fetch_standings(client, competition_id, season)
+        except ApiFootballError as exc:
+            raise SelectionError(f"Standings failed: {type(exc).__name__}") from None
+        finally:
+            client.close()
 
     jobs: list[Callable[[Session], None]] = []
     for team_id in team_ids:

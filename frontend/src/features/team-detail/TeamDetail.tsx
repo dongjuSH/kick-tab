@@ -15,7 +15,7 @@ import { useFavorites } from "@/features/favorites/useFavorites";
 import { RecentForm, formItem } from "@/components/common/RecentForm";
 import { isApiError } from "@/lib/api/errors";
 import type { TeamOverview } from "@/lib/api/types";
-import { teamName } from "@/lib/format/match";
+import { competitionName, teamName } from "@/lib/format/match";
 import { SeasonRecords } from "./SeasonRecords";
 import { SquadTable } from "./SquadTable";
 import { TeamMatches } from "./TeamMatches";
@@ -203,7 +203,7 @@ function TeamHeader({
           <h1 id="team-name" className="text-title font-bold break-keep text-fg lg:text-heading lg:leading-[34px]">{name}</h1>
           <p className="text-label leading-5 text-fg-muted">
             {team.nameEn}
-            <span className="hidden lg:inline"> · {league.shortName}</span>
+            <span className="hidden lg:inline"> · {competitionName(league)}</span>
           </p>
         </div>
         <FavoriteToggle teamId={team.id} teamName={name} className="shrink-0 lg:min-w-48" />

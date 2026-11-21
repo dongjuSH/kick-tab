@@ -1,5 +1,21 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-21 (토) — 08 이적 출전 근거 결정 B·Codex N1 보완·00 소규모 수정
+
+브랜치 `feat/08-team-detail`(2026-11-20 `dev` 병합 7b56869 이후)에 한 커밋으로 커밋·push 후 `dev` 병합. Codex 교차 검증 차단 0·중요 0·경미 1 → N1 보완. 그 밖의 판단(득점·도움 0도 '값 있음' 유지, 445025 재확인 유지, 판정 순서)은 현재대로.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 사용자 결정 B | `services/team_detail.py`(`move_evidence` — 이 팀 출전 NULL 줄은 같은 줄 득점·도움·평점이 있으면 출전 근거, `parse_player_season` — 값 있는 NULL은 최소 1·빈 NULL은 0, `judge_move` 순서 records_incomplete → played_here, 삭제 `appearances_unknown`·`MoveEvidence.unknown`), `models/team_detail.py`(설명) | 출전 수 미제공 해석(D-08-6a). 이전 팀 캐시 NULL 선수·시즌 273건 재확인(274회 — 11/21 결정 B 적용 때) |
+| Codex N1 | `services/team_detail.py`(`club_appearances_unknown` 분기·설명 삭제, `prior`·`parse_player_season`·`save_player_season` 타입 `int`), `tests/test_team_detail.py`(합성 테스트 삭제), DB `player_club_seasons` 무효 캐시 1행 삭제(445025·2024·9587·NULL) | 도달하지 않는 분기(작업 원칙 5). 445025/2024 확인 상태는 유지(check_pending) |
+| 00 소규모 수정 | `services/top5_selection.py`(`stored_standings` — 06 `standings` 저장 표 우선, 없는 표만 API), `tests/test_top5_db.py`, 프런트 `TeamDetail.tsx`·`teams/TeamsSection.tsx`(`competitionName()` 한글 대회명) | TOP 5 호출 절감, 03 대회명 통일 메모(§3.1) 반영 |
+| 테스트 | `tests/test_team_detail.py`·`tests/test_team_detail_db.py`(결정 B 판정·NULL 해석), `tests/test_top5_db.py` | 회귀 |
+| 문서 | `docs/guide.md`(첫 단락·§3 08·§6.5·D-08-6a·§11), `docs/file-feature-map.md`, 이 문서 | 사용자 요청으로 세 문서 최신화 |
+
+결과: 8개 팀×2시즌 바로 보이는 400 → 359줄, 접힘 258 → 299줄, 이 팀 출전 근거 없이 표시 73 → 32줄. 이동 사유 8개 팀 played_here 425·not_played 435·played_before 31·club_unknown 1(N1 보완 전후 같음), 전체 96팀 played_here 5,646·not_played 4,337·played_before 314·club_unknown 25·check_pending 1. N1 보완의 외부 호출 0회.
+
+검수: 백엔드 ruff·pytest 339(DB 포함 446)·alembic check(head 0018), 프런트 lint·`tsc --noEmit`·npm test 62·Turbopack 빌드.
+
 ## 2026-11-20 (금) — 08 팀 상세 비회원 전체 검수 개선
 
 브랜치 `feat/08-team-detail`(최신 `dev` a7ef699 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: PRD v1.14 Fix, 기능 명세서 v1.14 Fix(TEAM-002 규칙 1·6·7, TEAM-006 규칙 1~6과 추가 검수), 유저 플로우 v1.13 Fix, Figma 52:1254·58:738·308:4617. 사용자 결정: 이적료·원화 환산 제외(D-08-10), 최근 5경기는 06 범위. Codex 교차 검증 2회(1차 중요 3·경미 2 → 보완 후 2차 통과).

@@ -314,8 +314,8 @@ def row_move(player, direction, club, half=1, season=2026, day=None, kind="Trans
     )
 
 
-def evidence(played=(), complete=True, prior=None, unknown=()):
-    return MoveEvidence(frozenset(played), frozenset(unknown), complete, prior or {})
+def evidence(played=(), complete=True, prior=None):
+    return MoveEvidence(frozenset(played), complete, prior or {})
 
 
 def test_moves_with_appearances_here_are_shown_whatever_their_type_or_club():
@@ -339,10 +339,9 @@ def test_a_signing_needs_the_club_he_came_from():
     assert judge_move(arrival, played) == (True, "played_before")
     youth = evidence(prior={(3, 2025): {}})  # checked: no first-team line at all
     assert judge_move(arrival, youth) == (False, "not_played")
-    unknown = evidence(prior={(3, 2025): {211: None}})
-    assert judge_move(arrival, unknown) == (True, "club_appearances_unknown")
     no_club = row_move(3, "in", None)
     assert judge_move(no_club, played) == (True, "club_unknown")
+    assert judge_move(no_club, evidence()) == (True, "club_unknown")
     # A January move comes from the club's current season.
     winter = row_move(3, "in", 211, half=2, season=2026)
     assert check_season(winter) == 2026
@@ -381,7 +380,7 @@ def test_youth_competitions_and_friendlies_are_not_first_team():
         {"team": {"id": 40}, "league": {"name": "Serie B", "season": 2025},
          "games": {"appearences": None}},
     ]}]
-    assert parse_player_season(answer, 9, 2025) == {50: 1, 38: 8, 40: None}
+    assert parse_player_season(answer, 9, 2025) == {50: 1, 38: 8, 40: 0}
     assert parse_player_season([], 9, 2025) == {}  # no answer: no appearances anywhere
     with pytest.raises(IncompleteData):
         parse_player_season([{"player": {"id": 8}, "statistics": []}], 9, 2025)
@@ -393,38 +392,37 @@ def line_of(team, league, apps):
             "games": {"appearences": apps}}
 
 
-def test_a_missing_count_is_unknown_never_zero():
-    # Codex 1차 N2: [0, None] and [None, 0] are unknown like [None]; a positive count decides.
-    for lines in ([0, None], [None, 0], [None]):
-        stats = [line_of(38, "Championship", a) for a in lines]
-        answer = [{"player": {"id": 9}, "statistics": stats}]
-        assert parse_player_season(answer, 9, 2025) == {38: None}
-    answer = [{"player": {"id": 9}, "statistics": [
-        line_of(38, "Championship", None), line_of(38, "FA Cup", 2)]}]
-    assert parse_player_season(answer, 9, 2025) == {38: 2}
-    zeros = [{"player": {"id": 9}, "statistics": [
-        line_of(38, "Championship", 0), line_of(38, "FA Cup", 0)]}]
-    assert parse_player_season(zeros, 9, 2025) == {38: 0}  # every count given as 0
+@pytest.mark.parametrize("values,expected", [
+    ([0, None], 0), ([None, 0], 0), ([None], 0), ([0, 0], 0), ([None, 2], 2),
+])
+def test_empty_null_club_lines_count_as_zero(values, expected):
+    answer = [{"player": {"id": 9}, "statistics": [line_of(38, "Championship", a) for a in values]}]
+    assert parse_player_season(answer, 9, 2025) == {38: expected}
 
 
-def test_a_line_without_club_or_competition_is_refused_unless_it_counts_nothing():
-    # Codex 1차 N3: 10 games with no club or no competition name cannot be judged.
-    for broken in (line_of(None, "Championship", 10), line_of(38, None, 10),
-                   line_of(38, None, None)):
+@pytest.mark.parametrize("field,value", [("goals", 0), ("assists", 2), ("rating", "7.287")])
+def test_a_valued_null_club_line_proves_an_appearance(field, value):
+    line = line_of(38, "Championship", None)
+    if field == "rating":
+        line["games"]["rating"] = value
+    else:
+        line["goals"] = {"total" if field == "goals" else "assists": value}
+    assert parse_player_season([{"player": {"id": 9}, "statistics": [line]}], 9, 2025) == {38: 1}
+
+
+def test_unidentifiable_nonempty_lines_are_refused():
+    for broken in (line_of(None, "Championship", 10), line_of(38, None, 10)):
         with pytest.raises(IncompleteData):
             parse_player_season([{"player": {"id": 9}, "statistics": [broken]}], 9, 2025)
-    harmless = [{"player": {"id": 9}, "statistics": [line_of(None, None, 0)]}]
-    assert parse_player_season(harmless, 9, 2025) == {}
-
-
-def test_a_count_left_out_here_is_not_a_confirmed_non_appearance():
-    # Codex 1차 N1: a departure / loan return whose line here gives no count stays shown.
-    ev = evidence(unknown={7})
-    assert judge_move(row_move(7, "out", 38, kind="Loan"), ev) == (True, "appearances_unknown")
-    back = row_move(7, "in", 38, kind="Return from loan")
-    assert judge_move(back, ev) == (True, "appearances_unknown")
-    assert judge_move(row_move(7, "out", 38), evidence(played={7}, unknown=set())) == (
-        True, "played_here",
+    valued = line_of(None, None, None)
+    valued["goals"] = {"assists": 2}
+    with pytest.raises(IncompleteData):
+        parse_player_season([{"player": {"id": 9}, "statistics": [valued]}], 9, 2025)
+    for apps in (None, 0):
+        answer = [{"player": {"id": 9}, "statistics": [line_of(None, None, apps)]}]
+        assert parse_player_season(answer, 9, 2025) == {}
+    assert judge_move(row_move(7, "out", 38), evidence(played={7}, complete=False)) == (
+        True, "records_incomplete",
     )
 
 
