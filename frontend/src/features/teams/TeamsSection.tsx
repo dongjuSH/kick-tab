@@ -16,7 +16,7 @@ import { ChipRow, type ChipItem } from "@/features/standings/ChipRow";
 import { LEAGUES, dataStatus } from "@/features/standings/model";
 import { isApiError } from "@/lib/api/errors";
 import type { BrowseTeam, TeamRef } from "@/lib/api/types";
-import { teamName } from "@/lib/format/match";
+import { competitionName, teamName } from "@/lib/format/match";
 import { teamsQuery } from "./queries";
 import { useTeamsParams, type InvalidCondition } from "./useTeamsParams";
 
@@ -207,7 +207,7 @@ function TeamCard({ item }: { item: BrowseTeam }) {
       <span className="flex min-w-0 flex-col">
         <span className="truncate text-lead font-bold text-fg group-hover:underline">{name}</span>
         <span className="truncate text-small text-fg-muted">
-          {team.nameKo ? `${team.nameEn} · ${league.shortName}` : league.shortName}
+          {team.nameKo ? `${team.nameEn} · ${competitionName(league)}` : competitionName(league)}
         </span>
       </span>
     </>

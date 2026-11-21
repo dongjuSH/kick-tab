@@ -139,6 +139,39 @@ def test_automatic_attempt_publishes_and_never_runs_again(factory):
         assert run(trigger, factory, good_model).status == "skipped"
 
 
+def test_stored_standings_replace_the_provider_request(factory):
+    """00 정리(2026-11-21): a table 06 already stores is read from the DB — the attempt
+    publishes even though every `/standings` request would fail. A never-collected table
+    still needs the provider (None)."""
+    paths: list[str] = []
+
+    def no_standings_client() -> ApiFootballClient:
+        def handler(request):
+            paths.append(request.url.path)
+            if request.url.path.endswith("/standings"):
+                return httpx.Response(500)
+            return httpx.Response(200, json={"errors": [], "results": 0, "response": []})
+
+        return ApiFootballClient(
+            SecretStr("test-key"), transport=httpx.MockTransport(handler),
+            limiter=MinuteRateLimiter(1000), budget=DailyBudget(1000),
+        )
+
+    with factory() as session:
+        table = top5_selection.stored_standings(session, 39, 2026)
+        assert table is not None and table[50]["of"] == 20 and table[50]["rank"] >= 1
+        assert top5_selection.stored_standings(session, 39, 1999) is None
+
+    started = time.monotonic()
+    outcome = run_attempt(
+        "scheduled", session_factory=factory, client_factory=no_standings_client,
+        generate=good_model, alert=lambda notice: True, now=NOW,
+        clock=lambda: NOW + timedelta(seconds=time.monotonic() - started),
+    )
+    assert outcome.status == "published"
+    assert not any(path.endswith("/standings") for path in paths)
+
+
 def repair_at(factory, at, alerts):
     return top5_selection.reconcile_attempts(
         session_factory=factory, clock=lambda: at,

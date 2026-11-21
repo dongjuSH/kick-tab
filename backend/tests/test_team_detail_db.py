@@ -521,20 +521,34 @@ def test_folded_rows_are_only_confirmed_non_appearances(session, client):
             assert group.shown == (reasons != {"not_played"})
 
 
-def test_counts_left_out_here_keep_a_departure_shown(session):
-    """Codex 1차 N1: with every count of a departing player left out (NULL), his move is not
-    a confirmed non-appearance — it stays shown as `appearances_unknown`."""
+def test_null_team_lines_follow_user_decision_b(session):
     from app.models.team_detail import TeamPlayerStat
 
     rows = detail.merge_transfers(detail.read_transfers(session, CITY, 2026))
     rodri = next(r for r in rows if r.player_name == "Rodri" and r.direction == "out")
-    session.execute(
-        update(TeamPlayerStat)
-        .where(TeamPlayerStat.team_id == CITY, TeamPlayerStat.player_id == rodri.player_id)
-        .values(appearances=None)
+    session.execute(update(TeamPlayerStat).where(
+        TeamPlayerStat.team_id == CITY, TeamPlayerStat.player_id == rodri.player_id,
+    ).values(appearances=None, goals=None, assists=None, rating=None))
+    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026, rows)) == (
+        False, "not_played",
     )
-    evidence = detail.move_evidence(session, CITY, 2026, rows)
-    assert detail.judge_move(rodri, evidence) == (True, "appearances_unknown")
+    line = session.scalar(select(TeamPlayerStat).where(
+        TeamPlayerStat.team_id == CITY, TeamPlayerStat.player_id == rodri.player_id,
+        TeamPlayerStat.season == 2025,
+    ))
+    line.assists, line.rating = 2, 7.287
+    session.flush()
+    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026, rows)) == (
+        True, "played_here",
+    )
+    # A past fixed season is read at response time; no collection is necessary.
+    assert 325975 in detail.move_evidence(session, 157, 2025, []).played
+    session.execute(TeamSync.__table__.delete().where(
+        TeamSync.team_id == CITY, TeamSync.kind == "player_stats", TeamSync.season == 2025,
+    ))
+    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026, rows)) == (
+        True, "records_incomplete",
+    )
 
 
 def test_signing_checks_store_first_team_clubs_and_retry_failures(session, monkeypatch):

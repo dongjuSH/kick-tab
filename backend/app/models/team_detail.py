@@ -201,8 +201,11 @@ class PlayerSeasonCheck(Base):
 class PlayerClubSeason(Base):
     """First-team official appearances of a checked player for one club in one season: the
     sum over the club's lines outside youth competitions and friendlies (`is_first_team`).
-    NULL = the club's lines give no appearance count. Clubs are provider ids (no foreign key:
-    most are outside the stored teams)."""
+    Decision B: a missing count with goals/assists/rating contributes a lower bound of 1,
+    an entirely empty line contributes 0. This cache is evidence, not a displayed total.
+    Never NULL since decision B (the column stays nullable: no migration for it; a stray
+    NULL row is ignored as an unusable check).
+    Clubs are provider ids (no foreign key: most are outside the stored teams)."""
 
     __tablename__ = "player_club_seasons"
 
