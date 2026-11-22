@@ -44,6 +44,9 @@ class MatchSummary(ApiModel):
     status: MatchStatus
     finish_type: FinishType | None
     elapsed: int | None
+    # A live match in a break (provider HT / BT): shown as '하프타임' / '연장 전 휴식'
+    # instead of '진행 중 45′'. None otherwise.
+    live_break: Literal["half_time", "extra_time"] | None
     status_reason: str | None
     home: TeamRef
     away: TeamRef

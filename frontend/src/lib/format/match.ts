@@ -54,6 +54,9 @@ export function statusWord(match: MatchSummary): string {
     case "scheduled":
       return "예정";
     case "live":
+      // A break is still a live match: the half-time / pre-extra-time break is named.
+      if (match.liveBreak === "half_time") return "하프타임";
+      if (match.liveBreak === "extra_time") return "연장 전 휴식";
       return "진행 중";
     case "finished":
       return "종료";

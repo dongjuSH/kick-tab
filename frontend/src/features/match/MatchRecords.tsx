@@ -21,7 +21,16 @@ import type {
 import { MISSING, formatKstTime } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
 import { EventIcon } from "./icons";
-import { eventKind, eventText, minuteText, positionText, statLabel, statShares, statValue } from "./model";
+import {
+  eventKind,
+  eventText,
+  minuteText,
+  positionText,
+  statLabel,
+  statShares,
+  statValue,
+  timelineRows,
+} from "./model";
 import { matchRecordsQuery } from "./queries";
 
 export const RECORD_TABS = [
@@ -83,82 +92,116 @@ function BlockMessage({ tab, status, onRetry }: { tab: RecordTab; status: BlockS
   );
 }
 
-// Home column | time on the centre line | away column (MAT-002, Figma 52:151 / 52:404).
-const TIMELINE_GRID = "grid grid-cols-[minmax(0,1fr)_3.25rem_minmax(0,1fr)] items-start gap-x-2 lg:gap-x-3";
+// Home column | minute on the centre line (56px) | away column (MAT-002, Figma 161:4161 /
+// 52:151, mobile 161:5190 / 52:404). The rows are 52px high at least, items centred.
+const SIDE = "flex min-h-[52px] min-w-0 flex-1 items-center gap-2";
+const CENTRE = "relative flex w-14 shrink-0 flex-col items-center justify-center bg-surface text-center";
 
 function TimelineTeam({ team, align }: { team: TeamRef; align: "end" | "start" }) {
   const name = teamName(team);
   return (
-    <span
-      className={cx(
-        "flex min-w-0 items-center gap-1.5 text-small font-bold text-fg",
-        align === "end" ? "flex-row-reverse text-right" : "text-left",
-      )}
-    >
+    <span className={cx("flex min-w-0 flex-1 items-center gap-1", align === "end" && "justify-end")}>
       <TeamCrest src={team.crestUrl} name={name} size={20} />
-      <span className="min-w-0 break-keep [overflow-wrap:anywhere]">{name}</span>
+      <span
+        className={cx(
+          "min-w-0 break-keep text-small text-fg [overflow-wrap:anywhere]",
+          align === "end" && "text-right",
+        )}
+      >
+        {name}
+      </span>
     </span>
   );
 }
 
 function EventBody({ event, align }: { event: MatchEvent; align: "end" | "start" | "center" }) {
-  return (
+  const icon = (
+    <span className="grid size-4 shrink-0 place-items-center">
+      <EventIcon kind={eventKind(event)} />
+    </span>
+  );
+  const text = (
     <span
       className={cx(
-        "flex min-w-0 max-w-full items-start gap-1.5 text-body text-fg",
-        align === "end" && "flex-row-reverse text-right",
-        align === "center" && "justify-center text-center",
+        "min-w-0 text-label text-fg [overflow-wrap:anywhere]",
+        align === "end" ? "flex-1 text-right" : align === "start" ? "flex-1" : "text-center",
       )}
     >
-      <span className="grid h-6 w-4 shrink-0 place-items-center">
-        <EventIcon kind={eventKind(event)} />
-      </span>
-      <span className="min-w-0 [overflow-wrap:anywhere]">{eventText(event)}</span>
+      {eventText(event)}
+    </span>
+  );
+  return align === "end" ? (
+    <>
+      {text}
+      {icon}
+    </>
+  ) : (
+    <>
+      {icon}
+      {text}
+    </>
+  );
+}
+
+function Minute({ minute, note }: { minute: string; note?: string }) {
+  return (
+    <span className={CENTRE}>
+      <span className="whitespace-nowrap text-small text-action">{minute}</span>
+      {note && <span className="w-14 text-[10px] leading-5 text-fg">{note}</span>}
     </span>
   );
 }
 
 /**
  * Timeline, latest first: home events left (icon toward the centre line), away events
- * right, the minute on the centre line. An event whose team the provider did not give
- * stays in the middle as '소속 미확인' — it is never assigned to a side (MAT-002).
- * Each row names its team for screen readers, since the column alone carries it.
+ * right, the minute on the centre line, and period rows (status on top, '전반 종료', …)
+ * on the line (`timelineRows`). An event whose team the provider did not give stays in
+ * the middle as '소속 미확인' — it is never assigned to a side (MAT-002). Each row names
+ * its team for screen readers, since the column alone carries it.
  */
-function Timeline({ events, teams }: { events: MatchEvent[]; teams: Teams }) {
-  if (events.length === 0) return <StateMessage title="아직 기록된 이벤트가 없습니다" />;
+function Timeline({ events, info, teams }: { events: MatchEvent[]; info: MatchInfo; teams: Teams }) {
+  // Without events the period rows (e.g. '45′ 전반 종료') still show (user decision 2026-11-22).
+  const rows = timelineRows(events, info);
+  if (rows.length === 0) return <StateMessage title="아직 기록된 이벤트가 없습니다" />;
   return (
-    <div className="relative">
-      <span aria-hidden className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line" />
-      <div aria-hidden className={cx(TIMELINE_GRID, "relative border-b border-line bg-surface pb-3")}>
+    <div className="flex flex-col">
+      <div aria-hidden className="flex items-center gap-1">
         <TimelineTeam team={teams.home} align="end" />
-        <span className="text-center text-small text-fg-muted">시간</span>
+        <span className="w-14 shrink-0 text-center text-small text-fg">시간</span>
         <TimelineTeam team={teams.away} align="start" />
       </div>
       <ol className="relative">
-        {[...events].reverse().map((event, index) => {
-          const minute = (
-            <span className="relative bg-surface text-center text-label leading-6 font-bold text-action">
-              {minuteText(event)}
-            </span>
-          );
+        <span aria-hidden className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line" />
+        {rows.map((row, index) => {
+          if (row.kind === "period") {
+            return (
+              <li key={index} className="relative flex min-h-[52px] justify-center">
+                <Minute minute={row.minute} note={row.label} />
+              </li>
+            );
+          }
+          const { event } = row;
           if (!event.side) {
             return (
-              <li key={index} className="flex flex-col items-center gap-0.5 py-2.5">
-                {minute}
-                <span className="relative flex max-w-full flex-col items-center gap-0.5 bg-surface px-2">
+              <li key={index} className="relative flex flex-col items-center pb-2">
+                <span className="flex min-h-[52px] items-center">
+                  <Minute minute={minuteText(event)} note="소속 미확인" />
+                </span>
+                <span className="relative flex max-w-full items-center gap-2 bg-surface px-2">
                   <EventBody event={event} align="center" />
-                  <span className="text-small text-fg-muted">소속 미확인</span>
                 </span>
               </li>
             );
           }
           const home = event.side === "home";
           return (
-            <li key={index} className={cx(TIMELINE_GRID, "py-2.5")}>
+            <li key={index} className="relative flex items-start gap-2">
               <span className="sr-only">{`${teamName(teams[event.side])}, `}</span>
-              <span className="min-w-0">{home && <EventBody event={event} align="end" />}</span>
-              {minute}
-              <span className="min-w-0">{!home && <EventBody event={event} align="start" />}</span>
+              <span className={cx(SIDE, "justify-end")}>{home && <EventBody event={event} align="end" />}</span>
+              <span className="flex min-h-[52px] items-center">
+                <Minute minute={minuteText(event)} />
+              </span>
+              <span className={SIDE}>{!home && <EventBody event={event} align="start" />}</span>
             </li>
           );
         })}
@@ -291,12 +334,14 @@ function Ratings({ players, names }: { players: PlayerRating[]; names: Names }) 
 
 function Panel({
   tab,
+  info,
   records,
   names,
   teams,
   onRetry,
 }: {
   tab: RecordTab;
+  info: MatchInfo;
   records: Records;
   names: Names;
   teams: Teams;
@@ -308,7 +353,7 @@ function Panel({
   }
   switch (tab) {
     case "timeline":
-      return <Timeline events={records.events.data ?? []} teams={teams} />;
+      return <Timeline events={records.events.data ?? []} info={info} teams={teams} />;
     case "stats":
       return <Statistics rows={records.statistics.data ?? []} names={names} />;
     case "lineups":
@@ -389,7 +434,7 @@ export function MatchRecords({
       <section className={CARD} aria-label="경기 기록">
         <h2 className="text-subtitle font-bold">타임라인</h2>
         {query.isError && <RefreshFailure onRetry={retry} />}
-        <Panel tab="timeline" records={records} names={names} teams={teams} onRetry={retry} />
+        <Panel tab="timeline" info={info} records={records} names={names} teams={teams} onRetry={retry} />
       </section>
     );
   }
@@ -429,7 +474,7 @@ export function MatchRecords({
         tabIndex={0}
         className="pt-4"
       >
-        <Panel tab={tab} records={records} names={names} teams={teams} onRetry={retry} />
+        <Panel tab={tab} info={info} records={records} names={names} teams={teams} onRetry={retry} />
       </div>
     </section>
   );

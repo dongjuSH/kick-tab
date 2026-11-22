@@ -107,7 +107,7 @@ test("page areas by state: no lineup or review area before kickoff, reviews besi
   const of = (status, reviewsAvailable, headToHeadAvailable = false) =>
     areasOf({ ...info(status), reviewsAvailable, headToHeadAvailable });
   assert.deepEqual({ ...of("scheduled", false, true) }, { records: false, headToHead: true, reviews: false, reviewsBeside: false });
-  assert.deepEqual({ ...of("live", true) }, { records: true, headToHead: false, reviews: true, reviewsBeside: false });
+  assert.deepEqual({ ...of("live", true) }, { records: true, headToHead: false, reviews: true, reviewsBeside: true });
   assert.deepEqual({ ...of("finished", true) }, { records: true, headToHead: false, reviews: true, reviewsBeside: true });
   // Rulings and stopped matches: the server closes reviews.
   assert.deepEqual({ ...of("finished", false) }, { records: true, headToHead: false, reviews: false, reviewsBeside: false });
@@ -155,12 +155,65 @@ test("timeline puts home events left, away right, unknown-team events in the mid
   assert.equal(rows.length, 4);
   // Latest first; each sided row: [sr team] [home cell] [minute] [away cell].
   const cells = (row) => row.replace(/^<li[^>]*>/, "").replace(/<\/li>$/, "");
+  const minute = (m) => String.raw`<span class="flex min-h-\[52px\] items-center"><span class="[^"]*"><span[^>]*>${m}</span></span></span>`;
   assert.match(rows[0], /79′/);
-  assert.match(cells(rows[0]), /^<span class="sr-only">팀 50, <\/span><span class="min-w-0">[\s\S]*골 취소 · A[\s\S]*<\/span><span[^>]*>79′<\/span><span class="min-w-0"><\/span>$/);
-  assert.match(rows[1], /50′[\s\S]*Unknown Player[\s\S]*소속 미확인/);
+  assert.match(cells(rows[0]), new RegExp(String.raw`^<span class="sr-only">팀 50, </span><span class="[^"]*justify-end">[\s\S]*골 취소 · A[\s\S]*</span>${minute("79′")}<span class="[^"]*"></span>$`));
+  assert.match(rows[1], /50′[\s\S]*소속 미확인[\s\S]*Unknown Player/);
   assert.doesNotMatch(rows[1], /sr-only/);
-  assert.match(cells(rows[2]), /^<span class="sr-only">팀 42, <\/span><span class="min-w-0"><\/span><span[^>]*>30′<\/span><span class="min-w-0">[\s\S]*경고 · Away Player/);
+  assert.match(cells(rows[2]), new RegExp(String.raw`^<span class="sr-only">팀 42, </span><span class="[^"]*justify-end"></span>${minute("30′")}<span class="[^"]*">[\s\S]*경고 · Away Player`));
   assert.doesNotMatch(html, /데이터 제공사가 전달한 이벤트만/);
+});
+
+test("a live match in a break reads 하프타임 / 연장 전 휴식, without a minute", () => {
+  const h = hooks();
+  const load = loader({ ...leaves, react: h.react });
+  const { MatchStatusBadge } = load("@/components/common/MatchStatusBadge");
+  const badge = (liveBreak, elapsed) =>
+    h.render(MatchStatusBadge, { match: { ...match("live"), elapsed, liveBreak } }).html.replace(/<[^>]+>/g, "");
+  assert.equal(badge(null, 63), "진행 중 63′");
+  assert.equal(badge("half_time", 45), "하프타임");
+  assert.equal(badge("extra_time", 90), "연장 전 휴식");
+});
+
+test("timeline period rows: status on top, half time and full time on the line (Figma 161:4161)", () => {
+  const { timelineRows } = loader()("@/features/match/model");
+  const ev = (elapsed, extra = null) => ({ elapsed, extra, side: "home", type: "goal", detail: "Normal Goal", player: "A", assist: null });
+  const show = (events, statusCode, elapsed) =>
+    Array.from(timelineRows(events, { statusCode, match: { elapsed } }), (row) =>
+      row.kind === "period" ? `${row.minute} ${row.label}` : `${row.event.elapsed}${row.event.extra ? `+${row.event.extra}` : ""}`);
+  // Live in the second half: status minute on top, '전반 종료' between the halves.
+  assert.deepEqual(show([ev(12), ev(45, 2), ev(61)], "2H", 63), ["63′ 후반 진행 중", "61", "45′ 전반 종료", "45+2", "12"]);
+  // Live in the first half: no half-time row yet; a later stoppage event sets the minute.
+  assert.deepEqual(show([ev(12), ev(45, 2)], "1H", 45), ["45+2′ 전반 진행 중", "45+2", "12"]);
+  assert.deepEqual(show([ev(12)], "HT", 45), ["45′ 전반 종료", "12"]);
+  // Second half not started by any event yet: '전반 종료' sits on top of the first-half events.
+  assert.deepEqual(show([ev(7), ev(44)], "2H", 50), ["50′ 후반 진행 중", "45′ 전반 종료", "44", "7"]);
+  // Finished (no stoppage minutes from the provider).
+  assert.deepEqual(show([ev(16), ev(57), ev(90, 3)], "FT", 90), ["90+3′ 경기 종료", "90+3", "57", "45′ 전반 종료", "16"]);
+  // Extra time: '후반 종료' before the extra-time events.
+  assert.deepEqual(show([ev(30), ev(88), ev(105)], "AET", 120), ["120′ 경기 종료", "105", "90′ 후반 종료", "88", "45′ 전반 종료", "30"]);
+  // No event yet: the period rows still show.
+  assert.deepEqual(show([], "HT", 45), ["45′ 전반 종료"]);
+  assert.deepEqual(show([], "2H", 50), ["50′ 후반 진행 중", "45′ 전반 종료"]);
+  // Half-time substitutions (45′, no stoppage, after every first-half event) sit above '전반 종료'.
+  const sub = (elapsed, extra = null) => ({ ...ev(elapsed, extra), type: "subst", detail: "Substitution 1" });
+  const kinds = (events, statusCode, elapsed) =>
+    Array.from(timelineRows(events, { statusCode, match: { elapsed } }), (row) =>
+      row.kind === "period" ? row.label : `${row.event.type} ${row.event.elapsed}${row.event.extra ? `+${row.event.extra}` : ""}`);
+  assert.deepEqual(kinds([ev(30), sub(45), sub(45), ev(52)], "2H", 60),
+    ["후반 진행 중", "goal 52", "subst 45", "subst 45", "전반 종료", "goal 30"]);
+  assert.deepEqual(kinds([ev(30), sub(45)], "HT", 45), ["subst 45", "전반 종료", "goal 30"]);
+  // A 45′ substitution followed by a first-half stoppage event was made in the first half.
+  assert.deepEqual(kinds([sub(45), ev(45, 2)], "2H", 50), ["후반 진행 중", "전반 종료", "goal 45+2", "subst 45"]);
+  // A stoppage-time substitution (45+1′) is a first-half event.
+  assert.deepEqual(kinds([sub(45, 1)], "2H", 50), ["후반 진행 중", "전반 종료", "subst 45+1"]);
+  // Before half time a 45′ substitution stays where it is.
+  assert.deepEqual(kinds([sub(45)], "1H", 45), ["전반 진행 중", "subst 45"]);
+  // The API sends no minute for a finished match: the regular end minute.
+  assert.deepEqual(show([ev(7), ev(57)], "FT", null), ["90′ 경기 종료", "57", "45′ 전반 종료", "7"]);
+  assert.deepEqual(show([ev(100)], "PEN", null), ["120′ 경기 종료", "100", "90′ 후반 종료", "45′ 전반 종료"]);
+  // Unknown or ruling codes: events only.
+  assert.deepEqual(show([ev(30)], "AWD", null), ["30"]);
 });
 
 test("player ratings show one card per team, home first, with missing ratings as a dash (Figma 94:4418)", () => {

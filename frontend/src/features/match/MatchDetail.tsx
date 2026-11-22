@@ -136,18 +136,17 @@ export function MatchDetail({ id }: { id: number }) {
       )}
       <StatusNotice info={info} />
       {areas.headToHead && <HeadToHeadSection info={info} />}
-      {/* Finished (PC): wide records left, narrow reviews right (384px, Figma 52:151). Live: the
-          reviews below the records at 640px (161:4161). Mobile stacks both. */}
+      {/* Live and finished (PC): wide records left, narrow reviews right (384px, Figma 52:151).
+          Mobile stacks both. */}
       {(areas.records || areas.reviews) && (
       <div
         className={cx(
           "grid items-start gap-4 lg:gap-6",
           areas.reviewsBeside && "lg:grid-cols-[minmax(0,1fr)_minmax(0,384px)]",
-          areas.reviews && !areas.reviewsBeside && "lg:grid-cols-[minmax(0,640px)_minmax(0,1fr)]",
         )}
       >
         {areas.records && (
-          <div className={cx("min-w-0", areas.reviews && !areas.reviewsBeside && "lg:col-span-2")}>
+          <div className="min-w-0">
             <MatchRecords
               info={info}
               infoUpdatedAt={query.dataUpdatedAt}

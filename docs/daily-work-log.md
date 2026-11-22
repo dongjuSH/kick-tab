@@ -1,5 +1,21 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-22 (일) — 04 경기 상세 진행 중 화면 실경기 검수·보완(유벤투스–베네치아)
+
+브랜치 `feat/04-match-detail`(최신 `dev` 0b397a6 — 02 병합 포함 — 반영 후 작업)에 커밋·push 후 `dev` 병합. 계기: 사용자가 11/21 맨시티–풀럼 진행 중 화면이 Figma 최신과 다르다고 지적. 11/22 20:30 유벤투스–베네치아(1550201)를 킥오프 전~종료까지 사용자와 함께 실시간 검수. 사용자 결정: 진행 중도 데스크톱 경기 기록·평가 같은 줄, 이벤트 0건이어도 상태 줄만 추가(시안 불필요), 하프타임 표기, 하프타임 교체는 '전반 종료' 위, 킥오프 전 실시간 호출 제거를 03 대신 04에서 반영.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 타임라인 | `frontend/src/features/match/model.ts`(`timelineRows`·`TimelineRow`·`halfTimeSubstitutions`), `MatchRecords.tsx`(`Timeline`·`Minute`·`EventBody`·`TimelineTeam` — Figma 161:4161/52:151 크기: 시간 열 56px, 시간 12px, 이벤트 13px, 줄 최소 52px) | 시안의 상태 줄('n′ 후반 진행 중'·'45′ 전반 종료'·'경기 종료')이 없었음. 끝난 구간 추가시간은 제공사가 주지 않아(`periods`·`status.extra` 빈 값 실측) 45′·90′·120′, 마지막 이벤트가 추가시간이면 그 분 |
+| 배치 | `features/match/model.ts`(`areasOf` — 진행 중도 `reviewsBeside`), `MatchDetail.tsx` | 진행 중 데스크톱도 경기 기록 왼쪽·평가 오른쪽 384px(사용자 결정, Figma 161:4161은 아래 배치) |
+| 하프타임 표기 | `backend/app/schemas/match.py`(`MatchSummary.live_break`), `services/fixtures.py`(`LIVE_BREAKS`, `to_summary`), 생성 타입, `frontend/src/lib/format/match.ts`(`statusWord`), `components/common/MatchStatusBadge.tsx` | HT 동안 모든 카드가 '진행 중 45′'. HT '하프타임'·BT '연장 전 휴식'(분 없음) |
+| 실시간 호출 | `backend/app/services/fixtures.py`(`LIVE_LEAD` 삭제, `needs_live_sync` 킥오프부터), `sync/fixtures.py`(설명) | 킥오프 전 30분 호출은 정보가 없음(최근 7일 116회 중 52회) |
+| 테스트 | `backend/tests/test_schedule_db.py`(+1: 킥오프 기준·`live_break`), `frontend/tests/match-regressions.test.mjs`(상태 줄·0건·하프타임 교체 6가지·하프타임 배지·진행 중 배치) | 회귀 |
+
+- **실경기 확인(1550201):** 킥오프 전 30분 60초 호출 확인(제거 대상) → 20:32 1H 반영, 예정 화면이 새로고침 없이 진행 중으로 전환 → 21:18 HT(전반 이벤트 0건, 원본도 0건) → 21:33 2H(하프타임 교체 2건) → 22:21 FT 4:0, 실시간 응답에서 빠진 경기를 `?ids=`로 재조회해 최종 기록 저장. 원본 대조: 이벤트 14건·분 일치, 평점 32명 일치, 진행 중 평점은 90초 보충으로 갱신(2′ 시점 '미제공'은 제공사 미제공).
+- **제한:** 앱 안 브라우저 창을 숨기면 브라우저가 타이머를 멈춰 갱신이 늦어짐(지연 경고는 설계대로 표시, 포커스 시 즉시 따라잡음). 화면 켜 둔 상태의 60초 갱신은 사용자 브라우저로 확인. 연장·승부차기·BT 실경기는 미확인(테스트로만).
+- **검사:** ruff, 기본 pytest 381 통과/155 건너뜀, DB 포함 pytest 536, alembic check 변경 없음, lint·tsc·프런트 테스트 71·build·`git diff --check` 통과.
+
 ## 2026-11-21 (토) — 06 UEFA 토너먼트 대진 카드 제목 표기(사용자 Figma 수정 반영)
 
 브랜치 `feat/06-standings`(최신 `dev` a13c125 병합)에 커밋·push 후 `dev` 병합. 사용자가 Figma 리그 순위 · UEFA 16강 대진 데스크톱 레이어(`451:20753`)의 대진 제목을 이전과 같은 '팀 로고 vs 로고 팀' 양식으로 통일한 것을 반영.
