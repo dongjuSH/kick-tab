@@ -29,7 +29,9 @@ def test_engine_keeps_verified_tls():
 
 def test_models_match_guide_tables():
     assert Feedback.__table__.c.user_id.nullable is True
-    assert not Feedback.__table__.c.user_id.foreign_keys  # FK is added by chat 02
+    # Chat 02: withdrawal keeps the feedback and clears the link (P-03).
+    (fk,) = Feedback.__table__.c.user_id.foreign_keys
+    assert fk.column.table.name == "users" and fk.ondelete == "SET NULL"
     assert Feedback.__table__.c.type.nullable is True
     assert "ip" not in {c.name for c in Feedback.__table__.c}
     assert {c.name for c in SyncRun.__table__.c} == {

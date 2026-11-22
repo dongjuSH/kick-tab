@@ -16,8 +16,8 @@ export const NEWS_BADGE_LABELS: Record<NewsBadge, string> = {
 /**
  * News card (NEWS-001·004, Figma 49:457): badge, provider title and description, the
  * original link's host and time. No thumbnail, no article body. The card opens the original
- * article in a new tab through a one-time link check (/news/original?id=, NEWS-004). The
- * bookmark button is added by chat 02 (members only).
+ * article in a new tab through a one-time link check (/news/original?id=, NEWS-004). There is
+ * no personal saving (dropped 2026-11-21).
  */
 export function NewsCard({ article, now }: { article: NewsItem; now: Date }) {
   return (

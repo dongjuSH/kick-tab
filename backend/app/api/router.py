@@ -2,9 +2,12 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import require_csrf
 from app.api.routes import (
+    auth,
     feedback,
     matches,
+    me,
     results,
+    reviews,
     schedule,
     standings,
     teams,
@@ -21,6 +24,9 @@ api_router = APIRouter(
         "5XX": {"model": ErrorResponse, "description": "Server error"},
     },
 )
+api_router.include_router(auth.router)
+api_router.include_router(me.router)
+api_router.include_router(reviews.router)
 api_router.include_router(feedback.router)
 api_router.include_router(top_matches.router)
 api_router.include_router(schedule.router)

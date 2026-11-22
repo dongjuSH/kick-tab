@@ -22,8 +22,9 @@ export interface ApiRequestOptions {
 
 /**
  * Called once when a request fails with 401 AUTH_EXPIRED. Return true if the session was
- * refreshed and the request should be retried. Chat 02 registers the refresh logic
- * (single shared POST /api/v1/auth/refresh); until then nothing is retried.
+ * refreshed and the request should be retried. `features/auth/session.ts` registers the
+ * single shared POST /api/v1/auth/refresh. A failed refresh clears the cookies, so the retry
+ * of a public read goes out as a guest.
  */
 type UnauthorizedHandler = (error: ApiError) => Promise<boolean>;
 let unauthorizedHandler: UnauthorizedHandler | null = null;
@@ -80,8 +81,11 @@ export async function apiFetch<T, M = Record<string, unknown>>(
     response = await send();
     if (response.status === 401 && unauthorizedHandler) {
       const error = await toApiError(response.clone());
-      if (error.code === "AUTH_EXPIRED" && (await unauthorizedHandler(error))) {
-        response = await send();
+      if (error.code === "AUTH_EXPIRED") {
+        const refreshed = await unauthorizedHandler(error);
+        // A read is repeated even when the refresh failed: the cookies are gone by then, so
+        // public data loads as a guest. Changes are never repeated without a session.
+        if (refreshed || method === "GET") response = await send();
       }
     }
   } catch (error) {
@@ -90,6 +94,8 @@ export async function apiFetch<T, M = Record<string, unknown>>(
   }
 
   if (!response.ok) throw await toApiError(response);
+  // 204 No Content (logout, deletions): no envelope to read.
+  if (response.status === 204) return { data: null as T, meta: {} as M };
   try {
     return (await response.json()) as ApiEnvelope<T, M>;
   } catch {

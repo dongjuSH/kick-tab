@@ -176,13 +176,14 @@ def test_allowed_origin_passes_csrf_check(client, stored):
 
 
 def test_feedback_rate_limit_returns_429_with_retry_after(client, stored):
-    for _ in range(3):
+    # Guests: 2 per minute (P-10, chat 02); members have their own, looser limit.
+    for _ in range(2):
         assert client.post("/api/v1/feedback", json=HI, headers=WEB).status_code == 201
     response = client.post("/api/v1/feedback", json=HI, headers=WEB)
     assert response.status_code == 429
     assert response.json()["error"]["code"] == "RATE_LIMITED"
     assert int(response.headers["Retry-After"]) >= 1
-    assert len(stored) == 3
+    assert len(stored) == 2
 
 
 def test_failed_save_is_not_counted_and_hides_internal_details(client):
@@ -289,9 +290,9 @@ def test_malformed_or_invalid_bodies_count_toward_the_limit(client, stored, cont
     headers = {**WEB, "Content-Type": content_type}
     codes = [
         client.post("/api/v1/feedback", content=content, headers=headers).status_code
-        for _ in range(4)
+        for _ in range(3)
     ]
-    assert codes == [422, 422, 422, 429]
+    assert codes == [422, 422, 429]
     assert stored == []
 
 

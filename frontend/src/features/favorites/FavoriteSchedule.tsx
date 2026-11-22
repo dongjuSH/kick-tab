@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useQuery, type UseQueryResult } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { MatchStatusBadge } from "@/components/common/MatchStatusBadge";
 import { TeamCrest } from "@/components/common/TeamCrest";
 import { TeamSearch } from "@/components/common/TeamSearch";
@@ -18,13 +18,21 @@ import { useNow } from "@/lib/hooks/useNow";
 import type { FavoriteChange } from "./store";
 import { useFavorites } from "./useFavorites";
 
+// Teams shown before "더 보기" when more are registered (members, Figma 670:8943).
+const FOLDED_TEAMS = 5;
+
 /**
  * "관심 팀" panel (FAV-001~004, SCH-005; Figma `KickTab/Guest Favorites` 306:6220 —
  * Registered · Empty · Search · Limit · SaveError). The registered teams with remove, "팀
  * 추가" search right here (registrable teams only, from zero teams too), and each team's live
  * or nearest upcoming match, live first (a match between two favourites appears once).
- * Changes land in the shared browser store (max 5), so match-card stars and the schedule's
- * favourite buttons follow; a failed save keeps the previous list.
+ * Changes land in the current user's list (guest: this browser, max 5; member: the account,
+ * max 10), so match-card stars and the schedule's favourite buttons follow; a failed save
+ * keeps the previous list.
+ *
+ * More than five teams (members, Figma 670:8943): the first five registered teams and their
+ * matches are shown, '더 보기 (5/n)' opens all and '접기 (n/n)' folds back. The count, the
+ * limit and the schedule's favourite buttons always use the whole list.
  */
 export function FavoriteSchedule() {
   const favorites = useFavorites();
@@ -34,12 +42,29 @@ export function FavoriteSchedule() {
   const competitions = useQuery(competitionsQuery);
   const [adding, setAdding] = useState(false);
   // The change that could not be saved, kept so "다시 시도" repeats it.
-  const [failedChange, setFailedChange] = useState<(() => FavoriteChange) | null>(null);
+  const [failedChange, setFailedChange] = useState<(() => Promise<FavoriteChange>) | null>(null);
   const [picked, setPicked] = useState<TeamRef[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const foldable = ids.length > FOLDED_TEAMS;
+  // Back to five or fewer teams: the fold is gone, and a later sixth team starts folded.
+  if (!foldable && expanded) setExpanded(false);
+  const shownIds = foldable && !expanded ? ids.slice(0, FOLDED_TEAMS) : ids;
+  const listId = useId();
+  const addButton = useRef<HTMLButtonElement>(null);
+  const toggleFocused = useRef(false);
+  // The fold button disappeared while focused: focus moves to '팀 추가'.
+  useEffect(() => {
+    if (foldable) return;
+    if (toggleFocused.current) {
+      toggleFocused.current = false;
+      addButton.current?.focus();
+    }
+  }, [foldable]);
 
   const known = new Map([...picked, ...(schedule.data?.data.teams ?? [])].map((t) => [t.id, t]));
+  // Live first, then the existing order; a match between two shown teams appears once.
   const matches = (schedule.data?.data.matches ?? []).filter(
-    (m) => ids.includes(m.home.id) || ids.includes(m.away.id),
+    (m) => shownIds.includes(m.home.id) || shownIds.includes(m.away.id),
   );
   // Some competitions not collected: the nearest match may be missing, so an empty list is
   // never "no upcoming matches" and a shown list may be incomplete.
@@ -52,14 +77,19 @@ export function FavoriteSchedule() {
   const failedText = `${failed.join("·")} 조회 실패. 확인된 경기만 보여주며, 예정 경기가 없다고 단정하지 않습니다.`;
   const full = favorites.status === "ready" && ids.length >= favorites.max;
 
-  const run = (change: () => FavoriteChange) => {
-    const result = change();
+  const [saving, setSaving] = useState(false);
+  const [limitHit, setLimitHit] = useState(false);
+  const run = async (change: () => Promise<FavoriteChange>) => {
+    setSaving(true);
+    const result = await change();
+    setSaving(false);
     const saveFailed = result === "failed" || result === "unavailable";
     setFailedChange(saveFailed ? () => change : null);
+    setLimitHit(result === "limit");
     return result;
   };
-  const add = (team: TeamRef) => {
-    const result = run(() => favorites.add(team.id));
+  const add = async (team: TeamRef) => {
+    const result = await run(() => favorites.add(team.id));
     if (result === "added" || result === "exists") {
       setPicked((list) => [team, ...list.filter((t) => t.id !== team.id)]);
       setAdding(false);
@@ -77,10 +107,26 @@ export function FavoriteSchedule() {
         description="브라우저 저장소를 사용할 수 없어 관심 팀을 불러오지 못했습니다. 경기 일정·뉴스 등 다른 기능은 그대로 이용할 수 있습니다."
       />
     );
+  } else if (favorites.status === "failed") {
+    // The account list could not be read: never replaced by this browser's list (COM-005).
+    body = (
+      <DataState
+        status="error"
+        errorTitle="관심 팀을 불러오지 못했습니다"
+        error={null}
+        onRetry={favorites.retry}
+        retryLabel="다시 시도"
+      />
+    );
   } else {
     body = (
       <>
-        {full && <p className="text-small text-fg-secondary">최대 5팀까지 등록할 수 있습니다.</p>}
+        {full && <p className="text-small text-fg-secondary">최대 {favorites.max}팀까지 등록할 수 있습니다.</p>}
+        {limitHit && !full && (
+          <p role="status" className="text-small text-warning">
+            관심 팀은 최대 {favorites.max}개까지 등록할 수 있습니다.
+          </p>
+        )}
         {adding && !full && <AddTeam registered={ids} onAdd={add} />}
         {failedChange && (
           // Figma 306:6183 SaveError: the previous list stays; retry repeats the change.
@@ -99,16 +145,21 @@ export function FavoriteSchedule() {
             <p className="text-small text-fg-secondary">팀을 추가하면 가까운 경기 일정을 볼 수 있습니다.</p>
           </div>
         ) : (
-          <>
+          <div id={listId} className="flex flex-col gap-3">
             <ul aria-label="등록된 관심 팀" className="flex flex-col divide-y divide-line">
-              {ids.map((id) => {
+              {shownIds.map((id) => {
                 const team = known.get(id);
                 const name = team ? teamName(team) : "팀 정보 확인 중";
                 return (
                   <li key={id} className="flex min-h-11 items-center gap-2">
                     <TeamCrest src={team?.crestUrl ?? null} name={name} size={20} />
                     <span className="min-w-0 flex-1 truncate text-body font-medium text-fg">{name}</span>
-                    <Button variant="ghost" aria-label={`${name} 관심 팀 해제`} onClick={() => run(() => favorites.remove(id))}>
+                    <Button
+                      variant="ghost"
+                      aria-label={`${name} 관심 팀 해제`}
+                      disabled={saving}
+                      onClick={() => run(() => favorites.remove(id))}
+                    >
                       해제
                     </Button>
                   </li>
@@ -125,7 +176,20 @@ export function FavoriteSchedule() {
                 retry={retry}
               />
             </div>
-          </>
+          </div>
+        )}
+        {foldable && (
+          // Figma 670:8943: '표시 팀 수 / 전체 등록 팀 수'; the whole list opens at once.
+          <Button
+            fullWidth
+            aria-expanded={expanded}
+            aria-controls={listId}
+            onFocus={() => (toggleFocused.current = true)}
+            onBlur={() => (toggleFocused.current = false)}
+            onClick={() => setExpanded((open) => !open)}
+          >
+            {expanded ? `접기 (${ids.length}/${ids.length})` : `더 보기 (${FOLDED_TEAMS}/${ids.length})`}
+          </Button>
         )}
       </>
     );
@@ -149,6 +213,7 @@ export function FavoriteSchedule() {
               {ids.length}/{favorites.max}
             </span>
             <Button
+              ref={addButton}
               aria-expanded={adding && !full}
               disabled={full}
               onClick={() => {

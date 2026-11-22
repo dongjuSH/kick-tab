@@ -1,14 +1,23 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useId } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useId, useState } from "react";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { DataState, StateMessage } from "@/components/ui/DataState";
+import { Dialog } from "@/components/ui/Dialog";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
+import { cx } from "@/components/ui/cx";
+import { loginHref } from "@/features/auth/returnTo";
+import { useAuth } from "@/features/auth/session";
+import { apiFetch } from "@/lib/api/client";
+import { isApiError } from "@/lib/api/errors";
 import type { ReviewItem, ReviewSort } from "@/lib/api/types";
 import { MISSING } from "@/lib/format/kst";
 import { ThumbIcon } from "./icons";
 import { reviewsQuery } from "./queries";
+import { ReviewComposer } from "./ReviewComposer";
 import { ReviewGuidance } from "./ReviewGuidance";
 import { ReviewLoginNotice } from "./ReviewLoginNotice";
 
@@ -17,28 +26,88 @@ const SORTS = [
   { value: "latest", label: "최신순" },
 ] as const satisfies readonly { value: ReviewSort; label: string }[];
 
-function Reactions({ review }: { review: ReviewItem }) {
-  // Counts only: reacting is a member action added by chat 02 (REV-004 rule 4).
+/**
+ * Like / dislike (REV-004 rule 4): 44px buttons, one reaction per member and review; pressing
+ * the chosen one again clears it, the other one switches. Own reviews cannot be reacted to.
+ * Guests get the login dialog (Figma 62:1939) and nothing is saved.
+ */
+function Reactions({
+  review,
+  member,
+  onGuest,
+  onSessionLost,
+}: {
+  review: ReviewItem;
+  member: boolean;
+  onGuest: () => void;
+  onSessionLost: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const own = member && review.mine;
+
+  const react = async (value: 1 | -1) => {
+    if (!member) {
+      onGuest();
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      const clear = review.myReaction === value;
+      await apiFetch(`/reviews/${review.id}/reaction`, clear ? { method: "DELETE" } : { method: "PUT", body: { value } });
+      await queryClient.invalidateQueries({ queryKey: ["matches", "reviews"] });
+    } catch (caught) {
+      if (isApiError(caught) && caught.status === 401) onSessionLost();
+      else setError(isApiError(caught) ? caught.message : "반응을 저장하지 못했습니다.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const button = (value: 1 | -1, label: string, count: number) => {
+    const chosen = review.myReaction === value;
+    return (
+      <button
+        type="button"
+        aria-pressed={member && !own ? chosen : undefined}
+        aria-label={own ? `${label} ${count}, 내 평가에는 반응할 수 없습니다` : `${label} ${count}`}
+        disabled={own || pending}
+        onClick={() => react(value)}
+        className={cx(
+          "flex h-11 items-center gap-1.5 rounded-control px-3 text-body font-medium",
+          chosen ? "bg-selected text-action" : "text-fg-secondary",
+          !own && "hover:bg-subtle",
+          own && "cursor-default",
+        )}
+      >
+        <ThumbIcon down={value === -1} />
+        {`${label} ${count}`}
+      </button>
+    );
+  };
+
   return (
-    <p className="flex items-center gap-2 text-body font-medium text-fg-secondary">
-      <span className="flex h-11 items-center gap-1.5 px-3">
-        <ThumbIcon />
-        {`좋아요 ${review.likes}`}
-      </span>
-      <span className="flex h-11 items-center gap-1.5 px-3">
-        <ThumbIcon down />
-        {`싫어요 ${review.dislikes}`}
-      </span>
-    </p>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {button(1, "좋아요", review.likes)}
+        {button(-1, "싫어요", review.dislikes)}
+      </div>
+      {error && (
+        <p role="alert" className="px-3 text-small text-error">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
 /**
  * Match reviews: public text reviews of a live or normally finished match (REV-001·004,
  * Figma 52:151 · 161:4161). The valid review count, popular/latest order, reactions and
- * the review rules; no star rating or average. Guests see the login notice above the list
- * (`ReviewLoginNotice`, login 준비 중 until chat 02). Writing, editing and reacting are
- * chat 02's: nothing to write with is placed here.
+ * the review rules; no star rating or average. Guests see the login notice (408:16478);
+ * members see the writing area (63:1408) or their own review with edit/delete (chat 02).
  */
 export function ReviewSection({
   fixtureId,
@@ -50,8 +119,14 @@ export function ReviewSection({
   onSort: (sort: ReviewSort) => void;
 }) {
   const query = useQuery(reviewsQuery(fixtureId, sort));
+  const auth = useAuth();
+  const router = useRouter();
   const idBase = useId();
   const summary = query.data?.summary;
+  const [loginPrompt, setLoginPrompt] = useState(false);
+  const member = auth.status === "member";
+  const mine = query.data?.items.find((item) => item.mine);
+  const loginTarget = loginHref(`/matches/${fixtureId}`, `review:${fixtureId}`);
 
   return (
     <section
@@ -72,7 +147,16 @@ export function ReviewSection({
           )}
         </span>
       </div>
-      <ReviewLoginNotice />
+      {auth.status === "guest" && <ReviewLoginNotice fixtureId={fixtureId} />}
+      {member && query.data && (
+        <ReviewComposer
+          key={`${auth.member.id}:${mine?.id ?? "new"}`}
+          memberId={auth.member.id}
+          restrictedUntil={auth.member.reviewRestrictedUntil ?? null}
+          fixtureId={fixtureId}
+          mine={mine}
+        />
+      )}
       <div>
         <Tabs items={SORTS} value={sort} onChange={onSort} label="평가 정렬" idBase={idBase} />
         <div role="tabpanel" id={tabPanelId(idBase, sort)} aria-labelledby={tabId(idBase, sort)} className="pt-4">
@@ -89,15 +173,35 @@ export function ReviewSection({
             <ol className="flex flex-col">
               {query.data.items.map((review) => (
                 <li key={review.id} className="flex flex-col gap-2.5 border-b border-line py-4 first:pt-0">
-                  <p className="text-body font-bold text-fg">{review.authorNickname ?? MISSING}</p>
+                  <p className="text-body font-bold text-fg">
+                    {review.authorNickname ?? MISSING}
+                    {member && review.mine && <span className="ml-2 text-small font-medium text-action">내 평가</span>}
+                  </p>
                   <p className="text-body break-words whitespace-pre-line text-fg">{review.body}</p>
-                  <Reactions review={review} />
+                  <Reactions
+                    review={review}
+                    member={member}
+                    onGuest={() => setLoginPrompt(true)}
+                    onSessionLost={() => router.push(loginTarget)}
+                  />
                 </li>
               ))}
             </ol>
           )}
         </div>
       </div>
+      {/* Never left open behind a login: closed on the way out, and members do not get it. */}
+      <Dialog open={loginPrompt && !member} onClose={() => setLoginPrompt(false)} title="로그인이 필요합니다" layout="responsive" width={375}>
+        <div className="flex flex-col gap-4">
+          <p className="text-body text-fg-secondary">로그인 후 현재 화면으로 돌아와 이용할 수 있어요.</p>
+          <ButtonLink href={loginTarget} variant="primary" fullWidth onClick={() => setLoginPrompt(false)}>
+            로그인하기
+          </ButtonLink>
+          <Button variant="ghost" fullWidth onClick={() => setLoginPrompt(false)}>
+            계속 둘러보기
+          </Button>
+        </div>
+      </Dialog>
     </section>
   );
 }

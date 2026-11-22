@@ -428,9 +428,20 @@ def test_reviews_popular_and_latest_order_with_count(connection):
         )
         session.flush()
 
+        def member():
+            # Reviews and reactions belong to real accounts since 02 (users FK, 0019).
+            from app.models.user import User
+
+            user = User(email=f"t5-{uuid.uuid4().hex}@example.com",
+                        nickname=f"t{uuid.uuid4().hex[:10]}", password_hash="x",
+                        login_method="email")
+            session.add(user)
+            session.flush()
+            return user.id
+
         def review(label, minutes_ago, likes, dislikes):
             row = Review(
-                user_id=uuid.uuid4(), fixture_id=BASE_ID + 50, body=f"r{label}",
+                user_id=member(), fixture_id=BASE_ID + 50, body=f"r{label}",
                 created_at=NOW - timedelta(minutes=minutes_ago),
                 updated_at=NOW - timedelta(minutes=minutes_ago),
             )
@@ -438,7 +449,7 @@ def test_reviews_popular_and_latest_order_with_count(connection):
             session.flush()
             for value, count in ((1, likes), (-1, dislikes)):
                 for _ in range(count):
-                    session.add(ReviewReaction(review_id=row.id, user_id=uuid.uuid4(), value=value))
+                    session.add(ReviewReaction(review_id=row.id, user_id=member(), value=value))
             return row.id
 
         newest_few = review(5, 1, likes=2, dislikes=0)  # 2 reactions: not ranked by ratio
@@ -460,13 +471,15 @@ def test_reviews_popular_and_latest_order_with_count(connection):
         assert list_reviews(session, BASE_ID + 51, "popular").summary.count == 0
 
         # The body is required and never blank, whatever the whitespace (migration 0015):
-        # the DB agrees with Python's str.strip(), which chat 02 uses to validate.
+        # the DB agrees with Python's str.strip(), which chat 02 uses to validate. One real
+        # member writes, so only the body check can refuse the row.
+        writer = member()
         for body in (None, "   ", "\t\n", " ", "　 ", " \r\n"):
             with pytest.raises(IntegrityError), session.begin_nested():
-                session.add(Review(user_id=uuid.uuid4(), fixture_id=BASE_ID + 50, body=body))
+                session.add(Review(user_id=writer, fixture_id=BASE_ID + 50, body=body))
                 session.flush()
         with session.begin_nested():
-            session.add(Review(user_id=uuid.uuid4(), fixture_id=BASE_ID + 50, body=" 골!\n"))
+            session.add(Review(user_id=writer, fixture_id=BASE_ID + 50, body=" 골!\n"))
             session.flush()
 
 

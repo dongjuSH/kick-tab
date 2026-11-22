@@ -1,10 +1,13 @@
 import { FeedbackButton } from "@/features/feedback/FeedbackButton";
+import { LegalLink } from "@/features/legal/LegalLink";
+import type { LegalDocumentId } from "@/features/legal/documents";
 import { siteOperator } from "@/lib/site";
 
-// No documents exist yet (P-12): shown as text without links until they are written.
-const POLICY_ITEMS = [
-  { label: "이용약관" },
-  { label: "개인정보처리방침", emphasis: true },
+// Terms and privacy are drafts (P-12, docs/legal): LegalLink shows them as text marked
+// "준비 중" and turns them into links once `features/legal/documents.ts` publishes them.
+const POLICY_ITEMS: { label: string; document?: LegalDocumentId; emphasis?: boolean }[] = [
+  { label: "이용약관", document: "terms" },
+  { label: "개인정보처리방침", document: "privacy", emphasis: true },
   { label: "문의" },
 ];
 
@@ -34,8 +37,17 @@ export function SiteFooter() {
         <div className="flex flex-col items-start gap-3 lg:flex-row lg:items-center">
           <ul aria-label="서비스 정책과 문의" className="flex items-center gap-4 whitespace-nowrap text-fg-secondary lg:flex-1">
             {POLICY_ITEMS.map((item) => (
-              <li key={item.label} title="준비 중" className={item.emphasis ? "font-bold" : undefined}>
-                {item.label}
+              <li key={item.label} className={item.emphasis ? "font-bold" : undefined}>
+                {item.document ? (
+                  <LegalLink document={item.document} label={item.label} />
+                ) : siteOperator.email ? (
+                  // 문의 opens a mail to the operator once the address is set (SITE_OPERATOR_EMAIL).
+                  <a href={`mailto:${siteOperator.email}`} className="hover:underline">
+                    {item.label}
+                  </a>
+                ) : (
+                  <span title="준비 중">{item.label}</span>
+                )}
               </li>
             ))}
           </ul>

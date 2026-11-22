@@ -6,12 +6,14 @@ import { cx } from "@/components/ui/cx";
 import type { FavoriteChange } from "./store";
 import { useFavorites } from "./useFavorites";
 
-/** Why a change was refused (FAV-002); shared by the toggle and the match-card star. */
-export const FAVORITE_REFUSALS: Partial<Record<FavoriteChange, string>> = {
-  limit: "관심 팀은 최대 5개까지 등록할 수 있습니다.",
-  unavailable: "이 브라우저에서는 관심 팀을 저장할 수 없습니다.",
-  failed: "저장하지 못했습니다. 다시 시도해 주세요.",
-};
+/** Why a change was refused (FAV-002); shared by the toggle and the match-card star. The
+ *  limit is the current user's: guests 5, members 10 (D-07-3). */
+export function favoriteRefusal(change: FavoriteChange, max: number): string | null {
+  if (change === "limit") return `관심 팀은 최대 ${max}개까지 등록할 수 있습니다.`;
+  if (change === "unavailable") return "이 브라우저에서는 관심 팀을 저장할 수 없습니다.";
+  if (change === "failed") return "저장하지 못했습니다. 다시 시도해 주세요.";
+  return null;
+}
 
 /**
  * Register / unregister one team (Figma 52:723 "☆ 관심 팀 등록" / 52:737 "★ 관심 팀 등록됨").
@@ -44,9 +46,13 @@ export function FavoriteToggle({
   // Figma 57:766 fav-full: with five teams the others cannot be added (FAV-002 6th refused).
   const full = !active && favorites.status === "ready" && favorites.ids.length >= favorites.max;
 
-  const toggle = () => {
-    const result = active ? favorites.remove(teamId) : favorites.add(teamId);
-    const text = FAVORITE_REFUSALS[result];
+  // Member changes wait for the server; the button is locked meanwhile.
+  const [saving, setSaving] = useState(false);
+  const toggle = async () => {
+    setSaving(true);
+    const result = await (active ? favorites.remove(teamId) : favorites.add(teamId));
+    setSaving(false);
+    const text = favoriteRefusal(result, favorites.max);
     setRefusal(text ? { text, listKey: null } : null);
   };
 
@@ -61,7 +67,8 @@ export function FavoriteToggle({
             ? `${teamName} 관심 팀 등록 불가, 최대 ${favorites.max}개까지 등록할 수 있어요`
             : `${teamName} 관심 팀 ${active ? "해제" : "등록"}`
         }
-        disabled={favorites.status === "loading" || full}
+        disabled={favorites.status === "loading" || full || saving}
+        aria-busy={saving || undefined}
         onClick={toggle}
       >
         {active ? "★ 관심 팀 등록됨" : full ? `최대 ${favorites.max}개까지 등록할 수 있어요` : "☆ 관심 팀 등록"}

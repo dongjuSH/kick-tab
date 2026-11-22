@@ -65,5 +65,6 @@ export const queryKeys = {
   },
   me: {
     all: ["me"] as const,
+    favorites: () => ["me", "favorites"] as const,
   },
 } as const;

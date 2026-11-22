@@ -64,5 +64,24 @@ class Settings(BaseSettings):
     # Separate Discord channel for operator alerts (failed selection). Empty = alerts off.
     top5_alert_discord_webhook_url: SecretStr = SecretStr("")
 
+    # Member auth (chat 02, guide §6.2). The JWT secret signs access tokens and keys the
+    # verification-code hashes; empty = member features answer 503 instead of signing.
+    auth_jwt_secret: SecretStr = SecretStr("")
+    # Mail for verification codes (P-01): Gmail SMTP with STARTTLS. Without a host and
+    # username the console sender is used (automatic tests only — not a real signup).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    email_from: str = ""
+    # Version recorded in terms_agreements (P-12). "draft" until the documents are final;
+    # changing this value is the only step when they are published.
+    terms_version: str = "draft"
+
+    @property
+    def secure_cookies(self) -> bool:
+        """Auth cookies carry Secure outside local development (§10.5)."""
+        return self.app_env not in ("local", "development", "test")
+
 
 settings = Settings()

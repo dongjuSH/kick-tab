@@ -82,3 +82,9 @@ export type FeedbackType = NonNullable<FeedbackCreate["type"]>;
 export type FeedbackReceipt = Schemas["FeedbackReceipt"];
 
 export type ErrorResponse = Schemas["ErrorResponse"];
+
+export type Member = Schemas["Member"];
+export type MemberFavorites = Schemas["MemberFavorites"];
+export type EmailCodeSent = Schemas["EmailCodeSent"];
+export type EmailCodeVerified = Schemas["EmailCodeVerified"];
+export type VerificationPurpose = Schemas["EmailCodeRequest"]["purpose"];
