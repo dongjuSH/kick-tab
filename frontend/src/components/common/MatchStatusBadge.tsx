@@ -8,10 +8,13 @@ function tone(match: MatchSummary): BadgeTone {
   return "neutral"; // scheduled, finished, unknown ("확인 필요")
 }
 
-/** "진행 중 63′" while live (Figma 187:591, TOP 5 row); no minute when not provided. */
+/** "진행 중 63′" while live (Figma 187:591, TOP 5 row); no minute when not provided or in a
+ * break ("하프타임", "연장 전 휴식"). */
 function statusLabel(match: MatchSummary): string {
   const word = statusWord(match);
-  return match.status === "live" && match.elapsed !== null ? `${word} ${match.elapsed}′` : word;
+  return match.status === "live" && !match.liveBreak && match.elapsed !== null
+    ? `${word} ${match.elapsed}′`
+    : word;
 }
 
 /**

@@ -134,9 +134,9 @@ export function areasOf(info: MatchInfo) {
     headToHead: info.headToHeadAvailable,
     // Live and normally finished matches, decided by the server (`review_open`).
     reviews,
-    // PC: a finished match puts the reviews in a narrow column right of the records;
-    // live matches keep them below (Figma 52:151 / 161:4161). Mobile always stacks.
-    reviewsBeside: reviews && status === "finished",
+    // PC: live and finished matches put the reviews in a narrow column right of the records
+    // (Figma 52:151; user decision 2026-11-22 for live too). Mobile always stacks.
+    reviewsBeside: reviews && (status === "live" || status === "finished"),
   };
 }
 
@@ -160,4 +160,89 @@ export function formItems(teamName: string, matches: readonly FormMatch[]): Form
       };
     })
     .reverse();
+}
+
+/** A timeline row: one provider event, or a period row on the centre line (Figma 161:4161). */
+export type TimelineRow =
+  | { kind: "event"; event: MatchEvent }
+  | { kind: "period"; minute: string; label: string };
+
+// Status row at the top: where the match is now (live) or how it ended. Half time (HT) is
+// the '45′ 전반 종료' row itself, so that half-time substitutions sit above it.
+const STATUS_ROW: Record<string, string> = {
+  "1H": "전반 진행 중",
+  "2H": "후반 진행 중",
+  BT: "연장 전 휴식",
+  ET: "연장 진행 중",
+  P: "승부차기 진행 중",
+  SUSP: "경기 중단",
+  INT: "경기 중단",
+  FT: "경기 종료",
+  AET: "경기 종료",
+  PEN: "경기 종료",
+};
+const PAST_FIRST_HALF = new Set(["HT", "2H", "BT", "ET", "P", "FT", "AET", "PEN"]);
+const EXTRA_TIME = new Set(["ET", "P", "AET", "PEN"]);
+const REGULAR_END: Record<string, number> = { FT: 90, AET: 120, PEN: 120 };
+
+/**
+ * Half-time substitutions: the provider files them at 45′ with no stoppage minute, after
+ * every first-half event. A substitution at exactly 45′ followed by no other first-half
+ * event is made in the break, so it belongs above '전반 종료'.
+ */
+function halfTimeSubstitutions(events: MatchEvent[]): Set<MatchEvent> {
+  const subs = new Set<MatchEvent>();
+  for (let i = events.length - 1; i >= 0; i--) {
+    const event = events[i];
+    if (event.elapsed === null || event.elapsed > 45) continue;
+    if (event.type !== "subst" || event.elapsed !== 45 || event.extra) break;
+    subs.add(event);
+  }
+  return subs;
+}
+
+/**
+ * Timeline rows, latest first: the events with period rows on the centre line — '전반 종료'
+ * from half time on (half-time substitutions above it), '후반 종료' before extra time, and
+ * the match status on top. With no event yet the period rows still show. The provider gives
+ * no stoppage minutes of a finished period (`periods`/`extra` are empty), so a period end
+ * shows its regular minute (45′, 90′); the top row takes the status minute, or the latest
+ * event's minute when that is later (e.g. 90+3′).
+ */
+export function timelineRows(
+  events: MatchEvent[],
+  info: Pick<MatchInfo, "statusCode"> & { match: Pick<MatchInfo["match"], "elapsed"> },
+): TimelineRow[] {
+  const code = info.statusCode;
+  const elapsed = info.match.elapsed;
+  const marks: { after: number; minute: string; label: string }[] = [];
+  if (PAST_FIRST_HALF.has(code) || ((code === "SUSP" || code === "INT") && (elapsed ?? 0) > 45)) {
+    marks.push({ after: 45, minute: "45′", label: "전반 종료" });
+  }
+  if (EXTRA_TIME.has(code)) marks.push({ after: 90, minute: "90′", label: "후반 종료" });
+  const breakSubs = marks.length ? halfTimeSubstitutions(events) : new Set<MatchEvent>();
+  const rows: TimelineRow[] = [];
+  let next = 0;
+  for (const event of events) {
+    while (
+      next < marks.length &&
+      ((event.elapsed !== null && event.elapsed > marks[next].after) ||
+        (marks[next].after === 45 && breakSubs.has(event)))
+    ) {
+      const { minute, label } = marks[next++];
+      rows.push({ kind: "period", minute, label });
+    }
+    rows.push({ kind: "event", event });
+  }
+  for (const { minute, label } of marks.slice(next)) rows.push({ kind: "period", minute, label });
+  const label = STATUS_ROW[code];
+  if (label) {
+    // The API sends `elapsed` for live matches only: a finished match ends at its regular minute.
+    const fixed = code === "BT" ? 90 : (elapsed ?? REGULAR_END[code] ?? null);
+    let minute = fixed === null ? MISSING : `${fixed}′`;
+    const last = events.at(-1);
+    if (fixed !== null && last?.elapsed === fixed && last.extra) minute = minuteText(last);
+    rows.push({ kind: "period", minute, label });
+  }
+  return rows.reverse();
 }

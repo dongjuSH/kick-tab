@@ -20,6 +20,7 @@ from app.models.reference import CompetitionSeason
 from app.providers.api_football import ApiFootballClient, DailyBudget, MinuteRateLimiter
 from app.services.fixtures import (
     fixtures_on,
+    needs_live_sync,
     next_for_teams,
     overlaps,
     schedule_period,
@@ -542,3 +543,32 @@ def test_day_outside_every_season_is_empty_only_after_collection(session, collec
         with pytest.raises(ApiError) as caught:
             read_fixtures(db=session, day=empty)
         assert caught.value.status_code == 503
+
+
+def test_live_sync_starts_at_kickoff_and_names_a_break(session):
+    # Far ahead of real data: only this test's fixture counts.
+    day = kst_today() + timedelta(days=400)
+    kickoff = datetime(day.year, day.month, day.day, 3, 7, tzinfo=UTC)
+    now = datetime.now(UTC)
+    # Real matches live right now would keep the job on: out of scope (rolled back).
+    session.execute(text("UPDATE fixtures SET status = 'finished' WHERE status = 'live'"))
+    upsert_fixtures(session, [item(31, kickoff, "NS")], now)
+    session.flush()
+    # Not before kickoff: `/fixtures?live=` lists started matches only (2026-11-22).
+    assert not needs_live_sync(session, kickoff - timedelta(minutes=30))
+    assert not needs_live_sync(session, kickoff - timedelta(seconds=1))
+    assert needs_live_sync(session, kickoff)
+    assert needs_live_sync(session, kickoff + timedelta(hours=2, minutes=59))
+    assert not needs_live_sync(session, kickoff + timedelta(hours=3, minutes=1))
+
+    def shown(short, elapsed):
+        upsert_fixtures(session, [item(31, kickoff, short, goals=(1, 0), elapsed=elapsed)], now)
+        session.flush()
+        match = next(m for m in fixtures_on(session, kickoff.date())[0] if m.id == BASE_ID + 31)
+        return match.status, match.elapsed, match.live_break
+
+    assert shown("1H", 30) == ("live", 30, None)
+    assert shown("HT", 45) == ("live", 45, "half_time")
+    assert shown("BT", 90) == ("live", 90, "extra_time")
+    assert shown("2H", 50) == ("live", 50, None)
+    assert shown("FT", 90) == ("finished", None, None)

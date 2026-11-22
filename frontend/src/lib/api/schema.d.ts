@@ -1424,6 +1424,8 @@ export interface components {
             finishType: ("normal" | "aet" | "pen" | "awarded" | "walkover") | null;
             /** Elapsed */
             elapsed: number | null;
+            /** Livebreak */
+            liveBreak: ("half_time" | "extra_time") | null;
             /** Statusreason */
             statusReason: string | null;
             home: components["schemas"]["TeamRef"];

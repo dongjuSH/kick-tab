@@ -205,7 +205,7 @@ def _live_precheck(session: Session, params: Mapping[str, Any]) -> bool:
 
 @register_job(
     "fixtures_live",
-    description="Live scores while a supported match is live or about to start",
+    description="Live scores while a supported match is live or past its kickoff",
     schedule={"trigger": "interval", "seconds": 60},
     precheck=_live_precheck,
 )

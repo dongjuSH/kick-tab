@@ -32,10 +32,12 @@ logger = logging.getLogger(__name__)
 # three KST dates before today with a stored match, today when it has one, and the next 17.
 PAST_MATCH_DAYS = 3
 FUTURE_MATCH_DAYS = 17
-# Live sync runs when a match is live, starts within this lead time, or should have started
-# within the lag (kickoff passed but the provider has not switched it to live yet).
-LIVE_LEAD = timedelta(minutes=30)
+# Live sync runs when a match is live or should have started within the lag (kickoff passed
+# but the provider has not switched it to live yet). Not before kickoff: `/fixtures?live=`
+# lists started matches only, so earlier calls would bring nothing (2026-11-22).
 LIVE_LAG = timedelta(hours=3)
+# Provider codes of a break in a live match (half time, break before extra time).
+LIVE_BREAKS = {"HT": "half_time", "BT": "extra_time"}
 
 
 @dataclass(frozen=True)
@@ -293,7 +295,7 @@ def needs_live_sync(session: Session, now: datetime) -> bool:
                 or_(
                     Fixture.status == "live",
                     Fixture.status.in_(("scheduled", "unknown"))
-                    & Fixture.kickoff_at.between(now - LIVE_LAG, now + LIVE_LEAD),
+                    & Fixture.kickoff_at.between(now - LIVE_LAG, now),
                 )
             )
             .limit(1)
@@ -329,6 +331,7 @@ def to_summary(
         status=fixture.status,
         finish_type=fixture.finish_type,
         elapsed=fixture.elapsed if fixture.status == "live" else None,
+        live_break=LIVE_BREAKS.get(fixture.status_short_raw) if fixture.status == "live" else None,
         status_reason=fixture.status_reason,
         home=team_ref(home, lookup),
         away=team_ref(away, lookup),

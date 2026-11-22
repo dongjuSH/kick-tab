@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-22 · 04 진행 중 경기 실경기 검수·보완(`dev` 병합):** 백엔드 `schemas/match.py`(`MatchSummary.live_break`), `services/fixtures.py`(`LIVE_BREAKS`·`to_summary`, `LIVE_LEAD` 삭제 — `needs_live_sync`는 킥오프부터), `sync/fixtures.py`(설명), `tests/test_schedule_db.py`. 프런트 `features/match/model.ts`(`timelineRows`·`TimelineRow`·`halfTimeSubstitutions`, `areasOf` 진행 중도 평가 오른쪽)·`MatchRecords.tsx`(Figma 161:4161 타임라인·상태 줄)·`MatchDetail.tsx`, `lib/format/match.ts`(`statusWord` 하프타임·연장 전 휴식)·`components/common/MatchStatusBadge.tsx`(휴식 중 분 없음), 생성 타입, `tests/match-regressions.test.mjs`.
+
 **2026-11-21 · 06 UEFA 토너먼트 대진 카드 제목 표기(사용자 Figma 수정 반영·`dev` 병합):** 프런트 `features/standings/KnockoutStage.tsx`(`SlotTitle` — 데스크톱 '팀 로고 vs 로고 팀', 모바일 '로고 팀 vs 로고 팀').
 
 **2026-11-21 · 08 이적 출전 근거 결정 B·Codex N1·00 소규모 수정(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `services/team_detail.py`(출전 수 NULL 해석, `club_appearances_unknown`·`appearances_unknown` 삭제, 이전 팀 출전 타입 `int`), `models/team_detail.py`(설명), `services/top5_selection.py`(`stored_standings`), 테스트 3개. 프런트 `features/team-detail/TeamDetail.tsx`·`features/teams/TeamsSection.tsx`(한글 대회명).
