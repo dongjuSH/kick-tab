@@ -9,9 +9,10 @@ for the same match wait for that single fetch.
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy.orm import Session
 
+from app.api.auth import MaybeMember, Member
 from app.api.errors import ApiError
 from app.db.session import get_db
 from app.models.fixture import Fixture
@@ -23,6 +24,8 @@ from app.schemas.match_detail import (
     MatchInfoResponse,
     MatchRecordsResponse,
     ReviewListResponse,
+    ReviewResponse,
+    ReviewWrite,
     UpdatedMeta,
 )
 from app.seed.competitions import season_label
@@ -30,7 +33,7 @@ from app.services.fixtures import to_summary
 from app.services.head_to_head import ensure_form, ensure_meetings, read_head_to_head
 from app.services.match_detail import BEFORE_KICKOFF, ensure_records, read_records
 from app.services.reference import team_detail_lookup
-from app.services.reviews import ReviewSort, list_reviews, review_open
+from app.services.reviews import ReviewSort, create_review, list_reviews, review_open
 
 router = APIRouter(prefix="/fixtures", tags=["matches"])
 Db = Annotated[Session, Depends(get_db)]
@@ -94,10 +97,26 @@ def read_match_head_to_head(db: Db, fixture_id: FixtureId) -> HeadToHeadResponse
 
 @router.get("/{fixture_id}/reviews")
 def read_match_reviews(
-    db: Db, fixture_id: FixtureId, sort: Annotated[ReviewSort, Query()] = "popular"
+    db: Db,
+    fixture_id: FixtureId,
+    viewer: MaybeMember,
+    sort: Annotated[ReviewSort, Query()] = "popular",
 ) -> ReviewListResponse:
-    """Public text reviews and their count, live or normally finished (REV-001·004)."""
+    """Public text reviews and their count, live or normally finished (REV-001·004). For a
+    signed-in member each item also says whether it is theirs and their reaction."""
     fixture = _fixture(db, fixture_id)
     if not review_open(fixture):
         raise ApiError(409, "CONFLICT", "이 경기는 경기 평가를 제공하지 않습니다.")
-    return ReviewListResponse(data=list_reviews(db, fixture_id, sort))
+    return ReviewListResponse(
+        data=list_reviews(db, fixture_id, sort, viewer.id if viewer else None)
+    )
+
+
+@router.post("/{fixture_id}/reviews", status_code=status.HTTP_201_CREATED)
+def write_review(
+    db: Db, fixture_id: FixtureId, payload: ReviewWrite, user: Member
+) -> ReviewResponse:
+    """REV-002: one review per member and match (409 REVIEW_EXISTS), only while open (409
+    CONFLICT), 1-300 characters and not only spaces (422)."""
+    _fixture(db, fixture_id)
+    return ReviewResponse(data=create_review(db, user.id, fixture_id, payload.body))

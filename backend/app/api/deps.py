@@ -2,6 +2,7 @@
 
 import threading
 from collections.abc import Callable, Coroutine, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from fastapi import Request, Response
@@ -31,12 +32,26 @@ def require_csrf(request: Request) -> None:
         raise ApiError(403, "FORBIDDEN", "허용되지 않은 요청입니다.", details={"reason": "origin"})
 
 
+@dataclass(frozen=True)
+class SharedCounter:
+    """A scope-wide counter several `RateLimit`s count against together. Its lock is the
+    one every sharing limit takes, so checking and recording stay one step across them
+    (Codex R2: two limits each checking before either recorded let one extra through)."""
+
+    key: str
+    limiter: RateLimiter
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
 class RateLimit:
     """Per-client limits plus optional scope-wide limits (key = scope + client IP).
 
     Replace `key_func` to key by user etc. `global_limits` cap the whole scope regardless
     of client: the safety net for a forged X-Forwarded-For (guide §10.2 C-08). A request is
     counted only when both pass, so rejected requests never create client state.
+
+    `shared_global` lets several limits (e.g. members and guests of one form) count against
+    one scope-wide counter (and share its lock) instead of each getting its own.
 
     Use `route_class()` on the router so the limit runs before the body is parsed: a
     malformed JSON body then still counts (P-10). Calling the instance directly also works
@@ -49,12 +64,19 @@ class RateLimit:
         limits: Sequence[Limit],
         key_func: Callable[[Request], str] | None = None,
         global_limits: Sequence[Limit] = (),
+        shared_global: SharedCounter | None = None,
     ) -> None:
         self.scope = scope
         self.limiter = RateLimiter(limits)
-        self.global_limiter = RateLimiter(global_limits) if global_limits else None
+        if shared_global is not None:
+            self.global_key = shared_global.key
+            self.global_limiter: RateLimiter | None = shared_global.limiter
+            self._lock = shared_global.lock
+        else:
+            self.global_key = scope
+            self.global_limiter = RateLimiter(global_limits) if global_limits else None
+            self._lock = threading.Lock()
         self.key_func = key_func or (lambda request: client_ip(request, settings.trusted_proxies))
-        self._lock = threading.Lock()
 
     def reset(self) -> None:
         self.limiter.reset()
@@ -66,12 +88,12 @@ class RateLimit:
         with self._lock:
             waits = [self.limiter.check(key)]
             if self.global_limiter:
-                waits.append(self.global_limiter.check(self.scope))
+                waits.append(self.global_limiter.check(self.global_key))
             blocked = [wait for wait in waits if wait is not None]
             if not blocked:
                 self.limiter.record(key)
                 if self.global_limiter:
-                    self.global_limiter.record(self.scope)
+                    self.global_limiter.record(self.global_key)
                 return
         raise ApiError(
             429,

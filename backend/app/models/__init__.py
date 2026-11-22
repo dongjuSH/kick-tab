@@ -31,8 +31,22 @@ from app.models.team_detail import (
     Transfer,
 )
 from app.models.top_matches import Top5Attempt, Top5Publication, Top5Week, WeeklyTopMatch
+from app.models.user import (
+    AuthIdentity,
+    EmailVerification,
+    MemberFavorite,
+    RefreshToken,
+    TermsAgreement,
+    User,
+)
 
 __all__ = [
+    "AuthIdentity",
+    "EmailVerification",
+    "MemberFavorite",
+    "RefreshToken",
+    "TermsAgreement",
+    "User",
     "Competition",
     "CompetitionSeason",
     "Feedback",

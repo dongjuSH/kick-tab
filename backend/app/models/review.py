@@ -3,10 +3,9 @@
 A review is text only: the body is required (not blank) and at most 300 characters. There
 is no star rating or member average (04 개선, migration 0015). One review per member+match.
 
-Chat 04 creates the tables and the public read side. `users` does not exist yet (chat 02),
-so `user_id` has no foreign key here; chat 02 adds `REFERENCES users(id) ON DELETE CASCADE`
-on both tables (P-03: a withdrawn member's reviews and reactions are deleted and leave the
-aggregates).
+Chat 04 created the tables and the public read side; chat 02 (migration 0019) added
+`REFERENCES users(id) ON DELETE CASCADE` on both tables (P-03: a withdrawn member's
+reviews and reactions are deleted and leave the aggregates).
 """
 
 import uuid
@@ -22,7 +21,6 @@ from sqlalchemy import (
     SmallInteger,
     Text,
     UniqueConstraint,
-    Uuid,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,7 +47,9 @@ class Review(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     fixture_id: Mapped[int] = mapped_column(
         ForeignKey("fixtures.id", ondelete="CASCADE"), nullable=False
     )
@@ -69,7 +69,9 @@ class ReviewReaction(Base):
     review_id: Mapped[int] = mapped_column(
         ForeignKey("reviews.id", ondelete="CASCADE"), primary_key=True
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     value: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

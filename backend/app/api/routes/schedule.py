@@ -56,7 +56,8 @@ from app.services.team_search import search_teams
 router = APIRouter(tags=["schedule"])
 UNSUPPORTED_SEASON = "지원하지 않는 시즌입니다. 시즌 목록에서 다시 선택해 주세요."
 Db = Annotated[Session, Depends(get_db)]
-MAX_FAVORITES = 5
+# Members keep up to 10 favourite teams (2026-11-21); guests send at most 5.
+MAX_FAVORITES = 10
 
 NOT_COLLECTED = "경기 일정을 아직 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."
 # Each check makes one outbound request to a press site: keep it from becoming a proxy.
@@ -165,7 +166,7 @@ def read_fixture_availability(db: Db) -> FixtureAvailabilityResponse:
 @router.get("/fixtures/next")
 def read_favorite_schedule(
     db: Db,
-    teams: Annotated[str, Query(description="Comma-separated team ids, at most 5")],
+    teams: Annotated[str, Query(description="Comma-separated team ids, at most 10")],
 ) -> FavoriteScheduleResponse:
     """FAV-004: the live or nearest upcoming match of each favourite team."""
     try:
@@ -176,7 +177,7 @@ def read_favorite_schedule(
         raise ApiError(
             422,
             "VALIDATION_ERROR",
-            "관심 팀은 1~5개의 팀 ID로 조회합니다.",
+            "관심 팀은 1~10개의 팀 ID로 조회합니다.",
             details={"fields": {"teams": "팀 ID를 확인해 주세요."}},
         )
     state = sync_state(db)

@@ -132,8 +132,11 @@ def test_fixtures_date_outside_collection_window_is_rejected(client):
     assert "date" in body["error"]["details"]["fields"]
 
 
-@pytest.mark.parametrize("teams", ["", "a,b", "1,2,3,4,5,6", "0", "-1", "50,0"])
-def test_favorite_schedule_requires_one_to_five_ids(client, teams):
+@pytest.mark.parametrize(
+    "teams", ["", "a,b", ",".join(str(i) for i in range(1, 12)), "0", "-1", "50,0"]
+)
+def test_favorite_schedule_requires_one_to_ten_ids(client, teams):
+    """Members keep up to 10 teams (2026-11-21); an 11th id is refused."""
     response = client.get("/api/v1/fixtures/next", params={"teams": teams})
     assert response.status_code == 422
 

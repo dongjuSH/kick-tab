@@ -207,21 +207,27 @@ test("match reviews show the count only: no star rating or average", () => {
     { id: 1, authorNickname: null, body: "좋은 경기", likes: 3, dislikes: 1, createdAt: "", updatedAt: "" },
     { id: 2, authorNickname: "축구좋아", body: "후반 집중력", likes: 0, dislikes: 0, createdAt: "", updatedAt: "" },
   ] };
-  const reviewLoader = (data) => loader({ ...leaves, react: h.react,
-    "@tanstack/react-query": { useQuery: () => ({ data, isPending: false }) },
+  const reviewLoader = (data, react = h.react) => loader({ ...leaves, react,
+    "@tanstack/react-query": { useQuery: () => ({ data, isPending: false }), useQueryClient: () => ({}) },
+    "next/navigation": { useRouter: () => ({ push() {} }) },
+    "@/features/auth/session": { useAuth: () => ({ status: "guest" }) },
     "./queries": { reviewsQuery: () => ({}) },
-  })("@/features/match/ReviewSection");
+  }, { URL })("@/features/match/ReviewSection");
   const { html } = h.render(reviewLoader(list).ReviewSection, { fixtureId: 1, sort: "popular", onSort() {} });
   assert.match(html, /경기 평가/);
-  // Guest notice as the latest Figma (408:16478): primary 로그인 button; 02 adds its action.
+  // Guest notice as the latest Figma (408:16478): primary 로그인 → the login that returns to
+  // this match's review area (02, AUTH-005).
   assert.match(html, /로그인 후 경기 평가를 작성할 수 있습니다\./);
-  assert.match(html, /<button[^>]*bg-action[^>]*>로그인<\/button>/);
-  assert.doesNotMatch(html, /href="\/login/);
+  const login = html.match(/<a [^>]*>로그인<\/a>/)?.[0] ?? "";
+  assert.match(login, /bg-action/);
+  assert.match(login, /href="\/login\?returnTo=%2Fmatches%2F1&amp;intent=review%3A1"/);
   assert.match(html, /2건/);
   assert.match(html, /좋아요 3/);
   assert.match(html, /인기순/);
   assert.doesNotMatch(html, /평점|평균|★/);
-  const none = h.render(reviewLoader({ summary: { count: 0 }, items: [] }).ReviewSection,
+  // Fresh hook slots: the list items (reactions) changed the hook order of the first render.
+  const h2 = hooks();
+  const none = h2.render(reviewLoader({ summary: { count: 0 }, items: [] }, h2.react).ReviewSection,
     { fixtureId: 1, sort: "latest", onSort() {} }).html;
   assert.match(none, /아직 평가가 없습니다/);
   assert.match(none, /평가 0건/);

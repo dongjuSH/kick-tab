@@ -2,7 +2,7 @@
  * Guest favourite teams in localStorage (FAV-001~003, PRD 9장): this browser only, at most
  * five team ids, no duplicates. Every storage access is guarded: a blocked or broken
  * storage reports "unavailable" and the public screens keep working (guide §6.6).
- * Chat 02 adds the member list (DB) as a second source; the two are never merged.
+ * Members use their account list instead (useFavorites, max 10); the two are never merged.
  */
 
 const FAVORITES_KEY = "kt-fav-guest";

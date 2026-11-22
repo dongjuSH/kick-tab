@@ -40,7 +40,10 @@ export function SiteHeader() {
           </div>
           <div className="flex-1" />
           <div className="hidden lg:block">
-            <HeaderAuth layout="desktop" />
+            {/* Reads the path (logout on a member-only page goes to the main page). */}
+            <Suspense fallback={<span className="block h-11 w-[204px]" />}>
+              <HeaderAuth layout="desktop" />
+            </Suspense>
           </div>
           <div className="lg:hidden">
             <Suspense fallback={<span className="block size-11" />}>

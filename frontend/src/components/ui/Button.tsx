@@ -21,7 +21,7 @@ export function buttonClass(variant: ButtonVariant = "secondary", fullWidth = fa
   return cx(BASE, VARIANTS[variant], fullWidth && "w-full", className);
 }
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends ComponentProps<"button"> {
   variant?: ButtonVariant;
   fullWidth?: boolean;
 }

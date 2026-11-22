@@ -175,7 +175,7 @@ class HeadToHeadResponse(ApiModel):
 
 class ReviewItem(ApiModel):
     id: int
-    # Filled from `users` by chat 02 (null until members exist).
+    # The author's nickname (`users.nickname`, chat 02).
     author_nickname: str | None
     # Text review: 1-300 characters, no star rating (REV, 04 개선).
     body: str
@@ -183,6 +183,41 @@ class ReviewItem(ApiModel):
     dislikes: int
     created_at: datetime
     updated_at: datetime
+    # For the signed-in viewer (chat 02): their own review (edit/delete, no reacting) and
+    # their reaction (1 like, -1 dislike). Guests: false / null.
+    mine: bool = False
+    my_reaction: Literal[1, -1] | None = None
+
+
+class ReviewWrite(ApiModel):
+    """REV-002·003: 1-300 characters and not only spaces (checked in the service)."""
+
+    body: str = Field(max_length=2000)
+
+
+class ReviewReactionWrite(ApiModel):
+    value: Literal[1, -1]
+
+
+class ReviewResponse(ApiModel):
+    data: ReviewItem
+
+
+class MyReview(ApiModel):
+    """A member's own review for my page (MY, chat 09): the match, the text, the counts,
+    when it was written and — only if it was changed afterwards — when it was edited."""
+
+    id: int
+    match: MatchSummary
+    body: str
+    likes: int
+    dislikes: int
+    created_at: datetime
+    edited_at: datetime | None
+
+
+class MyReviewsResponse(ApiModel):
+    data: list[MyReview]
 
 
 class ReviewSummary(ApiModel):

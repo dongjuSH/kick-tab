@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { cx } from "@/components/ui/cx";
-import { FAVORITE_REFUSALS } from "./FavoriteToggle";
+import { favoriteRefusal } from "./FavoriteToggle";
 import { useFavorites } from "./useFavorites";
 
 /**
@@ -13,6 +13,7 @@ import { useFavorites } from "./useFavorites";
 export function FavoriteStar({ teamId, teamName }: { teamId: number; teamName: string }) {
   const favorites = useFavorites();
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const active = favorites.has(teamId);
 
   useEffect(() => {
@@ -27,10 +28,12 @@ export function FavoriteStar({ teamId, teamName }: { teamId: number; teamName: s
         type="button"
         aria-pressed={active}
         aria-label={`${teamName} 관심 팀 ${active ? "해제" : "등록"}`}
-        disabled={favorites.status === "loading"}
-        onClick={() => {
-          const result = active ? favorites.remove(teamId) : favorites.add(teamId);
-          setRefusal(FAVORITE_REFUSALS[result] ?? null);
+        disabled={favorites.status === "loading" || saving}
+        onClick={async () => {
+          setSaving(true);
+          const result = await (active ? favorites.remove(teamId) : favorites.add(teamId));
+          setSaving(false);
+          setRefusal(favoriteRefusal(result, favorites.max));
         }}
         // 24px star, 44px target (guide §3.1 '조작 영역').
         className="relative inline-flex size-6 items-center justify-center rounded-full before:absolute before:-inset-2.5 hover:bg-subtle"

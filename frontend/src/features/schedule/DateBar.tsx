@@ -108,7 +108,6 @@ export function DateBar({
           {dates.map((date) => {
             const parts = parseIsoDate(date)!;
             const isSelected = date === selected;
-            const isToday = date === today;
             const state = availability.get(date);
             const statusKey = state === "unknown" || state === "partial" ? state : null;
             const status = statusKey ? DATE_STATUS[statusKey] : "";
@@ -117,7 +116,7 @@ export function DateBar({
                 key={date}
                 type="button"
                 aria-pressed={isSelected}
-                aria-label={`${parts.month}월 ${parts.day}일 ${parts.weekday}요일${isToday ? " 오늘" : ""}${status ? ` · ${status}` : ""}`}
+                aria-label={`${parts.month}월 ${parts.day}일 ${parts.weekday}요일${status ? ` · ${status}` : ""}`}
                 data-last-past={date === lastPast ? "" : undefined}
                 onClick={() => onSelect(date)}
                 className={cx(
@@ -131,8 +130,6 @@ export function DateBar({
                 <span className="whitespace-nowrap text-[15px] font-medium leading-[22px] [@container_(max-width:190px)]:text-[14px]">
                   {parts.month}/{parts.day}
                 </span>
-                {/* Today keeps its weekday (SCH-002): a dot marks it, the name says "오늘". */}
-                {isToday && <span aria-hidden className="absolute top-1 right-1 size-1.5 rounded-full bg-action lg:top-1.5 lg:right-1.5" />}
                 {status && (
                   <span className="max-w-full whitespace-nowrap text-[10px] leading-3 text-fg-muted">
                     <span className="[@container_(max-width:200px)]:hidden">{status}</span>
