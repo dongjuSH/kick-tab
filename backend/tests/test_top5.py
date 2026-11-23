@@ -317,66 +317,61 @@ BUSY = LlmError("Gemini API error 503 UNAVAILABLE", transient=True)
 SLOW = LlmError("Gemini API error 504 DEADLINE_EXCEEDED", transient=True)
 
 
-def test_each_request_waits_up_to_ten_minutes_with_the_thinking_level(monkeypatch):
+def test_first_request_runs_until_the_00_05_slot_with_the_thinking_level(monkeypatch):
+    # The 00:00 attempt's model time is 705 s (until 00:11:45): slots at 300 s and 600 s.
     model_setup(monkeypatch)
     clock = FakeClock()
-    call, calls = timed_call(clock, [(90, {"picks": []})])
-    _, raw = top5.gemini_generate("p", 1100, call=call, clock=clock, sleep=clock.sleep)
-    assert calls == [(0.0, 600.0, "low")]  # 10 minutes, never beyond the attempt
-    assert raw["model"] == "gemini-3.8-flash"
-    clock = FakeClock()
-    call, calls = timed_call(clock, [(90, {"picks": []})])
-    top5.gemini_generate("p", 400, call=call, clock=clock, sleep=clock.sleep)
-    assert calls[0][1] == 400.0  # less than 10 minutes left: only what is left
-
-
-def test_quick_errors_wait_longer_each_time_slow_ones_retry_at_once(monkeypatch):
-    model_setup(monkeypatch)
-    clock = FakeClock()
-    call, calls = timed_call(clock, [(3, BUSY), (4, BUSY), (600, SLOW), (100, {"picks": []})])
-    _, raw = top5.gemini_generate("p", 1190, call=call, clock=clock, sleep=clock.sleep)
-    starts = [c[0] for c in calls]
-    # 503 after 3 s -> 30 s pause; 503 after 4 s -> 60 s pause; 504 after 600 s -> at once.
-    assert starts == [0.0, 33.0, 97.0, 697.0]
-    assert calls[3][1] == 1190.0 - 697.0  # the last request gets the time still left
+    call, calls = timed_call(clock, [(23, {"picks": []})])
+    _, raw = top5.gemini_generate("p", 705, call=call, clock=clock, sleep=clock.sleep)
+    assert calls == [(0.0, 300.0, "low")]  # never past the next slot
     assert raw["model"] == "gemini-3.8-flash"
 
 
-def test_at_most_five_requests_then_failure_names_every_error(monkeypatch):
+def test_errors_are_asked_again_only_at_00_05_and_00_10(monkeypatch):
+    model_setup(monkeypatch)
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(3, BUSY), (300, SLOW), (23, {"picks": []})])
+    _, raw = top5.gemini_generate("p", 705, call=call, clock=clock, sleep=clock.sleep)
+    # 503 at 3 s -> wait for 00:05 (300 s); 504 lasting until 00:10 -> the 00:10 slot at once.
+    assert [c[0] for c in calls] == [0.0, 300.0, 600.0]
+    assert [c[1] for c in calls] == [300.0, 300.0, 105.0]  # the last one until the end
+    assert raw["model"] == "gemini-3.8-flash"
+
+
+def test_at_most_three_requests_then_failure_names_every_error(monkeypatch):
     model_setup(monkeypatch)
     clock = FakeClock()
     call, calls = timed_call(clock, [(2, LlmError(f"Gemini API error 503 #{i}", transient=True))
-                                     for i in range(6)])
+                                     for i in range(4)])
     with pytest.raises(top5.ModelFailed) as info:
-        top5.gemini_generate("p", 1190, call=call, clock=clock, sleep=clock.sleep)
-    assert len(calls) == top5.MAX_REQUESTS == 5
+        top5.gemini_generate("p", 705, call=call, clock=clock, sleep=clock.sleep)
+    assert len(calls) == top5.MAX_REQUESTS == 3
     assert str(info.value).startswith("gemini-3.8-flash: Gemini API error 503 #0 → ")
 
 
-def test_no_retry_for_lasting_errors_or_without_time(monkeypatch):
+def test_no_retry_for_lasting_errors(monkeypatch):
     model_setup(monkeypatch)
     clock = FakeClock()
     call, calls = timed_call(clock, [(1, LlmError("Gemini API error 429 RESOURCE_EXHAUSTED"))])
     with pytest.raises(top5.ModelFailed):
-        top5.gemini_generate("p", 1190, call=call, clock=clock, sleep=clock.sleep)
+        top5.gemini_generate("p", 705, call=call, clock=clock, sleep=clock.sleep)
     assert len(calls) == 1  # quota, bad request or bad answer: not asked again
-    clock = FakeClock()
-    call, calls = timed_call(clock, [(600, SLOW)])
-    with pytest.raises(top5.ModelFailed):
-        top5.gemini_generate("p", 700, call=call, clock=clock, sleep=clock.sleep)
-    assert len(calls) == 1  # 100 s left < 180 s needed for another answer
 
 
-def test_first_request_also_needs_180_seconds(monkeypatch):
+def test_late_evidence_starts_at_the_next_usable_slot(monkeypatch):
     model_setup(monkeypatch)
+    # Evidence ready at 00:04:45 (285 s into the 705 s): 15 s before 00:05 is too short,
+    # so the first request is the 00:05 one; with under 30 s in total nothing is sent.
     clock = FakeClock()
-    call, calls = timed_call(clock, [(90, {"picks": []})])
+    call, calls = timed_call(clock, [(23, {"picks": []})])
+    top5.gemini_generate("p", 420, call=call, clock=clock, sleep=clock.sleep)
+    assert calls == [(15.0, 300.0, "low")]
+    clock = FakeClock()
+    call, calls = timed_call(clock, [(23, {"picks": []})])
     with pytest.raises(top5.ModelFailed, match="not requested"):
-        top5.gemini_generate("p", 179, call=call, clock=clock, sleep=clock.sleep)
+        top5.gemini_generate("p", 29, call=call, clock=clock, sleep=clock.sleep)
     assert calls == []
-    top5.gemini_generate("p", 180, call=call, clock=clock, sleep=clock.sleep)
-    assert len(calls) == 1  # exactly 180 s left is enough
 
 
-def test_window_end_is_monday_0020_kst():
-    assert window_end(WEEK) == datetime(2026, 11, 1, 15, 20, tzinfo=UTC)
+def test_window_end_is_monday_0012_kst():
+    assert window_end(WEEK) == datetime(2026, 11, 1, 15, 12, tzinfo=UTC)

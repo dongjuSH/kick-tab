@@ -4,6 +4,8 @@
 
 **2026-11-21 · 06 UEFA 토너먼트 대진 카드 제목 표기(사용자 Figma 수정 반영·`dev` 병합):** 프런트 `features/standings/KnockoutStage.tsx`(`SlotTitle` — 데스크톱 '팀 로고 vs 로고 팀', 모바일 '로고 팀 vs 로고 팀').
 
+**2026-11-23 · TOP 5 유료 Neon 전환(00, `dev` 병합):** 백엔드 `services/top5_selection.py`(`check_schedule` 수집 대상 시즌만, `candidate_rows` 이미 치른 주간 경기 포함·`select_week` 근거 킥오프 시점 자름, `PROMPT_VERSION` `2026-11-23.1`, `WINDOW_MINUTES` 12, `gemini_generate` 요청 최대 3번(근거 준비 즉시·00:05·00:10)), `config.py`(`gemini-4-neon`, 시도 720초), `notifications/discord.py`·`sync/top5.py`·`services/top_matches.py`(00:12 문구), 테스트 `test_top5.py`·`test_top5_db.py`. 아래 행의 00:20·요청 5회·3.8 Flash 내용은 이 변경이 우선한다.
+
 **2026-11-21 · 08 이적 출전 근거 결정 B·Codex N1·00 소규모 수정(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `services/team_detail.py`(출전 수 NULL 해석, `club_appearances_unknown`·`appearances_unknown` 삭제, 이전 팀 출전 타입 `int`), `models/team_detail.py`(설명), `services/top5_selection.py`(`stored_standings`), 테스트 3개. 프런트 `features/team-detail/TeamDetail.tsx`·`features/teams/TeamsSection.tsx`(한글 대회명).
 
 **2026-11-20 · 08 팀 상세 비회원 전체 검수 개선(Codex 교차 검증 통과·`dev` 병합):** 백엔드 `migrations/versions/20261120_0018_player_season_checks.py`(새), `models/team_detail.py`(`PlayerSeasonCheck`·`PlayerClubSeason`)·`models/__init__.py`, `services/team_detail.py`(`record_competitions`, 이적 판정 `judge_move`·묶음 `group_moves`, 영입 이전 팀 확인), `sync/team_detail.py`(`team_player_stats` 과거 2시즌·`season=`, 새 작업 `transfer_player_checks`), `schemas/team_detail.py`(`TransferGroup`), `api/routes/teams.py`, 테스트 2개. 프런트 `features/team-detail/SeasonRecords.tsx`(묶음 줄)·`SquadTable.tsx`(범위 안내), `lib/api/types.ts`·생성 타입.

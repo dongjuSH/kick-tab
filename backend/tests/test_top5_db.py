@@ -1,5 +1,5 @@
 """Chat 04 against the dev database (opt-in, always rolled back): the weekly TOP 5 attempt
-flow (one automatic attempt, delay notice held until 00:20 + alert, manual recovery, timeout)
+flow (one automatic attempt, delay notice held until 00:12 + alert, manual recovery, timeout)
 and the public review order.
 
 Run: KICKTAB_DB_TESTS=1 uv run python -m pytest tests/test_top5_db.py
@@ -179,12 +179,12 @@ def repair_at(factory, at, alerts):
     )
 
 
-WINDOW_END = datetime(2027, 6, 6, 15, 20, tzinfo=UTC)  # Monday 2027-06-07 00:20 KST
+WINDOW_END = datetime(2027, 6, 6, 15, 12, tzinfo=UTC)  # Monday 2027-06-07 00:12 KST
 
 
 def test_early_failure_keeps_last_week_until_0020_then_delays_and_alerts_once(factory):
-    # One automatic attempt per week. A failure before 00:20 KST is only recorded: users
-    # keep last week's result ('준비 중'); the delay notice and one alert follow at 00:20.
+    # One automatic attempt per week. A failure before 00:12 KST is only recorded: users
+    # keep last week's result ('준비 중'); the delay notice and one alert follow at 00:12.
     alerts = []
     first = run("scheduled", factory, failing_model, alerts)
     assert first.status == "failed" and "503" in first.message and first.alert_sent is None
@@ -195,8 +195,8 @@ def test_early_failure_keeps_last_week_until_0020_then_delays_and_alerts_once(fa
     assert public(factory).version is None  # nothing new published for this week yet
     # No second automatic attempt.
     assert run("scheduled", factory, good_model).status == "skipped"
-    assert repair_at(factory, WINDOW_END - timedelta(seconds=1), alerts) == 0  # 00:19:59
-    assert repair_at(factory, WINDOW_END, alerts) == 1  # 00:20:00
+    assert repair_at(factory, WINDOW_END - timedelta(seconds=1), alerts) == 0  # 00:11:59
+    assert repair_at(factory, WINDOW_END, alerts) == 1  # 00:12:00
     assert repair_at(factory, WINDOW_END + timedelta(minutes=1), alerts) == 0  # only once
     delayed = public(factory)
     assert delayed.view == "delayed" and delayed.version is not None
@@ -221,7 +221,7 @@ def test_manual_recovery_before_0020_cancels_the_held_delay(factory):
 
 
 def test_failure_after_0020_shows_the_delay_at_once(factory):
-    # A failure recorded after 00:20 shows the delay notice at once (the held time passed).
+    # A failure recorded after 00:12 shows the delay notice at once (the held time passed).
     alerts = []
     late = WINDOW_END + timedelta(minutes=5)
     outcome = run_attempt(
@@ -237,21 +237,21 @@ def test_failure_after_0020_shows_the_delay_at_once(factory):
 
 
 def test_automatic_attempt_is_cut_at_the_window_end(factory):
-    # 00:19:50 KST: only 10 s are left before 00:20, minus the 10 s margin -> skipped.
-    late = NOW + timedelta(minutes=19, seconds=20)
+    # 00:11:50 KST: only 10 s are left before 00:12, minus the 10 s margin -> skipped.
+    late = NOW + timedelta(minutes=11, seconds=20)
     outcome = run_attempt(
         "scheduled", session_factory=factory, client_factory=empty_client,
         generate=good_model, alert=lambda notice: True, now=late, clock=lambda: late,
     )
     assert outcome.status == "skipped" and "window passed" in outcome.message
-    # At 00:00:30 the attempt gets until 00:19:50 KST, not the 1200 s setting.
+    # At 00:00:30 the attempt gets until 00:11:50 KST, not the 720 s setting.
     with factory() as session:
         attempt, *_ = top5_selection._start(
             session, NOW.date() + timedelta(days=1), "scheduled", NOW,
             (top5_selection.window_end(NOW.date() + timedelta(days=1)) - NOW).total_seconds()
             - 10,
         )
-        assert attempt.deadline_at == datetime(2027, 6, 6, 15, 19, 50, tzinfo=UTC)
+        assert attempt.deadline_at == datetime(2027, 6, 6, 15, 11, 50, tzinfo=UTC)
         session.rollback()
 
 
@@ -278,6 +278,80 @@ def test_stale_schedule_is_a_failure_not_an_empty_week(factory):
     assert outcome.status == "failed" and "not refreshed" in outcome.message
 
 
+def test_success_at_0000_makes_exactly_one_model_request(factory):
+    """Cost guard (00, 2026-11-23): an answer at 00:00 is published and nothing asks the
+    model again — not the 00:05/00:10 slots, not the reconciler, not a second trigger."""
+    sent: list[float] = []
+
+    def paid_call(prompt, schema, *, model, api_key, timeout_seconds, thinking_level):
+        sent.append(timeout_seconds)
+        return good_model(prompt, timeout_seconds)
+
+    def generate(prompt, seconds):
+        return top5_selection.gemini_generate(prompt, seconds, call=paid_call)
+
+    outcome = run("scheduled", factory, generate)
+    assert outcome.status == "published" and len(sent) == 1
+    # The first request may wait only until the 00:05 slot, never into it.
+    assert sent[0] <= 300
+    alerts: list = []
+    for minutes in (5, 10, 12, 30):  # the old retry times and after the window
+        assert repair_at(factory, NOW + timedelta(minutes=minutes), alerts) == 0
+    for trigger in ("scheduled", "manual"):
+        assert run(trigger, factory, generate).status == "skipped"
+    assert len(sent) == 1 and alerts == []
+
+
+def test_played_matches_of_the_week_stay_candidates(factory):
+    """00, 2026-11-23 (user decision): a late recovery judges the same week as 00:00, so a
+    match already finished or live this week is a candidate; postponed, cancelled, TBD and
+    administrative results are not."""
+    week_start = NOW.date() + timedelta(days=1)
+    kickoff = NOW - timedelta(seconds=20)  # Monday 00:00:10 KST, before the attempt
+    rows = [
+        (BASE_ID + 10, "finished", "FT", "normal"),
+        (BASE_ID + 11, "live", "2H", None),
+        (BASE_ID + 12, "cancelled", "CANC", None),
+        (BASE_ID + 13, "finished", "AWD", "awarded"),
+        (BASE_ID + 14, "live", "SUSP", None),
+        (BASE_ID + 15, "postponed", "PST", None),
+    ]
+    with factory() as session:
+        for fixture_id, status, short, finish in rows:
+            session.add(
+                Fixture(
+                    id=fixture_id, competition_id=39, season=2026, round="Regular Season - 38",
+                    kickoff_at=kickoff, kickoff_date_kst=(kickoff + timedelta(hours=9)).date(),
+                    status=status, status_short_raw=short, finish_type=finish,
+                    goals_home=1 if status == "finished" else None,
+                    goals_away=0 if status == "finished" else None,
+                    home_team_id=50, away_team_id=42, synced_at=NOW,
+                )
+            )
+        session.commit()
+        ids = {f.id for f, _, _, _ in top5_selection.candidate_rows(session, week_start)}
+    assert {BASE_ID + 10, BASE_ID + 11} <= ids
+    assert not ids & {BASE_ID + 12, BASE_ID + 13, BASE_ID + 14, BASE_ID + 15}
+    assert {BASE_ID, BASE_ID + 1, BASE_ID + 2} <= ids  # the scheduled ones as before
+
+
+def test_stale_season_outside_the_period_does_not_block(factory):
+    """00, 2026-11-23: only the seasons the `fixtures` job refreshes must be fresh. A season
+    that cannot play in the common period (the job skips it) stays stale and must not block
+    the week — Copa del Rey 2026 ending 11-18 failed attempt 4346."""
+    with factory() as session:
+        # The fixture marks every season fresh; the Champions League 2026 season ends in
+        # January 2027, before this June week's period, so the job no longer fetches it.
+        session.execute(
+            update(CompetitionSeason)
+            .where(CompetitionSeason.competition_id == 2, CompetitionSeason.season == 2026)
+            .values(fixtures_synced_at=NOW - timedelta(days=3))
+        )
+        session.commit()
+    outcome = run("scheduled", factory, good_model)
+    assert outcome.status == "published"
+
+
 def test_timed_out_attempt_cannot_publish(factory, monkeypatch):
     def slow(*args, **kwargs):
         time.sleep(0.3)
@@ -290,7 +364,7 @@ def test_timed_out_attempt_cannot_publish(factory, monkeypatch):
         attempt = session.get(Top5Attempt, outcome.attempt_id)
         assert attempt.outcome == "timeout"
     time.sleep(0.4)  # the abandoned thread finishes; it has no way to publish
-    assert public(factory).version is None  # no late list (and no delay before 00:20)
+    assert public(factory).version is None  # no late list (and no delay before 00:12)
 
 
 def interrupted(factory, trigger, attempts):
@@ -327,17 +401,17 @@ def test_interrupted_automatic_attempt_is_reconciled_then_delayed_at_0020(factor
 
 
 def test_week_without_any_automatic_attempt_is_delayed_from_0021(factory):
-    # The 00:00 attempt never ran (service down): from 00:21 KST (window end + one-minute
+    # The 00:00 attempt never ran (service down): from 00:13 KST (window end + one-minute
     # grace) the reconciler publishes the delay notice and alerts once.
     alerts = []
     assert week(factory) is None
-    assert repair_at(factory, WINDOW_END + timedelta(seconds=59), alerts) == 0  # 00:20:59
+    assert repair_at(factory, WINDOW_END + timedelta(seconds=59), alerts) == 0  # 00:12:59
     assert week(factory) is None and alerts == []
-    assert repair_at(factory, WINDOW_END + timedelta(minutes=1), alerts) == 1  # 00:21:00
+    assert repair_at(factory, WINDOW_END + timedelta(minutes=1), alerts) == 1  # 00:13:00
     assert repair_at(factory, WINDOW_END + timedelta(minutes=2), alerts) == 0
     delayed = public(factory)
     assert delayed.view == "delayed" and len(alerts) == 1
-    assert "00:00-00:20" in alerts[0].error
+    assert "00:00-00:12" in alerts[0].error
     assert week(factory).status == "delayed" and week(factory).needs_manual
     assert week(factory).auto_attempts == 0
     assert run("manual", factory, good_model).status == "published"
@@ -411,7 +485,7 @@ def test_interrupted_manual_recovery_keeps_the_held_delay(factory):
     assert repair_at(factory, NOW + timedelta(minutes=1), alerts) == 1
     state = week(factory)
     assert state.status == "delayed" and state.auto_attempts == 1
-    assert state.next_retry_at == WINDOW_END and alerts == []  # still held until 00:20
+    assert state.next_retry_at == WINDOW_END and alerts == []  # still held until 00:12
     assert repair_at(factory, WINDOW_END, alerts) == 1 and len(alerts) == 1
     assert run("manual", factory, good_model).status == "published"
 
@@ -496,8 +570,8 @@ def test_answering_model_is_recorded(factory):
 
 
 def manual_running_through_0020(factory, monkeypatch, alerts, answer):
-    """A manual recovery starts at 00:19:00 after the automatic failure; its model request is
-    still open when 00:20 comes (the clock jumps there inside the request)."""
+    """A manual recovery starts at 00:11:00 after the automatic failure; its model request is
+    still open when 00:12 comes (the clock jumps there inside the request)."""
     monkeypatch.setattr(top5_selection, "HELD_POLL_SECONDS", 0.02)
     run("scheduled", factory, failing_model, alerts)
     clock = {"now": WINDOW_END - timedelta(minutes=1)}
@@ -526,7 +600,7 @@ def kinds(factory):
 
 
 def test_running_manual_recovery_still_shows_the_delay_at_0020(factory, monkeypatch):
-    # Starting a manual recovery must not cancel the held delay; at 00:20 it goes public
+    # Starting a manual recovery must not cancel the held delay; at 00:12 it goes public
     # with one alert even though the recovery holds the week lock. A later success replaces it.
     alerts = []
     outcome, seen = manual_running_through_0020(factory, monkeypatch, alerts, good_model)
@@ -548,7 +622,7 @@ def test_running_manual_recovery_failing_after_0020_keeps_one_delay(factory, mon
 
 def test_dead_manual_recovery_owner_still_shows_the_delay_at_0020(factory):
     # The process running the manual recovery died before its deadline (lock released):
-    # the reconciler shows the held delay at 00:20 without waiting for the deadline.
+    # the reconciler shows the held delay at 00:12 without waiting for the deadline.
     alerts = []
     run("scheduled", factory, failing_model, alerts)
     with factory() as session:

@@ -146,7 +146,7 @@ class Top5DelayNotice:
     attempts: int
     error: str
     failed_at: datetime
-    # The automatic selection failed or did not finish by Monday 00:20 KST; the delay
+    # The automatic selection failed or did not finish by Monday 00:12 KST; the delay
     # notice is shown (sent once per week).
 
 
@@ -159,7 +159,7 @@ def build_top5_payload(notice: Top5DelayNotice) -> dict[str, Any]:
             {
                 "title": "TOP 5 업데이트 지연 · 수동 복구 필요",
                 "description": (
-                    "월요일 00:00~00:20(KST) 자동 선정이 실패해 사용자에게 업데이트 지연 "
+                    "월요일 00:00~00:12(KST) 자동 선정이 실패해 사용자에게 업데이트 지연 "
                     "안내를 표시하고 있습니다. "
                     "원인을 확인한 뒤 백엔드 폴더에서 관리 명령으로 다시 실행해 주세요."
                 ),
