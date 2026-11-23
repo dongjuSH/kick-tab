@@ -1,7 +1,7 @@
 """AI weekly TOP 5 jobs (chat 04, TOP 5 policy 2026-11-02 in the planning docs).
 
 - top5_weekly: Monday 00:00 KST, first automatic attempt (skipped if the week has started).
-  It is the only automatic attempt and ends by 00:20 KST (model requests are retried inside
+  It is the only automatic attempt and ends by 00:12 KST (model requests at 00:00·00:05·00:10 inside
   it); a failure publishes the delay notice and alerts the operator. The 00:05 retry job
   was removed on 2026-11-19.
 - top5:        manual recovery for the current week (`uv run python -m app.sync top5`),

@@ -52,15 +52,16 @@ class Settings(BaseSettings):
     # AI weekly TOP 5 (chat 04, TOP 5 policy in the planning docs). The key goes straight
     # to the SDK client; GOOGLE_API_KEY is never read. Free tier: public match data only.
     gemini_api_key: SecretStr = SecretStr("")
-    # The only TOP 5 model. There is no lower fallback model (user decision 2026-11-19: its
+    # The only TOP 5 model: Gemini 4 Neon on the paid tier (user decision 2026-11-23 after a
+    # one-request comparison with Hydrogen). No lower fallback model (2026-11-19: its
     # reasons were too weak to show); transient errors are retried within the attempt.
-    top5_llm_model: str = "gemini-3.8-flash"
+    top5_llm_model: str = "gemini-4-neon"
     # Thinking limit sent with the request (minimal/low/medium/high; empty = model default).
     # "low" keeps the answer within the attempt's time limit (93 s observed with default).
     top5_llm_thinking_level: str = "low"
     # Time limit of one attempt (evidence + model requests). The automatic attempt is also
-    # cut at Monday 00:20 KST (the selection window); a manual recovery uses the full limit.
-    top5_attempt_timeout_seconds: int = 1200
+    # cut at Monday 00:12 KST (the selection window); a manual recovery uses the full limit.
+    top5_attempt_timeout_seconds: int = 720
     # Separate Discord channel for operator alerts (failed selection). Empty = alerts off.
     top5_alert_discord_webhook_url: SecretStr = SecretStr("")
 
