@@ -20,13 +20,32 @@ const GUEST: AuthState = { status: "guest" };
 let state: AuthState = LOADING;
 const listeners = new Set<() => void>();
 
+/**
+ * Session generation: goes up whenever the viewer changes (sign-in, sign-out, another member)
+ * and on `signedOut()` — but not when the first check of the page load settles: nothing was
+ * signed in before it, so a refresh already on its way still counts (Codex N8). An answer to a request sent in an earlier generation is never applied
+ * — a late refresh or session check must not bring back an ended session, and a late member
+ * request must not land after a logout and a new login, even as the same member (Codex N1·N6).
+ */
+let epoch = 0;
+
+export function authEpoch(): number {
+  return epoch;
+}
+
 function set(next: AuthState) {
   const same =
     next.status === state.status &&
     (next.status !== "member" || (state.status === "member" && state.member.id === next.member.id));
   if (same && next.status !== "member") return;
+  if (!same && state.status !== "loading") epoch += 1;
   state = next;
   listeners.forEach((listener) => listener());
+}
+
+/** What the current state says, for a check whose own answer came too late to apply. */
+function settled(): "member" | "guest" | "unknown" {
+  return state.status === "loading" ? "unknown" : state.status;
 }
 
 export function subscribeAuth(listener: () => void): () => void {
@@ -49,9 +68,11 @@ export function useAuth(): AuthState {
  * on as a guest without member data; afterwards the current state is kept.
  */
 export async function checkSession(): Promise<"member" | "guest" | "unknown"> {
+  const started = epoch;
   try {
     // 200 with null = not signed in (no failed request in the console for guests).
     const { data } = await apiFetch<Member | null>("/auth/me");
+    if (epoch !== started) return settled();
     if (!data) {
       set(GUEST);
       return "guest";
@@ -59,6 +80,7 @@ export async function checkSession(): Promise<"member" | "guest" | "unknown"> {
     set({ status: "member", member: data });
     return "member";
   } catch (error) {
+    if (epoch !== started) return settled();
     if (isApiError(error) && error.status === 401) {
       set(GUEST);
       return "guest";
@@ -68,7 +90,46 @@ export async function checkSession(): Promise<"member" | "guest" | "unknown"> {
   }
 }
 
+/**
+ * The server has already ended this session (withdrawal, 401 AUTH_REQUIRED): this browser is
+ * a guest now, without asking /auth/me again (a failed check must not keep the old member).
+ * `forget` also drops the unsent review texts (withdrawal; a lost session keeps them).
+ */
+export function signedOut({ forget }: { forget: boolean }): void {
+  failedRefresh = null;
+  epoch += 1;
+  set(GUEST);
+  if (forget) dropReviewDrafts();
+}
+
+/**
+ * A member-only request (my page, account favourites). 401 means the session is gone (no
+ * cookie, or the refresh failed), not that the area failed: this browser becomes a guest and
+ * the page shows its login notice instead of personal data (MY-001, Codex N3·N5). A 401 from
+ * an earlier generation becomes AbortError, so callers also skip navigation and notices.
+ */
+export async function memberRequest<T>(send: () => Promise<T>): Promise<T> {
+  const started = epoch;
+  try {
+    return await send();
+  } catch (error) {
+    if (isApiError(error) && error.status === 401) {
+      // A failed automatic refresh has already made this a guest. Its original mutation
+      // still needs the login/return flow; an explicit logout or a new login does not.
+      const ownFailedRefresh = error.code === "AUTH_EXPIRED" && state.status === "guest" &&
+        failedRefresh?.started === started && failedRefresh.ended === epoch;
+      if (logoutRequestPending || (epoch !== started && !ownFailedRefresh)) {
+        if (logoutRequestPending && epoch === started) signedOut({ forget: false });
+        throw new DOMException("The request belongs to an ended session.", "AbortError");
+      }
+      if (epoch === started) signedOut({ forget: false });
+    }
+    throw error;
+  }
+}
+
 let refreshing: Promise<boolean> | null = null;
+let failedRefresh: { started: number; ended: number } | null = null;
 let loggingOut: Promise<boolean> | null = null;
 let logoutRequestPending = false;
 
@@ -80,13 +141,19 @@ export function refreshSession(): Promise<boolean> {
   // Finish an already-sent refresh before logout clears its cookies. Do not start another
   // one while that logout is pending: a late reply could restore the member and cookies.
   if (logoutRequestPending && !refreshing) return Promise.resolve(false);
+  const started = epoch;
   refreshing ??= apiFetch<Member>("/auth/refresh", { method: "POST" })
     .then(({ data }) => {
+      // Signed out (withdrawal, lost session) while this was on its way: stays ended.
+      if (epoch !== started) return false;
       set({ status: "member", member: data });
       return true;
     })
     .catch(() => {
-      set(GUEST);
+      if (epoch === started) {
+        set(GUEST);
+        failedRefresh = { started, ended: epoch };
+      }
       return false;
     })
     .finally(() => {
@@ -116,7 +183,7 @@ async function performLogout(): Promise<boolean> {
     logoutRequestPending = false;
   }
   const done = (await checkSession()) === "guest";
-  if (done) dropReviewDrafts();
+  if (done) signedOut({ forget: true });
   return done;
 }
 

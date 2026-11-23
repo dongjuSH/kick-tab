@@ -43,7 +43,7 @@ function browserSession(fetch) {
     );
     return loaded.exports;
   }
-  return { session: load("@/features/auth/session"), storage };
+  return { session: load("@/features/auth/session"), storage, api: load("@/lib/api/client") };
 }
 
 test("logout waits for an earlier refresh, blocks new refreshes, and coalesces callers", async () => {
@@ -118,4 +118,107 @@ test("a failed in-flight refresh does not prevent deliberate logout", async () =
   assert.equal(await ending, true);
   assert.equal(logouts, 1);
   assert.equal(session.readAuth().status, "guest");
+});
+
+const required = () => Response.json({ error: { code: "AUTH_REQUIRED", message: "로그인 필요" } }, { status: 401 });
+
+test("a current member request keeps its 401 and draft for the login return", async () => {
+  const { session, storage, api } = browserSession(async (url) =>
+    url.endsWith("/auth/me") ? json(member) : required(),
+  );
+  await session.checkSession();
+  storage.setItem("kt-review-draft:member-a:1", "private draft");
+  await assert.rejects(session.memberRequest(() => api.apiFetch("/reviews/1", { method: "PATCH" })),
+    (error) => error.code === "AUTH_REQUIRED" && error.status === 401);
+  assert.equal(session.readAuth().status, "guest");
+  assert.equal(storage.getItem("kt-review-draft:member-a:1"), "private draft");
+});
+
+for (const next of [null, member, { ...member, id: "member-b" }]) {
+  test(`an old 401 is cancelled after sign-out${next ? ` and ${next.id} signs in` : ""}`, async () => {
+    const reply = deferred();
+    let serverMember = member;
+    const { session, api } = browserSession(async (url) =>
+      url.endsWith("/auth/me") ? json(serverMember) : reply.promise,
+    );
+    await session.checkSession();
+    const rejected = assert.rejects(
+      session.memberRequest(() => api.apiFetch("/reviews/1", { method: "PATCH" })),
+      (error) => error.name === "AbortError",
+    );
+    session.signedOut({ forget: false });
+    if (next) {
+      serverMember = next;
+      await session.checkSession();
+    }
+    reply.resolve(required());
+    await rejected;
+    assert.equal(session.readAuth().status, next ? "member" : "guest");
+    if (next) assert.equal(session.readAuth().member.id, next.id);
+  });
+}
+
+test("automatic refresh failure still exposes the current mutation's expired session", async () => {
+  const { session, storage, api } = browserSession(async (url) => {
+    if (url.endsWith("/auth/me")) return json(member);
+    return url.endsWith("/refresh") ? required() : expired();
+  });
+  await session.checkSession();
+  storage.setItem("kt-review-draft:member-a:1", "private draft");
+  await assert.rejects(session.memberRequest(() => api.apiFetch("/reviews/1", { method: "PATCH" })),
+    (error) => error.code === "AUTH_EXPIRED" && error.status === 401);
+  assert.equal(session.readAuth().status, "guest");
+  assert.equal(storage.getItem("kt-review-draft:member-a:1"), "private draft");
+});
+
+test("a 401 during deliberate logout is cancelled without another login redirect", async () => {
+  const reply = deferred(), logoutReply = deferred();
+  let serverMember = member;
+  const { session, api } = browserSession(async (url) => {
+    if (url.endsWith("/auth/me")) return json(serverMember);
+    if (url.endsWith("/logout")) {
+      await logoutReply.promise;
+      serverMember = null;
+      return new Response(null, { status: 204 });
+    }
+    return reply.promise;
+  });
+  await session.checkSession();
+  const rejected = assert.rejects(
+    session.memberRequest(() => api.apiFetch("/reviews/1", { method: "PATCH" })),
+    (error) => error.name === "AbortError",
+  );
+  const logout = session.logout();
+  reply.resolve(required());
+  await rejected;
+  logoutReply.resolve();
+  assert.equal(await logout, true);
+  assert.equal(session.readAuth().status, "guest");
+});
+
+test("a first session check does not invalidate the normal refresh joined by a mutation", async () => {
+  const meReply = deferred(), refreshReply = deferred(), refreshJoined = deferred();
+  let writes = 0;
+  const { session, api } = browserSession(async (url) => {
+    if (url.endsWith("/auth/me")) return meReply.promise;
+    if (url.endsWith("/refresh")) return refreshReply.promise;
+    if (++writes === 1) return expired();
+    return json(member);
+  });
+  const check = session.checkSession();
+  const refresh = session.refreshSession();
+  meReply.resolve(json(member));
+  assert.equal(await check, "member");
+  // The mutation has parsed its expiry and joined the existing refresh.
+  api.setUnauthorizedHandler(() => {
+    refreshJoined.resolve();
+    return session.refreshSession();
+  });
+  const mutation = session.memberRequest(() => api.apiFetch("/me/password", { method: "PATCH" }));
+  await refreshJoined.promise;
+  refreshReply.resolve(json(member));
+  assert.equal(await refresh, true);
+  assert.equal((await mutation).data.id, member.id);
+  assert.equal(writes, 2);
+  assert.equal(session.readAuth().status, "member");
 });
