@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/Tabs";
 import { cx } from "@/components/ui/cx";
 import { loginHref } from "@/features/auth/returnTo";
-import { useAuth } from "@/features/auth/session";
+import { memberRequest, useAuth } from "@/features/auth/session";
 import { apiFetch } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import type { ReviewItem, ReviewSort } from "@/lib/api/types";
@@ -56,9 +56,13 @@ function Reactions({
     setError(null);
     try {
       const clear = review.myReaction === value;
-      await apiFetch(`/reviews/${review.id}/reaction`, clear ? { method: "DELETE" } : { method: "PUT", body: { value } });
+      // 401: memberRequest makes this a guest first, so the login page shows its form.
+      await memberRequest(() =>
+        apiFetch(`/reviews/${review.id}/reaction`, clear ? { method: "DELETE" } : { method: "PUT", body: { value } }),
+      );
       await queryClient.invalidateQueries({ queryKey: ["matches", "reviews"] });
     } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") return;
       if (isApiError(caught) && caught.status === 401) onSessionLost();
       else setError(isApiError(caught) ? caught.message : "반응을 저장하지 못했습니다.");
     } finally {

@@ -31,12 +31,16 @@ interface DialogProps {
   compact?: boolean;
   /** Drag handle on the bottom sheet only (Figma competition picker 187:1372, 2026-11-02). */
   handle?: boolean;
+  /** Below 1024px 16px at the sides (24px top and bottom), 24px all round above; no handle (09 password sheet, Figma 643:755 · 639:7683). */
+  sheetInset?: boolean;
   /**
    * Header X button (default). false when the content's own buttons close it (03
    * competition picker, Figma 2026-11-09: cancel · apply at the bottom); Escape and the
    * backdrop still close.
    */
   closeButton?: boolean;
+  /** Header X shown but not usable (09 password change while saving, Figma 639:7607). */
+  closeDisabled?: boolean;
   /**
    * The content owns the scroll area (03 competition picker, Figma 308:4628): the dialog keeps
    * its height limit without scrolling as a whole, so fixed rows (count, buttons) stay put and
@@ -68,7 +72,9 @@ export function Dialog({
   closeLabel = "닫기",
   compact = false,
   handle = false,
+  sheetInset = false,
   closeButton = true,
+  closeDisabled = false,
   scrollArea = false,
   initialFocus = "dialog",
   id,
@@ -169,7 +175,7 @@ export function Dialog({
         <div
           className={cx(
             "flex flex-col",
-            compact ? "min-h-0 gap-3 overflow-y-auto p-4" : handle ? "gap-3 p-4 lg:gap-4 lg:p-6" : "gap-4 p-6",
+            compact ? "min-h-0 gap-3 overflow-y-auto p-4" : handle ? "gap-3 p-4 lg:gap-4 lg:p-6" : sheetInset ? "gap-4 px-4 py-6 lg:p-6" : "gap-4 p-6",
             scrollArea && "min-h-0 flex-1",
           )}
         >
@@ -186,7 +192,16 @@ export function Dialog({
             <h2 id={titleId} className={cx("min-w-0 flex-1 font-bold", compact ? "text-lead" : "text-title")}>
               {title}
             </h2>
-            {closeButton && <IconButton icon="x" label={closeLabel} onClick={onClose} data-dialog-close />}
+            {closeButton && (
+              <IconButton
+                icon="x"
+                label={closeLabel}
+                onClick={onClose}
+                disabled={closeDisabled}
+                className="disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+                data-dialog-close
+              />
+            )}
           </div>
           {children}
         </div>

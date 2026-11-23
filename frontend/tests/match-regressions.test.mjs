@@ -72,6 +72,15 @@ function hooks() {
       const cleanups = effects.map((effect) => effect());
       return { html, cleanup: () => cleanups.forEach((cleanup) => cleanup?.()) };
     },
+    renderTree(component, props, commit) {
+      cursor = 0;
+      effects = [];
+      const tree = component(props);
+      // Host refs are attached during commit, before passive effects. A draft-triggered
+      // state update takes effect on the next call, just as on the browser's next render.
+      commit(tree);
+      effects.forEach((effect) => effect());
+    },
   };
 }
 
@@ -87,6 +96,92 @@ const records = {
   events: { status: "available", data: [] }, statistics: { status: "available", data: [] },
   lineups: { status: "not_yet", data: null }, players: { status: "not_provided", data: null },
 };
+
+function reviewReturn({ mine, draft, restricted }) {
+  const life = hooks();
+  let intent = true;
+  const body = { kind: "BODY" };
+  let active = body, previous = [], controls = [], fieldRef;
+  let renderedText = null;
+  const buttons = new Map();
+  const focusable = (kind, label) => {
+    const node = { kind, label, disabled: false, focus: () => { if (!node.disabled) active = node; } };
+    return node;
+  };
+  const textarea = focusable("TEXTAREA", "평가 수정");
+  const area = {
+    scrollIntoView() {},
+    querySelector(selector) {
+      return controls.find((node) => !selector.includes(":not(:disabled)") || !node.disabled);
+    },
+  };
+  const load = loader({
+    react: life.react,
+    "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: async () => {} }) },
+    "next/navigation": { useRouter: () => ({ push() { assert.fail("unexpected navigation"); } }) },
+    "@/components/ui/Button": { Button: "button" },
+    "@/features/auth/returnTo": {
+      hasReviewIntent: () => intent,
+      clearReviewIntent: () => { intent = false; },
+    },
+    "@/features/auth/session": { REVIEW_DRAFT_PREFIX: "kt-review-draft:" },
+    "./ReviewTextForm": { ReviewTextForm: "review-form" },
+    "./ReviewGuidance": { ReviewGuidance: () => null },
+    "./ReviewRestriction": { ReviewRestrictionNotice: () => null, useRestrictionEnd() {} },
+  }, { sessionStorage: { getItem: () => draft } });
+  const { ReviewComposer } = load("@/features/match/ReviewComposer");
+  const props = {
+    memberId: "member-a", fixtureId: 1, mine,
+    restrictedUntil: restricted ? "2026-12-01T00:00:00Z" : null,
+  };
+  const commit = (tree) => {
+    const nodes = [];
+    let nextField;
+    tree.props.ref.current = area;
+    const visit = (node) => {
+      if (Array.isArray(node)) { node.forEach(visit); return; }
+      if (!React.isValidElement(node)) return;
+      if (node.type === "review-form") {
+        nextField = node.props.fieldRef;
+        nextField.current = textarea;
+        renderedText = node.props.text;
+        nodes.push(textarea);
+      } else if (node.type === "button") {
+        const label = node.props.children;
+        if (!buttons.has(label)) buttons.set(label, focusable("BUTTON", label));
+        const control = buttons.get(label);
+        control.disabled = Boolean(node.props.disabled);
+        nodes.push(control);
+      }
+      visit(node.props.children);
+    };
+    visit(tree);
+    if (fieldRef && !nextField) fieldRef.current = null;
+    fieldRef = nextField;
+    if (previous.includes(active) && !nodes.includes(active)) active = body;
+    previous = nodes;
+    controls = nodes.filter((node) => node.kind === "BUTTON");
+  };
+  // Initial commit, draft restoration commit, and a stable commit afterwards.
+  for (let i = 0; i < 3; i++) life.renderTree(ReviewComposer, props, commit);
+  return { active, renderedText, intent };
+}
+
+for (const [name, options, expectedKind, expectedLabel] of [
+  ["a new review", { mine: undefined, draft: null }, "TEXTAREA", undefined],
+  ["a kept writing draft", { mine: undefined, draft: "writing draft" }, "TEXTAREA", undefined],
+  ["a kept edit draft", { mine: { id: 1, body: "saved" }, draft: "edit draft" }, "TEXTAREA", undefined],
+  ["an own review without a draft", { mine: { id: 1, body: "saved" }, draft: null }, "BUTTON", "수정"],
+  ["a restricted edit draft", { mine: { id: 1, body: "saved" }, draft: "edit draft", restricted: true }, "BUTTON", "삭제"],
+]) {
+  test(`review login return focuses ${name} after its controls mount (N11)`, () => {
+    const result = reviewReturn(options);
+    assert.equal(result.active.kind, expectedKind);
+    if (expectedLabel) assert.equal(result.active.label, expectedLabel);
+    if (options.draft && !options.restricted) assert.equal(result.renderedText, options.draft);
+    assert.equal(result.intent, false);
+  });
+}
 const leaves = {
   "next/link": { __esModule: true, default: ({ children, ...props }) => React.createElement("a", props, children) },
   "@/components/common/TeamCrest": { TeamCrest: () => null, PlayerPhoto: () => null },

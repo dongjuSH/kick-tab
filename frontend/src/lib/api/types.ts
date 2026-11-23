@@ -85,6 +85,8 @@ export type ErrorResponse = Schemas["ErrorResponse"];
 
 export type Member = Schemas["Member"];
 export type MemberFavorites = Schemas["MemberFavorites"];
+export type MyReview = Schemas["MyReview"];
+export type PasswordChange = Schemas["PasswordChangeRequest"];
 export type EmailCodeSent = Schemas["EmailCodeSent"];
 export type EmailCodeVerified = Schemas["EmailCodeVerified"];
 export type VerificationPurpose = Schemas["EmailCodeRequest"]["purpose"];

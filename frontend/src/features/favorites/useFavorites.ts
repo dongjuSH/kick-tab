@@ -2,7 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
-import { useAuth } from "@/features/auth/session";
+import { authEpoch, memberRequest, useAuth } from "@/features/auth/session";
 import { apiFetch } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/api/query-keys";
@@ -35,10 +35,11 @@ export interface Favorites {
   retry: () => void;
 }
 
-const memberFavoritesQuery = {
+/** The account list (`teams` in registration order); my page reads the names from it. */
+export const memberFavoritesQuery = {
   queryKey: queryKeys.me.favorites(),
-  queryFn: async ({ signal }: { signal: AbortSignal }) =>
-    (await apiFetch<MemberFavorites>("/me/favorites", { signal })).data,
+  queryFn: ({ signal }: { signal: AbortSignal }) =>
+    memberRequest(async () => (await apiFetch<MemberFavorites>("/me/favorites", { signal })).data),
 };
 
 /**
@@ -70,12 +71,17 @@ export function useFavorites(): Favorites {
 
   const ids = list.data?.teams.map((team) => team.id) ?? [];
   const change = async (request: () => Promise<MemberFavorites>, done: FavoriteChange): Promise<FavoriteChange> => {
+    // A late answer from before a logout (even if the same member signed in again) never
+    // lands in the list read since (`authEpoch`, Codex N1).
+    const started = authEpoch();
+    const stillSame = () => authEpoch() === started;
     try {
-      queryClient.setQueryData(queryKeys.me.favorites(), await request());
+      const saved = await memberRequest(request);
+      if (stillSame()) queryClient.setQueryData(queryKeys.me.favorites(), saved);
       return done;
     } catch (error) {
       // Refused or failed: the saved list is read again so the screen shows what is stored.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.me.favorites() });
+      if (stillSame()) void queryClient.invalidateQueries({ queryKey: queryKeys.me.favorites() });
       return isApiError(error) && error.code === "FAVORITE_LIMIT" ? "limit" : "failed";
     }
   };

@@ -1,5 +1,24 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-23 (월) — 09 마이페이지(관심 팀·내 평가·계정 관리)
+
+브랜치 `feat/09-mypage`(최신 `dev` 2c39a4d)에 커밋·push 후 `dev` 병합. 02 API만 사용했고 새 서버 API·마이그레이션은 없다. Codex 교차 검증 4차례(1차 N1~N4·7번 의견, 2차 N1 잔여·N5~N7, 3차 N8·N9, 최종 N10·N11은 Codex가 직접 보완) 후 통과.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 화면 | `frontend/src/app/mypage/page.tsx`, `features/mypage/MyPage.tsx`·`MyCard.tsx` | MY-001: 인증 확인 중 개인 정보 없음, 비회원·만료 세션은 로그인 안내 카드(`loginHref('/mypage')`), PC 2열(왼쪽 관심 팀·내 평가, 오른쪽 360px 계정 관리) |
+| 관심 팀 | `features/mypage/FavoriteTeams.tsx`, `favorites/useFavorites.ts`(`memberFavoritesQuery` export) | MY-002: 다른 화면과 같은 `useFavorites()`, 10 / 10이면 추가만 막고 한도 안내, 상세 제공 팀만 링크, 추가·삭제 뒤 포커스 |
+| 내 평가 | `features/mypage/MyReviews.tsx`·`queries.ts`·`model.ts`, `features/match/ReviewTextForm.tsx`(새, `ReviewComposer`와 공용) | MY-003: 최신순, 수정한 평가만 수정 날짜, 수정·삭제 뒤 경기 상세 건수 반영, 닫힌 경기 수정은 409 `CONFLICT` 안내 |
+| 작성 제한 | `features/match/ReviewRestriction.tsx`(새 — `ReviewRestrictionNotice`·`useRestrictionEnd`) | Codex 7번 의견·사용자 결정: 마이페이지도 경기 상세처럼 안내·수정 비활성·삭제 유지 |
+| 계정 관리 | `features/mypage/AccountPanel.tsx`·`PasswordDialog.tsx`·`WithdrawDialog.tsx`, `components/ui/Dialog.tsx`(`closeDisabled`·`sheetInset`) | MY-004: 이메일 계정만 비밀번호 변경(오류 코드↔칸 1:1, 저장 중 잠금, 실패 시 입력 유지), 탈퇴(62:1800) 후 비회원·메인 |
+| 세션 경합 | `features/auth/session.ts`(`authEpoch`·`signedOut`·`memberRequest`), `ReviewComposer.tsx`·`ReviewSection.tsx` | Codex N1·N3·N5·N6·N8~N10: 로그아웃·회원 전환·재로그인 뒤 늦은 응답과 401이 새 세션을 바꾸지 않게, 회원 전용 요청 401은 비회원 전환 후 로그인 안내(경기 상세는 초안·intent 유지한 로그인 이동). 첫 세션 확인 완료는 세대 변경이 아님(정상 갱신 보존) |
+| 로그인 복귀 | `ReviewComposer.tsx` | Codex N11: 수정 초안 복원 시 입력창이 생긴 뒤 포커스 |
+| 테스트 | `frontend/tests/mypage.test.mjs`(새 7개), `auth-session.test.mjs`·`match-regressions.test.mjs`(세션 경합·복귀 포커스), `backend/tests/test_auth_db.py`(닫힌 경기 수정 409·삭제 204) | 회귀 |
+
+- **사용자 결정:** Figma 주석은 참고(구현에 문제 없으면 차이 보고 안 함), 작성 제한 회원의 마이페이지 수정은 경기 상세와 맞춤. 닫힌 경기 409는 드문 상황이라 코드 검수·테스트로 고정. 같은 이메일 재가입은 사용자가 실제 계정으로 확인.
+- **실제 계정 검수:** 테스트 계정 A·B(탈퇴는 B 1개). 비밀번호 변경 후 A는 원래 비밀번호로 되돌림. 검수용 평가는 작성 후 삭제. 유료 외부 호출 0회.
+- **검사:** backend ruff, pytest 381 통과/158 건너뜀, `KICKTAB_DB_TESTS=1` 539, alembic check 변경 없음. frontend lint, tsc, npm test 90, build, `git diff --check`.
+
 ## 2026-11-23 (월) — TOP 5 유료 Neon 전환·선정 시간 12분·이미 치른 주간 경기 후보·일정 신선도 결함 수정(00)
 
 브랜치 `feat/04-match-detail`(최신 `dev` a600efc)에 커밋·push 후 `dev` 병합. 계기: 11/23 00:00에 서버가 꺼져 있어 자동 선정이 돌지 않았고, 수동 복구가 ① 일정 신선도 확인 결함 ② 무료 Gemini 3.8 Flash 503·504(요청 10번 모두)로 실패. 사용자가 Gemini 유료 등급으로 전환하고 다음을 결정했다.

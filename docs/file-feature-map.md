@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-23 · 09 마이페이지(Codex 교차 검증 통과·`dev` 병합):** 프런트 `app/mypage/page.tsx`(새), `features/mypage/`(새 — `MyPage`·`FavoriteTeams`·`MyReviews`·`AccountPanel`·`PasswordDialog`·`WithdrawDialog`·`MyCard`·`model.ts`·`queries.ts`), `features/match/ReviewTextForm.tsx`(새 — 경기 상세·마이페이지 공용 평가 입력 폼)·`ReviewRestriction.tsx`(새 — 작성 제한 안내·만료 재확인 공용), `ReviewComposer.tsx`·`ReviewSection.tsx`(공용 폼·`memberRequest`, 로그인 복귀 포커스), `features/auth/session.ts`(세션 세대 `authEpoch`·`signedOut`·`memberRequest` — 이전 세션의 늦은 응답·401 무시, 로그아웃 정리), `features/favorites/useFavorites.ts`(`memberFavoritesQuery` export·세대 확인), `components/ui/Dialog.tsx`(`closeDisabled`·`sheetInset`), `lib/api/query-keys.ts`(`me.reviews`)·`types.ts`(`MyReview`·`PasswordChange`). 테스트 `tests/mypage.test.mjs`(새)·`auth-session.test.mjs`·`match-regressions.test.mjs`(세션 경합·로그인 복귀 포커스), 백엔드 `tests/test_auth_db.py`(닫힌 경기 수정 409·삭제). 새 서버 API·마이그레이션 없음(02 API 사용).
+
 **2026-11-22 · 04 진행 중 경기 실경기 검수·보완(`dev` 병합):** 백엔드 `schemas/match.py`(`MatchSummary.live_break`), `services/fixtures.py`(`LIVE_BREAKS`·`to_summary`, `LIVE_LEAD` 삭제 — `needs_live_sync`는 킥오프부터), `sync/fixtures.py`(설명), `tests/test_schedule_db.py`. 프런트 `features/match/model.ts`(`timelineRows`·`TimelineRow`·`halfTimeSubstitutions`, `areasOf` 진행 중도 평가 오른쪽)·`MatchRecords.tsx`(Figma 161:4161 타임라인·상태 줄)·`MatchDetail.tsx`, `lib/format/match.ts`(`statusWord` 하프타임·연장 전 휴식)·`components/common/MatchStatusBadge.tsx`(휴식 중 분 없음), 생성 타입, `tests/match-regressions.test.mjs`.
 
 **2026-11-21 · 06 UEFA 토너먼트 대진 카드 제목 표기(사용자 Figma 수정 반영·`dev` 병합):** 프런트 `features/standings/KnockoutStage.tsx`(`SlotTitle` — 데스크톱 '팀 로고 vs 로고 팀', 모바일 '로고 팀 vs 로고 팀').
@@ -50,7 +52,7 @@
 
 > TOP 5는 기획 문서의 2026-11-02 개정 정책(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.
 
-기준: 2026-11-21 (토, 08 이적 출전 근거 결정 B·Codex N1 보완 완료 — Codex 교차 검증 통과), 브랜치 `feat/08-team-detail`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+기준: 2026-11-23 (월, 09 마이페이지 — Codex 교차 검증 통과), 브랜치 `feat/09-mypage`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -228,6 +230,7 @@
 | `tests/teams.test.mjs` | 07 테스트 7개(URL 기본값·리그/검색 변경 시 첫 페이지·검색마다 기록 1단계, 잘못된 리그·페이지·검색어·팀(32비트 상한), 고른 팀 조건(리그·단어 대체), `FavoriteToggle` 5개 꽉 참 마크업, 다른 탭 선저장 시 저장소 알림, `DataState` `emptyAction` 마크업) |
 | `tests/team-detail.test.mjs` | 08 테스트(포지션순 기본 정렬, 누락값 두 방향 맨 뒤·같은 선수 집합, 정렬 전환, '—' 표시, 시즌 기록 행, 이적 유형 문구(금액은 완전 이적), 반기 기본값·시작 전 반기 대체, 경기장 표기) |
 | `tests/top5.test.mjs` | 01 테스트 5개(지난주 유지 시 실제 기간·준비 상태·대진 순서, 지연·경기 없음 문구 구분, 띠 고정 제목·배지 렌더, 일반 클릭 판정 `isPlainClick`, 중단 경기 문구 `statusNotes`·변경 일시 사유 중복 없음) |
+| `tests/mypage.test.mjs` | 09 테스트 7개(관심 팀 개수·한도, 팀 링크 규칙, 수정 날짜·KST, 비밀번호 오류 코드↔칸·로컬 판정 순서, 이메일 계정만 변경, 닫힌 경기 409) |
 | `tests/match-regressions.test.mjs` | 04 회귀 테스트(경기 정보 갱신 연동 기록 재조회·종료 1회, 상태별 영역, 타임라인 아이콘·문구, 최근 5경기 미리보기, 평가 건수만, 로고+팀명 링크, 선수 평점 카드, 중단 경기 타임라인만, 지연 경고 시계, TOP 5 교체 재시도 등), 실제 TS 모듈을 변환해 실행. 06 비회원 개선(2026-11-20): `formItems`(오래된 순·홈/원정 복원, 옛 `formPreview` 테스트 대체) | 완료(04, 개선 반영) |
 | `next.config.ts` | `cacheComponents`·`partialPrefetching`, `/api/*` → `BACKEND_ORIGIN` rewrites | 완료 |
 | `scripts/gen-api.mjs` | 백엔드 OpenAPI(실행 중 서버 또는 파일)로 `src/lib/api/schema.d.ts` 생성 | 완료 |
@@ -247,7 +250,8 @@
 | `teams/page.tsx` | `/teams?league=&q=&team=&page=` 팀 탐색(보이는 제목·소개 없음, sr-only H1, Suspense 안 `TeamsSection`) | `features/teams` | 완료(07) |
 | `teams/[id]/page.tsx` | `/teams/[id]` 팀 상세(정적 셸 + Suspense 안 `params`, 숫자 아닌 ID는 404 페이지) | `features/team-detail` | 완료(08) |
 | `matches/[id]/page.tsx` | `/matches/[id]` 경기 상세(정적 셸 + Suspense 안에서 params 확인, 숫자 ID만) | `features/match/MatchDetail` | 완료(04) |
-| `not-found.tsx` | 없는 경로 안내(02 전 `/login`·`/signup`, 09 전 `/mypage`) | — | 완료 |
+| `mypage/page.tsx` | `/mypage` 마이페이지(메타 제목 '마이페이지', `MyPage`) | `features/mypage` | 완료(09) |
+| `not-found.tsx` | 없는 경로 안내 | — | 완료 |
 | `icon.svg` | 파비콘(로고 심벌 기반) | — | 완료 |
 
 ### 공통 UI (`src/components/ui/`)
@@ -258,7 +262,7 @@
 | `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning·error(04, 최근 흐름 '패'), small 12px·caption 11px) | 완료 |
 | `Pagination.tsx` | 페이지 분할(Figma 530:21586·530:21659, 2026-11-20): 한 줄 `< 1 2 3 … 420 >` — 테두리 없는 44px 화살표(양 끝 비활성·35%), 1·마지막 번호 고정, 사이는 현재 페이지 주변 번호와 '…', 번호 수는 줄 폭으로 3~9개(`numbersFor`), 카드 좌우 여백으로 12px씩(`-mx-3`), `aria-current`. 지난 경기·팀 탐색 공통 | 완료(05) |
 | `Tabs.tsx` | 탭(Figma Tab navigation: 44px·선택 굵은 파랑+밑줄·가로 스크롤, ARIA tabs·방향키/Home/End), `tabId`·`tabPanelId` | 완료(04, 06: `value` null = 선택 없음·첫 탭 Tab 순서, 스크롤 막대 숨김, 08: 항목 `disabled`(흐리게·클릭·방향키 건너뜀·`aria-disabled`)·오른쪽 `trailing` 문구) |
-| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백, 03: `closeButton={false}` 머리말 X 없음·`scrollArea` 내용이 스크롤 영역을 정함), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, 닫힘 전환 동안 내용 유지·`inert`·늦은 close 이벤트 가드(01, 2026-11-10), `BottomSheet` | 완료 |
+| `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백, 03: `closeButton={false}` 머리말 X 없음·`scrollArea` 내용이 스크롤 영역을 정함), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, 닫힘 전환 동안 내용 유지·`inert`·늦은 close 이벤트 가드(01, 2026-11-10), `BottomSheet` 09: `closeDisabled`(저장 중 X 비활성), `sheetInset`(손잡이 없는 시트 1024px 미만 좌우 16px·상하 24px — 비밀번호 변경) | 완료 |
 | `chip.tsx` | `chipClass()` 필터 칩(관심 팀·뉴스 분류·리그, Figma 49:171/49:173), `<ChipLabel>`(선택 시 굵기가 바뀌어도 폭 고정 — 칩 글자를 감쌈) | 완료 |
 | `Skeleton.tsx` | 로딩 자리 | 완료 |
 | `DataState.tsx` | `DataState`(로딩·정상·빈 결과·일부 미제공·실패+'다시 확인'·권한 거부), `StateMessage`(오류는 정보 아이콘, Figma 57:150), 06: `partialAction`(일부 미제공 안내 옆 조작, 없으면 기존 마크업), 07: `emptyAction`(빈 결과 아래 조작), 08: `retryLabel`(실패 버튼 문구, 팀 상세 '다시 시도') | 완료 |
@@ -301,6 +305,8 @@
 | `match/MatchRecords.tsx` | '경기 기록' 헤더(진행 중 '마지막 갱신'), 4탭(아이콘 타임라인·팀 통계·라인업·선수 평점 팀별 카드), 중단 경기 타임라인만, 블록별 미제공·조회 실패·재조회 실패 안내, 경기 정보 갱신(`infoUpdatedAt`)마다 진행 중 1회·상태 변경 1회 재조회 | `queries.ts`, `Tabs`, `icons.tsx` | 완료(04, 개선 반영) |
 | `match/HeadToHeadSection.tsx` | 상대 전적(요약 칩·날짜·장소·대회·결과, 현재 홈 기준 스코어)·양 팀 최근 5경기 흐름(PC 812/444 좌우·모바일 세로, 호버·포커스·탭 미리보기 '홈팀 스코어 원정팀'), 영역별 재시도. 06 비회원 개선(2026-11-20): 최근 5경기 흐름은 공통 `RecentForm`(오래된 순), `FormRow`는 팀 이름 + `RecentForm` 래퍼만 남음(자체 칩·팝업·호버 상태 삭제) | `queries.ts`, `model.ts` | 완료(04, 개선 반영) |
 | `match/ReviewSection.tsx` | '경기 평가' 공개 조회(유효 건수, 인기순·최신순, 본문·반응 수, 별점·평균 없음), `ReviewGuidance` 연결 | `queries.ts`, `icons.tsx` | 완료(04, 02가 로그인 상자·작성·반응 버튼) |
+| `match/ReviewTextForm.tsx` | 평가 입력 폼(라벨·textarea·n / 300·취소·제출, `REVIEW_MAX`·`reviewSendable`) — 경기 상세 작성·수정과 마이페이지 수정 공용 | `ReviewComposer`, `mypage/MyReviews` | 완료(09) |
+| `match/ReviewRestriction.tsx` | 작성 제한(약관 제9조) 안내 `ReviewRestrictionNotice`, 제한 끝 시각 1분 간격 세션 재확인 `useRestrictionEnd` | `ReviewComposer`, `mypage/MyReviews` | 완료(09) |
 | `match/ReviewGuidance.tsx` | '경기 평가' 제목 옆 주의사항 팝오버(벡터 아이콘, 차분한 색), 포커스 복귀와 뷰포트 내 배치 | `ReviewSection.tsx` | 완료(04) |
 | `match/icons.tsx` | 04 개선: 인라인 벡터 아이콘 `EventIcon`(골·실축·교체·경고·퇴장·골 취소·VAR·기타), `ThumbIcon`, `NoticeIcon` | 경기 상세 | 완료(04) |
 | `match/model.ts` | 이벤트 종류 `eventKind`·문구 `eventText`('골'·'골 취소' 등), 통계 한국어 표기·막대 비율, 포지션, 승무패 뱃지, 상태별 영역 `areasOf`(`reviewsBeside`), 최근 경기 미리보기 `formPreview`. 06 비회원 개선(2026-11-20): `formItems(teamName, matches)`(최신순 API → 오래된 순 `FormItem`), `formPreview`·`RESULT_LABEL` 삭제 | 위 컴포넌트 | 완료(04, 개선 반영) |
@@ -339,6 +345,13 @@
 | `favorites/FavoriteSchedule.tsx` | 메인 관심 팀 패널(Figma Guest Favorites 306:6220): n/5·팀 추가(`TeamSearch`, 등록 가능 팀만)·빈 상태·등록 목록 해제·5팀 제한·저장 실패 재시도, 팀별 진행 중·가장 가까운 예정 1경기 요약, 일부 실패·재조회 실패 안내 | `favoriteScheduleQuery`, `useFavorites` | 완료 |
 | `favorites/FavoriteTeamButtons.tsx` | 팀 검색 아래 '★ 관심 팀' + 파란 글자 버튼(44px), 다시 누르면 해제, 선택돼도 같은 모양·`aria-pressed`, 팀이 없으면 표시 안 함(Figma 49:57·61:883) | 메인 일정·지난 경기 | 완료(05 개선) |
 | `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) | `MatchCard` | 완료 |
+| `mypage/MyPage.tsx` | 마이페이지 조립(MY-001): 인증 확인 중 스켈레톤, 비회원·만료 세션은 로그인 안내 카드(`loginHref('/mypage')`), 회원은 PC 왼쪽 관심 팀·내 평가 / 오른쪽 360px 계정 관리 | `useAuth()` | 완료(09) |
+| `mypage/FavoriteTeams.tsx` | 관심 팀(MY-002): `useFavorites()` 그대로, n / 10, '관심 팀 추가'(`TeamSearch`), 10팀이면 추가만 막고 한도 안내, 팀 상세 링크 규칙, 추가·삭제 뒤 포커스 | `useFavorites`, `memberFavoritesQuery` | 완료(09) |
+| `mypage/MyReviews.tsx` | 내 평가(MY-003): 최신순, 수정한 평가만 수정 날짜, 수정(공용 폼·닫힌 경기 409 안내)·삭제 확인, 작성 제한 안내·수정 비활성 | `myReviewsQuery`, `ReviewTextForm`, `ReviewRestriction` | 완료(09) |
+| `mypage/AccountPanel.tsx` | 계정 관리(MY-004): 닉네임·이메일·로그인 방식·가입일 표시, 이메일 계정만 비밀번호 변경, 회원 탈퇴, 변경 완료 안내 | `PasswordDialog`, `WithdrawDialog` | 완료(09) |
+| `mypage/PasswordDialog.tsx` | 비밀번호 변경(PC 다이얼로그·모바일 시트): 오류 코드↔칸 1:1, 저장 중 잠금, 실패 시 입력 유지·다시 시도, 401은 로그인 안내 | `PATCH /me/password`, `memberRequest` | 완료(09) |
+| `mypage/WithdrawDialog.tsx` | 회원 탈퇴 확인(62:1800): 성공 시 `signedOut({ forget: true })` 후 메인, 실패 시 머무름 | `DELETE /me` | 완료(09) |
+| `mypage/MyCard.tsx`·`model.ts`·`queries.ts` | 영역 카드·영역 오류, 화면 규칙 순수 함수(개수·한도·날짜·비밀번호 오류 매핑·닫힌 경기 판정), `myReviewsQuery` | 마이페이지 | 완료(09) |
 | `news/MainNews.tsx` | 주요 뉴스(분류 칩, 6개씩 더 보기, 추가 조회·재조회 실패 시 기존 기사 유지, 출처 안내) | `NewsCard` | 완료 |
 | `news/OriginalRedirect.tsx` | 원문 확인 후 이동, 404·410만 접근 불가 안내 | `/news/{id}/link` | 완료 |
 | `feedback/FeedbackProvider.tsx` | 전역 의견 모달 1개(`<Suspense>` 안, 04), `useFeedback().openFeedback()` | `layout.tsx` | 완료 |

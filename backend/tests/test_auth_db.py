@@ -648,7 +648,21 @@ def test_reviews_write_edit_react_and_ownership(env):
     listed = b.get(f"/api/v1/fixtures/{fixture_id}/reviews").json()["data"]
     item = next(i for i in listed["items"] if i["id"] == rid)
     assert item["mine"] is False and item["myReaction"] == -1
+    # MY-003 (09): once the match is closed the edit is refused with 409 CONFLICT (my page
+    # shows '수정할 수 없는 경기'), and the own review can still be deleted. Rolled back.
+    from app.models.fixture import Fixture
+
+    fixture = session.get(Fixture, fixture_id)
+    fixture.status = "postponed"
+    session.flush()
+    closed = a.patch(f"/api/v1/reviews/{rid}", json={"body": "닫힌 뒤 수정"}, headers=WEB)
+    assert closed.status_code == 409 and closed.json()["error"]["code"] == "CONFLICT"
+    after = a.get("/api/v1/me/reviews")
+    assert after.status_code == 200, after.text
+    assert after.json()["data"][0]["body"] == "수정한 평가"
     assert a.delete(f"/api/v1/reviews/{rid}", headers=WEB).status_code == 204
+    fixture.status = "finished"  # the public list is only served for an open match
+    session.flush()
     assert all(
         i["id"] != rid
         for i in b.get(f"/api/v1/fixtures/{fixture_id}/reviews").json()["data"]["items"]
