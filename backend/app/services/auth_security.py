@@ -33,7 +33,9 @@ EMAIL_MAX = 254
 EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 NICKNAME_RULE = "닉네임은 2~12자 완성형 한글·영문·숫자로 입력해 주세요."
-NICKNAME_BLOCKED = "사용할 수 없는 닉네임입니다."
+NICKNAME_BLOCKED = (
+    "운영자 사칭이나 비속어로 볼 수 있는 단어가 포함되어 사용할 수 없는 닉네임입니다."
+)
 # A nickname may not contain these (user decision 2026-11-24): words that pass for the
 # operator, and direct profanity. Compared in lower case with digits removed, so "Admin1" or
 # "씨8발" are caught too. Accounts made before the rule keep their nickname. The signup

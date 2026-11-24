@@ -53,6 +53,9 @@ def test_nickname_rule(nickname, ok):
         ("병신123", True),
         ("개새끼", True),
         ("FuckYou", True),
+        # No exceptions (user decision 2026-11-24): the message explains why these fail.
+        ("badminton", True),
+        ("시발점", True),
         ("축구팬", False),
         ("토트넘팬7", False),
         ("Sonny", False),
@@ -61,6 +64,13 @@ def test_nickname_rule(nickname, ok):
 def test_blocked_nicknames(nickname, blocked):
     """User decision 2026-11-24: impersonation words and direct profanity, contained."""
     assert (sec.nickname_error(nickname) == sec.NICKNAME_BLOCKED) is blocked
+
+
+def test_blocked_nickname_message_says_why():
+    """The field error names the reason (user decision 2026-11-24)."""
+    assert sec.NICKNAME_BLOCKED == (
+        "운영자 사칭이나 비속어로 볼 수 있는 단어가 포함되어 사용할 수 없는 닉네임입니다."
+    )
 
 
 def test_signup_screen_blocks_the_same_words():
