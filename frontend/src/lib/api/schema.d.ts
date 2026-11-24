@@ -1124,7 +1124,7 @@ export interface components {
         /**
          * FixtureAvailability
          * @description The common match-day period (SCH-002·003): only dates with a stored match, the last
-         *     three before today, today when it has a match, and the next 17. `start`/`end` are the
+         *     three before today, today when it has a match, and the next 28. `start`/`end` are the
          *     first and last of them (null when nothing is stored yet).
          */
         FixtureAvailability: {

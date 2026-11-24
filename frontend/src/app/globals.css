@@ -97,7 +97,6 @@
 @starting-style {
   .kt-top5-sheet[open] { transform: translateY(100%); }
 }
-.kt-top5-sheet::backdrop { cursor: pointer; }
 
 /* Reduced motion: both panels switch at once, in either direction. */
 @media (prefers-reduced-motion: reduce) {

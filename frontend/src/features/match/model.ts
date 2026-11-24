@@ -80,6 +80,7 @@ const STAT_LABELS: Record<string, string> = {
   "Corner Kicks": "코너킥",
   Fouls: "파울",
   Offsides: "오프사이드",
+  "Free Kicks": "프리킥",
   "Total passes": "패스",
   "Shots off Goal": "빗나간 슈팅",
   "Blocked Shots": "막힌 슈팅",

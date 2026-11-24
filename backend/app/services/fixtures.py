@@ -28,10 +28,11 @@ from app.services.reference import (
 
 logger = logging.getLogger(__name__)
 
-# Main schedule period (SCH-002·003, 2026-11-19): match days, not calendar days - the last
-# three KST dates before today with a stored match, today when it has one, and the next 17.
+# Main schedule period (SCH-002·003, 2026-11-19; 28 ahead since 2026-11-24, was 17): match days,
+# not calendar days - the last three KST dates before today with a stored match, today when it
+# has one, and the next 28.
 PAST_MATCH_DAYS = 3
-FUTURE_MATCH_DAYS = 17
+FUTURE_MATCH_DAYS = 28
 # Live sync runs when a match is live or should have started within the lag (kickoff passed
 # but the provider has not switched it to live yet). Not before kickoff: `/fixtures?live=`
 # lists started matches only, so earlier calls would bring nothing (2026-11-22).
