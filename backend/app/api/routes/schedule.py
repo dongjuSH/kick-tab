@@ -206,9 +206,7 @@ def read_team_schedule(
     if found is None:
         raise ApiError(404, "NOT_FOUND", "팀을 찾을 수 없습니다. 팀 검색으로 다시 선택해 주세요.")
     return TeamScheduleResponse(
-        data=TeamSchedule(
-            team=team_ref(found, team_detail_lookup(db)), start=start, end=end, matches=matches
-        ),
+        data=TeamSchedule(team=team_ref(found, team_detail_lookup(db)), matches=matches),
         meta=_schedule_meta(state, updated_at),
     )
 

@@ -242,10 +242,11 @@ export function ResultsSection() {
           ) : (
             <Skeleton className="h-11 w-full" />
           )}
-          {/* The main schedule's search group (Figma 61:883 '공통 팀 검색 · 지난 경기'): label,
-              help, field and the favourite buttons 6px apart; the help names the season scope.
+          {/* The main schedule's search group (Figma 61:883 '공통 팀 검색 · 지난 경기'): the
+              favourite row (44px) right under the field, as on the main page (2026-11-24); the
+              help names the season scope.
               Remounted by a reset: also clears a typed term that never selected a team. */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col">
             <TeamSearch
               key={resetKey}
               selected={selectedTeam}

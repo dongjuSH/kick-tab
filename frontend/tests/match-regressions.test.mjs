@@ -591,13 +591,11 @@ test("default match day: today when it has a match, else the nearest later one, 
   assert.equal(defaultMatchDate([], "2026-11-19"), null);
 });
 
-test("KST date turns at 15:00 UTC and the period reads as its real first and last day", () => {
-  const { kstTodayIso, formatDateRange } = loader()("@/lib/format/kst");
+test("KST date turns at 15:00 UTC", () => {
+  const { kstTodayIso } = loader()("@/lib/format/kst");
   assert.equal(kstTodayIso(new Date("2026-11-18T14:59:59Z")), "2026-11-18");
   assert.equal(kstTodayIso(new Date("2026-11-18T15:00:00Z")), "2026-11-19");
   assert.equal(kstTodayIso(new Date("2026-12-31T15:00:00Z")), "2027-01-01");
-  assert.equal(formatDateRange("2026-11-06", "2026-12-02"), "2026.11.06–12.02");
-  assert.equal(formatDateRange("2026-12-20", "2027-01-08"), "2026.12.20–2027.01.08");
 });
 
 test("match card: HH:mm or 시간 미정, and VS only between the teams of a scheduled match (2026-11-19)", () => {

@@ -2139,16 +2139,6 @@ export interface components {
         /** TeamSchedule */
         TeamSchedule: {
             team: components["schemas"]["TeamRef"];
-            /**
-             * Start
-             * Format: date
-             */
-            start: string;
-            /**
-             * End
-             * Format: date
-             */
-            end: string;
             /** Matches */
             matches: components["schemas"]["MatchSummary"][];
         };
