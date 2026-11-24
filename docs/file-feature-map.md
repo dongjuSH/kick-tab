@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-24 · 02 금칙어 닉네임 오류 문구(사용자 결정·`dev` 병합):** 백엔드 `services/auth_security.py`(`NICKNAME_BLOCKED` → '운영자 사칭이나 비속어로 볼 수 있는 단어가 포함되어 사용할 수 없는 닉네임입니다.'), `tests/test_auth_rules.py`(문구·예외 없음 'badminton'·'시발점'). 프런트 `features/auth/rules.ts`(`NICKNAME_BLOCKED`), `tests/auth.test.mjs`.
+
 **2026-11-24 · 02 닉네임 금칙어·회원가입 '인증번호 받기' 주요(자체 검수·`dev` 병합):** 백엔드 `services/auth_security.py`(`BLOCKED_NICKNAME_WORDS`·`nickname_blocked`·`NICKNAME_BLOCKED`), 테스트 `tests/test_auth_rules.py`(금칙어·프런트 목록 일치). 프런트 `features/auth/rules.ts`(`BLOCKED_NICKNAME_WORDS`·`nicknameError`·`NICKNAME_RULE`·`NICKNAME_BLOCKED`), `SignupForm.tsx`(닉네임 오류), `EmailCodeStep.tsx`('인증번호 받기' 항상 주요), `tests/auth.test.mjs`.
 
 **2026-11-24 · 02 버튼 체계 적용·비밀번호 찾기 시안 맞춤(자체 검수·`dev` 병합):** 프런트 `features/auth/AuthForm.tsx`(`SocialButtons` 보조), `LoginForm.tsx`(하단 링크 텍스트), `SignupForm.tsx`('가입하기'·'자동 로그인 확인 중' 주요, '경기 일정 보기' 텍스트), `EmailCodeStep.tsx`(`password_reset` 단계형·`onEditEmail`·`onSent(email)`), `PasswordResetForm.tsx`(`sentTo`, 단계별 '로그인으로 돌아가기', 3단계 이메일 칸·규칙 안내 제거). 02 파일 항목을 이 문서에 처음 추가(백엔드·프런트·테스트). 비밀번호 찾기에서 기존과 같은 비밀번호 허용은 유지(사용자 결정).
@@ -175,7 +177,7 @@
 | `app/services/head_to_head.py` | `fetch_meetings`·`fetch_form`(친선·미종료 제외, 범위 확대 1회), `ensure_meetings`·`ensure_form`(갱신 조건·쿨다운, `strict`는 TOP 5), `recent_form`·`result_for`, `read_head_to_head` | 라우트·TOP 5 | 완료(04, 08 재사용 가능) |
 | `app/services/reviews.py` | `list_reviews(sort)`(인기순·최신순·반응 수·유효 건수, 평균 없음), `review_open`(진행 중(SUSP 제외)·일반 종료만 공개·작성 가능 — 02 쓰기 API도 사용) | `routes/matches.py` | 완료(04, 02가 작성·반응·닉네임) |
 | `app/services/accounts.py` | 02: 인증번호 발송·확인(목적별), 가입(세 필수 확인 기록), 로그인·세션 회전·로그아웃, `reset_password`(인증 후 새 비밀번호·모든 세션 종료 — 기존과 같은 비밀번호도 허용, 2026-11-24 사용자 결정), `change_password`, `delete_account`. 잠금 순서: 계정 행 → 토큰·인증번호 행 | `routes/auth.py`·`me.py` | 완료(02) |
-| `app/services/auth_security.py` | 02: Argon2id 해시, JWT 접근 토큰(15분·`ver`), 인증번호 HMAC, 닉네임·비밀번호 규칙, 닉네임 금칙어(사칭·욕설 포함 시 거부, 프런트 목록과 같음) | `accounts.py` | 완료(02) |
+| `app/services/auth_security.py` | 02: Argon2id 해시, JWT 접근 토큰(15분·`ver`), 인증번호 HMAC, 닉네임·비밀번호 규칙, 닉네임 금칙어(사칭·욕설 포함 시 거부·예외 없음, 이유를 밝힌 오류 문구, 프런트 목록과 같음) | `accounts.py` | 완료(02) |
 | `app/services/mailer.py` | 02: Gmail SMTP(STARTTLS) 인증번호 메일, 설정 없으면 콘솔 발송(자동 테스트 전용) | `accounts.py` | 완료(02) |
 | `app/services/member_favorites.py` | 02: 회원 관심 팀 조회·등록(10팀 한도)·해제 | `routes/me.py` | 완료(02) |
 | `app/services/moderation.py` | 02: 평가 작성 제한 설정·해제(약관 제9조) | `app/moderation.py`(CLI `python -m app.moderation`) | 완료(02) |

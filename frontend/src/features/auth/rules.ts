@@ -20,7 +20,7 @@ export const BLOCKED_NICKNAME_WORDS = [
 ];
 
 export const NICKNAME_RULE = "닉네임은 2~12자 완성형 한글·영문·숫자로 입력해 주세요.";
-export const NICKNAME_BLOCKED = "사용할 수 없는 닉네임입니다.";
+export const NICKNAME_BLOCKED = "운영자 사칭이나 비속어로 볼 수 있는 단어가 포함되어 사용할 수 없는 닉네임입니다.";
 
 /** The message the server would give for this nickname, or null when it is allowed. */
 export function nicknameError(value: string): string | null {

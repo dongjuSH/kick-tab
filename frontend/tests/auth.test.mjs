@@ -63,6 +63,10 @@ test("screen rules match the server (P-04)", () => {
   assert.equal(nicknameError("Admin7"), NICKNAME_BLOCKED);
   assert.equal(nicknameError("씨8발"), NICKNAME_BLOCKED);
   assert.equal(nicknameError("개새끼"), NICKNAME_BLOCKED);
+  // No exceptions: ordinary words that contain one fail too, and the message says why.
+  assert.equal(nicknameError("badminton"), NICKNAME_BLOCKED);
+  assert.equal(nicknameError("시발점"), NICKNAME_BLOCKED);
+  assert.equal(NICKNAME_BLOCKED, "운영자 사칭이나 비속어로 볼 수 있는 단어가 포함되어 사용할 수 없는 닉네임입니다.");
   assert.equal(nicknameError("토트넘팬7"), null);
   assert.equal(nicknameError("가"), NICKNAME_RULE);
   assert.equal(nicknameValid("가"), false);
