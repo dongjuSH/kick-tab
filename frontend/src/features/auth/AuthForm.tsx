@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 
 /**
@@ -105,13 +106,10 @@ export const SOCIAL_NOTICE = "카카오·구글 로그인은 준비 중입니다
  */
 export function SocialButtons() {
   const [notice, setNotice] = useState(false);
-  const button =
-    "inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-control border border-line-strong " +
-    "bg-surface px-4 text-body font-medium text-fg hover:bg-subtle";
   return (
     <div className="flex flex-col gap-3 border-t border-line pt-4">
       <p className="text-center text-small text-fg-secondary">다른 방법으로 계속하기</p>
-      <button type="button" className={button} onClick={() => setNotice(true)}>
+      <Button variant="secondary" fullWidth onClick={() => setNotice(true)}>
         <svg aria-hidden width="16" height="16" viewBox="0 0 16 16">
           <path
             fill="currentColor"
@@ -119,8 +117,8 @@ export function SocialButtons() {
           />
         </svg>
         카카오로 계속하기
-      </button>
-      <button type="button" className={button} onClick={() => setNotice(true)}>
+      </Button>
+      <Button variant="secondary" fullWidth onClick={() => setNotice(true)}>
         <svg aria-hidden width="16" height="16" viewBox="0 0 16 16">
           <path fill="#4285F4" d="M15.68 8.18c0-.57-.05-1.11-.15-1.64H8v3.1h4.3a3.68 3.68 0 0 1-1.6 2.41v2h2.58c1.51-1.39 2.4-3.44 2.4-5.87Z" />
           <path fill="#34A853" d="M8 16c2.16 0 3.97-.72 5.29-1.94l-2.58-2c-.72.48-1.63.76-2.71.76-2.09 0-3.85-1.41-4.48-3.3H.86v2.07A8 8 0 0 0 8 16Z" />
@@ -128,7 +126,7 @@ export function SocialButtons() {
           <path fill="#EA4335" d="M8 3.18c1.18 0 2.23.4 3.06 1.2l2.29-2.29A8 8 0 0 0 .86 4.41l2.66 2.07C4.15 4.59 5.91 3.18 8 3.18Z" />
         </svg>
         Google로 계속하기
-      </button>
+      </Button>
       {/* Always in the page (live region); out of the layout until there is a notice. */}
       <p role="status" className={notice ? "text-small text-fg-secondary" : "sr-only"}>
         {notice ? SOCIAL_NOTICE : null}
