@@ -32,22 +32,29 @@ function mmss(ms: number): string {
 }
 
 /**
- * Email + 6-digit code on the same screen (AUTH-001 rule 1, Figma 52:2387 → 134:5398 →
- * 134:5623). 10 minutes valid, resend after 1 minute (the new code replaces the old one),
- * five wrong codes make it unusable. Once confirmed the address is locked.
+ * Email + 6-digit code (AUTH-001 rule 1). 10 minutes valid, resend after 1 minute (the new
+ * code replaces the old one), five wrong codes make it unusable.
+ * - signup: both on the same screen (Figma 52:2387 → 134:5398 → 134:5623); changing the
+ *   address after a send starts over, and once confirmed the address is locked.
+ * - password_reset: separate steps (Figma 134:4077 → 134:4344). After the send the address
+ *   is no longer editable; '이메일 다시 입력' goes back to step 1.
  */
 export function EmailCodeStep({
   purpose,
   verified,
   onVerified,
   onSent,
+  onEditEmail,
 }: {
   purpose: VerificationPurpose;
   verified: Verified | null;
   onVerified: (verified: Verified) => void;
-  /** Called after a code was sent (password reset moves to step 2). */
-  onSent?: () => void;
+  /** Called with the address after a code was sent (password reset moves to step 2). */
+  onSent?: (email: string) => void;
+  /** Password reset: '이메일 다시 입력' was pressed (back to step 1). */
+  onEditEmail?: () => void;
 }) {
+  const steps = purpose === "password_reset";
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState<{ email: string; sentAt: number; expiresAt: number; resendAt: number } | null>(null);
@@ -87,7 +94,7 @@ export function EmailCodeStep({
         resendAt: Date.parse(data.resendAt),
       });
       setCode("");
-      onSent?.();
+      onSent?.(email.trim());
     } catch (caught) {
       const text = isApiError(caught) ? caught.message : "인증번호를 보내지 못했습니다. 다시 시도해 주세요.";
       setError({ field: sent ? "code" : "email", text });
@@ -125,23 +132,32 @@ export function EmailCodeStep({
       : `남은 시간 ${mmss(sent.expiresAt - now)} · ${canResend ? "재발송 가능" : `${Math.ceil((sent.resendAt - now) / 1000)}초 뒤 재발송 가능`}`
     : null;
 
+  const editEmail = () => {
+    setSent(null);
+    setCode("");
+    setError(null);
+    onEditEmail?.();
+  };
+
   return (
     <div className="flex flex-col gap-3">
-      <Field
-        label="이메일"
-        type="email"
-        autoComplete="email"
-        placeholder={purpose === "signup" ? "이메일 주소 입력" : "you@example.com"}
-        value={email}
-        // Changing the address after a send starts over.
-        onChange={(event) => {
-          setEmail(event.target.value);
-          if (sent && event.target.value.trim() !== sent.email) setSent(null);
-        }}
-        error={error?.field === "email" ? error.text : null}
-      />
+      {!(steps && sent) && (
+        <Field
+          label="이메일"
+          type="email"
+          autoComplete="email"
+          placeholder={steps ? "you@example.com" : "이메일 주소 입력"}
+          value={email}
+          // Signup: changing the address after a send starts over.
+          onChange={(event) => {
+            setEmail(event.target.value);
+            if (sent && event.target.value.trim() !== sent.email) setSent(null);
+          }}
+          error={error?.field === "email" ? error.text : null}
+        />
+      )}
       {!sent ? (
-        <Button variant="secondary" fullWidth disabled={pending !== null} onClick={send}>
+        <Button variant={steps ? "primary" : "secondary"} fullWidth disabled={pending !== null} onClick={send}>
           {pending === "send" ? "보내는 중…" : "인증번호 받기"}
         </Button>
       ) : (
@@ -163,6 +179,11 @@ export function EmailCodeStep({
           <Button variant="secondary" fullWidth disabled={pending !== null || !canResend} onClick={send}>
             {pending === "send" ? "보내는 중…" : "인증번호 다시 받기"}
           </Button>
+          {steps && (
+            <Button variant="secondary" fullWidth disabled={pending !== null} onClick={editEmail}>
+              이메일 다시 입력
+            </Button>
+          )}
           <p role="status" className="sr-only">
             {pending === null && !error ? `${sent.email}로 인증번호를 보냈습니다.` : ""}
           </p>

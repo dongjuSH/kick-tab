@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { Button, ButtonLink } from "@/components/ui/Button";
@@ -133,7 +132,7 @@ export function SignupForm() {
             title="자동 로그인 확인 중"
             description="로그인 상태를 확인하고 있습니다. 잠시만 기다려 주세요."
             action={
-              <Button variant="secondary" fullWidth disabled>
+              <Button variant="primary" fullWidth disabled>
                 자동 로그인 확인 중
               </Button>
             }
@@ -150,9 +149,9 @@ export function SignupForm() {
             }
           />
         )}
-        <Link href="/" className="inline-flex min-h-11 items-center justify-center rounded-control text-body text-fg hover:bg-subtle">
+        <ButtonLink href="/" variant="text">
           경기 일정 보기
-        </Link>
+        </ButtonLink>
       </AuthCard>
     );
   }
@@ -223,7 +222,7 @@ export function SignupForm() {
           ))}
         </fieldset>
         {error && <FormMessage tone="error">{error}</FormMessage>}
-        <Button type="submit" variant={status.ready ? "primary" : "secondary"} fullWidth disabled={!status.ready || pending}>
+        <Button type="submit" variant="primary" fullWidth disabled={!status.ready || pending}>
           {pending ? "가입하는 중…" : "가입하기"}
         </Button>
         <p id={statusId} role="status" className="text-small text-fg-secondary">

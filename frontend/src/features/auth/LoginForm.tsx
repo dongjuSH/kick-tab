@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, ButtonLink } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import type { Member } from "@/lib/api/types";
@@ -88,12 +87,12 @@ export function LoginForm() {
         </Button>
       </form>
       <div className="grid grid-cols-2">
-        <Link href="/password-reset" className="inline-flex min-h-11 items-center justify-center rounded-control text-body text-fg hover:bg-subtle">
+        <ButtonLink href="/password-reset" variant="text">
           비밀번호 찾기
-        </Link>
-        <Link href={signupHref} className="inline-flex min-h-11 items-center justify-center rounded-control text-body text-fg hover:bg-subtle">
+        </ButtonLink>
+        <ButtonLink href={signupHref} variant="text">
           회원가입
-        </Link>
+        </ButtonLink>
       </div>
       <SocialButtons />
     </AuthCard>
