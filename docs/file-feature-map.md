@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-24 · 02 버튼 체계 적용·비밀번호 찾기 시안 맞춤(자체 검수·`dev` 병합):** 프런트 `features/auth/AuthForm.tsx`(`SocialButtons` 보조), `LoginForm.tsx`(하단 링크 텍스트), `SignupForm.tsx`('가입하기'·'자동 로그인 확인 중' 주요, '경기 일정 보기' 텍스트), `EmailCodeStep.tsx`(`password_reset` 단계형·`onEditEmail`·`onSent(email)`), `PasswordResetForm.tsx`(`sentTo`, 단계별 '로그인으로 돌아가기', 3단계 이메일 칸·규칙 안내 제거). 02 파일 항목을 이 문서에 처음 추가(백엔드·프런트·테스트). 비밀번호 찾기에서 기존과 같은 비밀번호 허용은 유지(사용자 결정).
+
 **2026-11-24 · 01 공통 버튼 체계·헤더·팝업 버튼 통일(자체 검수·`dev` 병합):** 프런트 `components/ui/Button.tsx`(`variant` primary·secondary·text·danger — `ghost` 삭제·`text`로 이름 변경, 5상태: 호버·누름(`:active`)은 `not-disabled:`만, 비활성 `text-fg-disabled`)·`app/globals.css`(`--kt-text-disabled`/`--color-fg-disabled` 추가, 쓰지 않게 된 `--kt-action-disabled` 삭제, 누름·호버 겹침 `kt-press-8`·`12`·`18`, 전역 포커스 외곽선을 `--kt-border-focus` 직접 참조로 복구)·`layout/HeaderAuth.tsx`(로그인·마이페이지 보조)·팝업 버튼 같은 폭 2칸(`match/ReviewSection.tsx` 로그인 안내, `mypage/WithdrawDialog.tsx` — 빨간 테두리 전용 버튼 삭제·위험 종류, `mypage/MyPage.tsx` 비로그인 카드, `mypage/PasswordDialog.tsx`)·종류 정리(`favorites/FavoriteSchedule.tsx`, `match/HeadToHeadSection.tsx`·`MatchDetail.tsx`·`MatchRecords.tsx`·`ReviewComposer.tsx`·`ReviewTextForm.tsx`, `mypage/AccountPanel.tsx`·`FavoriteTeams.tsx`·`MyReviews.tsx`, `results/ResultsSection.tsx`, `schedule/ScheduleSection.tsx`, `team-detail/TeamDetail.tsx`).
 
 **2026-11-24 · 08 이적 갱신 실패 결함 수정(자체 교차 검증·`dev` 병합):** 백엔드 `services/team_detail.py`(`same_move` 새로, `check_transfers`를 D-08-6 정리 후 이동 단위 비교로), 테스트 `tests/test_team_detail.py`·`tests/test_team_detail_db.py`.
@@ -58,7 +60,7 @@
 
 > TOP 5는 기획 문서의 2026-11-02 개정 정책(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.
 
-기준: 2026-11-24 (화, 08 이적 갱신 실패 결함 수정 완료 — 자체 교차 검증), 브랜치 `feat/08-team-detail`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+기준: 2026-11-24 (화, 02 로그인·회원가입 버튼 체계 적용·비밀번호 찾기 시안 맞춤 완료 — 자체 검수), 브랜치 `feat/02-auth`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -100,6 +102,7 @@
 | `app/models/team_detail.py` | `TeamCoach`(현직 감독, 없으면 이름 NULL), `SquadMember`(현재 선수단 번호·포지션), `TeamSeasonStat`(팀·리그·시즌 `/teams/statistics` 원본), `Transfer`(팀 관점 영입·방출 원본, 상대 팀 제공값, 시즌·반기, 고유 인덱스: 상대 팀 ID 있으면 ID·없으면 이름), `TeamPlayerStat`(2026-11-18: 팀·선수·대회·시즌 줄 — 지원 대회 8개, 값 NULL 허용, 평점 numeric), `TeamSync`(팀·시즌·종류 coach·squad·statistics·transfers·player_stats별 마지막 성공·실패) 2026-11-20: `PlayerSeasonCheck`(영입 선수·시즌 확인 성공·실패 시각), `PlayerClubSeason`(그 시즌 구단별 1군 공식 출전 — NULL = 미제공), `TeamPlayerStat`은 그 시즌 개최 지원 대회 전체·과거 2시즌까지. 2026-11-21: `PlayerClubSeason.appearances`는 결정 B 이후 NULL을 쓰지 않음(열은 nullable 유지, 남은 NULL 행은 쓸 수 없는 확인으로 무시). | `services/team_detail.py` | 완료(08) |
 | `app/models/match_detail.py` | `FixtureDetail`(통계·라인업·선수 원본 블록·수집 상태·실패 시각), `FixtureEvent`(경기별 순번, 수집 때마다 교체), `HeadToHead`(경기별 맞대결), `TeamForm`(팀별 최근 공식 경기) | `services/match_detail.py`·`head_to_head.py` | 완료(04) |
 | `app/models/review.py` | `Review`(텍스트 평가: 본문 필수·≤300·공백만 금지 `REVIEW_BODY_SPACE_CLASS`, 회원·경기 유일, 별점 없음 — 0015), `ReviewReaction`(±1, 평가·회원 유일) — `user_id` 외래 키는 02 | `services/reviews.py` | 완료(04, 02가 작성·반응 연결) |
+| `app/models/user.py` | 02: `User`(이메일·닉네임·Argon2id 해시·`token_version`·`review_restricted_until`), `AuthIdentity`, `EmailVerification`(목적별 인증번호 해시·10분·재발송 1분·5회), `RefreshToken`(회전·재사용 감지), `TermsAgreement`, `MemberFavorite` | `services/accounts.py` | 완료(02) |
 | `app/models/top_matches.py` | `Top5Week`(주간 작업 상태·자동 시도 수·알림 시각), `Top5Attempt`(시도·근거·모델 출력), `Top5Publication`(공개 버전), `WeeklyTopMatch`(고정 순위·이유·선정 당시 킥오프) | `services/top5_selection.py`·`top_matches.py` | 완료(04) |
 | `app/models/news.py` | `NewsArticle`(url_hash unique·출처 도메인·뱃지·만료 시각), `NewsArticleTeam` | `services/news.py`, `sync/news.py` | 완료 |
 | `alembic.ini` | Alembic 설정(접속 주소는 `env.py`가 `.env`에서 읽음) | `migrations/` | 완료 |
@@ -121,6 +124,8 @@
 | `migrations/versions/20261107_0014_transfer_identity_indexes.py` | 이적 고유 제약을 상대 팀 ID 유무별 부분 고유 인덱스 2개로 교체 — 파서의 ID 또는 이름 기준과 같음(Codex 4차 N7) | — | 개발 DB 적용 |
 | `migrations/versions/20261118_0016_team_player_stats.py` | 08 수정(2026-11-18): `team_player_stats`(PK team·player·competition·season, 외래 키·RLS), `ck_team_syncs_kind_allowed`에 `player_stats` 추가, downgrade는 player_stats 동기화 행 삭제 후 CHECK 복원·테이블 삭제 | `models/team_detail.py` | 개발 DB 적용 |
 | `migrations/versions/20261120_0018_player_season_checks.py` | 08 비회원 전체 검수 개선: `player_season_checks`(PK player·season, checked_at·failed_at·failure)·`player_club_seasons`(PK player·season·team, appearances NULL 허용), 외래 키 없음(외부 구단 ID), RLS | `models/team_detail.py` | 개발 DB 적용(head) |
+| `migrations/versions/20261121_0019_member_accounts.py` | 02: 회원·인증 식별자·인증번호·리프레시 토큰·약관 기록·회원 관심 팀 테이블, 평가·의견 회원 연결 | `models/user.py` | 완료(02) |
+| `migrations/versions/20261122_0020_review_restrictions.py` | 02: `users.review_restricted_until`(평가 작성 제한, 약관 제9조) | `services/moderation.py` | 완료(02) |
 | `migrations/versions/20261111_0015_text_reviews.py` | 04 개선: `reviews.rating`·범위 CHECK 삭제, body NOT NULL + `ck_reviews_body_not_blank`(Python `str.isspace()` 공백만이면 거부), 공백 본문이 있으면 업그레이드 실패·평가가 있으면 downgrade 거부 | `models/review.py` | 개발 DB 적용 |
 | `app/seed/competitions.py` | 21개 대회(03 2026-11-19: 국가별 슈퍼컵 5·UEFA 슈퍼컵·FIFA 클럽 월드컵 추가, 처음 14개) 한국어 이름·그룹·정렬, `LEAGUE_IDS`·`UEFA_IDS`, `season_label` | `services/reference.py`, `sync/*` | 완료 |
 | `app/seed/countries.json` | 08 수정: API-Football `/countries` 1회로 만든 {국가명: 국기 URL} 170개(국적 국기 표시, `flag_url`이 공백·하이픈 무시하고 찾음) | `services/team_detail.py` | 완료(08) |
@@ -134,6 +139,7 @@
 | `app/api/router.py` | `/api/v1` 라우터, 전 라우트에 CSRF 검사·오류 응답 문서화, 05 지난 경기 라우터, 06 순위 라우터, 07 팀 탐색 라우터, 경기 상세 라우터는 일정 라우터 뒤에 등록 | `main.py`, `routes/*` | 완료 |
 | `app/api/errors.py` | `ApiError`, 오류 응답 형식, 검증·HTTP 예외 처리기, `UnhandledErrorMiddleware`(미처리 예외를 500으로, 서버 로그에는 종류만) | 전 라우트 | 완료 |
 | `app/api/deps.py` | `require_csrf`(헤더·Origin), `RateLimit`(클라이언트별 + 전역 상한, 둘 다 통과 시에만 집계, `route_class()`로 본문 해석 전 적용, `key_func` 교체 가능) | `router.py`, `routes/feedback.py` | 완료(02가 회원·비회원 차등) |
+| `app/api/auth.py` | 02: 쿠키(`kt_access`·`kt_refresh`) 읽기·쓰기·삭제, `current_member`·`optional_member`(만료 401 `AUTH_EXPIRED`) | `routes/auth.py`·`me.py`·`reviews.py` | 완료(02) |
 | `app/core/rate_limit.py` | `RateLimiter`(슬라이딩 윈도, `check`·`record`·`hit` 각각 단일 잠금 — `hit`은 검사·기록 원자적, 최근 사용 순 정리·최대 10,000키), `client_ip`(신뢰 프록시 뒤에서만 `X-Forwarded-For`), `Retry-After` 값 | `api/deps.py` | 완료 |
 | `app/api/routes/feedback.py` | `POST /api/v1/feedback`: 요청 제한(라우트 클래스, 확정값), 허니팟 거부, 중복 409, 저장 후 디스코드 알림 예약 | `services/feedback.py`, `notifications/discord.py` | 완료 |
 | `app/api/routes/top_matches.py` | `GET /api/v1/top-matches/current`(공개 결과·`meta.updatedAt`), `/version`(열린 화면 교체 감지) | `services/top_matches.py` | 완료 |
@@ -142,6 +148,9 @@
 | `app/api/routes/standings.py` | `GET /standings?league=&season=`(5대 리그 + 06 개선 UEFA 2·3·848 리그 페이즈, 행마다 `recent` 최근 5경기·표 `complete`, 컵 404·미지원 시즌 404·미수집 503·`refreshFailed`), `/standings/summary`(현재 시즌 리그별 상위 6행, 리그별 미수집 분리), `/player-rankings?league=&season=&type=`(5대 리그만·UEFA 404, 4종 제공 순서, 선방 자체 집계·`excluded`·`tied`, 잘못된 유형 422), 06 개선 `GET /knockouts?league=&season=&stage=`(UEFA만, 저장 경기로 대진·차전 `leg`(모든 경기 저장 시만)·합산·승부차기·승자, 시즌 경기 미적재 503, 공급사 호출 없음). 06 비회원 개선(2026-11-20): `/player-rankings` UEFA 2·3·848 허용(예선 포함 대회 전체, 국내 컵 404), 선수 이름 HTML 엔티티 해제(`display_text`), `/standings/summary` 8개 대회, 최근 경기 `competition` | `services/standings.py`·`services/knockouts.py` | 완료(06, 06 개선) |
 | `app/api/routes/teams.py` | `GET /teams?league=&q=&team=&page=`(07, 현재 시즌 5대 리그 소속 팀 12개씩, 정수이면서 5대 리그가 아니면 404·정수가 아니면 422, `team`은 그 팀 하나만(소속 아니면 빈 목록, 1~2,147,483,647 밖 422), 소속 미확인 503 `MEMBERSHIP_UNKNOWN`), 08: `GET /teams/{id}`(기본 정보·순위·감독·경기장·최근 5경기 — 저장 경기, 외부 호출 없음)·`/fixtures`(예정 3·최근 5)·`/squad`(지원 대회 합계·대회별 줄·국기·빠진 대회)·`/season-stats?season=`(승격 팀 not_participated)·`/transfers?season=`(응답 때 중복 정리, 표시·기타 목록)(이번·지난 시즌만), 없는 팀 404·허용 밖 404 `TEAM_DETAIL_UNAVAILABLE`·소속 미확인 503·미수집 503. 06 비회원 개선(2026-11-20): `GET /teams/{id}` `recent`는 `_recent` — `ensure_form`(04 규칙) 후 `team_detail.official_form`(친선 제외 전체 공식 경기, 오래된 순), 한 번도 받지 않은 팀은 `recent_results`로 대체, `competition` 포함 2026-11-20: `/squad` 합계는 그 시즌 개최 지원 대회 전체, `/transfers` 반기별 목록은 선수 묶음(`TransferGroup` — 이동마다 날짜·방향·상대·유형)이고 `judge_move`로 바로 보임/기타 이동. | `services/team_browse.py`·`team_detail.py` | 완료(07·08) |
 | `app/api/routes/schedule.py` | `GET /competitions`(05: 관리 시즌별 `seasons`), 05: `GET /seasons`·`require_supported_season`·`/teams/search?season=`, `/fixtures?date=`, `/fixtures/next?teams=`(양의 정수 1~5개), `/fixtures/team?team=`(오늘−3~+17일), `/teams/search?q=`, `/news`(08: `team` — 팀 연결 기사 최신 48개, 없는 팀 404), `/news/{id}/link`(요청 제한). 미수집 503·일부 실패 `failedCompetitionIds` | `services/fixtures.py`·`news.py`·`news_link.py`·`team_search.py` | 완료 |
+| `app/api/routes/auth.py` | 02: `POST /auth/email-codes`·`/verify`(가입·비밀번호 찾기), `/signup`(세 필수 확인), `/login`·`/refresh`·`/logout`, `/password-reset`, `GET /auth/me`(비회원 200 `data:null`) | `services/accounts.py` | 완료(02) |
+| `app/api/routes/me.py` | 02(09용): 회원 관심 팀(10팀)·내 평가·비밀번호 변경·회원 탈퇴 | `services/accounts.py`·`member_favorites.py`·`reviews.py` | 완료(02) |
+| `app/api/routes/reviews.py` | 02: 평가 작성·수정·삭제, 좋아요·싫어요(`PUT`/`DELETE /reviews/{id}/reaction`), 작성 제한 `REVIEW_RESTRICTED` 403 | `services/reviews.py` | 완료(02) |
 
 ### 스키마·서비스·연동
 
@@ -156,12 +165,19 @@
 | `app/schemas/top_matches.py` | `TopMatches`(`version`·`view` list·none·delayed·`week`·`currentWeek`·`selectedAt`·`items`), `TopMatchItem`(순위·이유·`selectedKickoffAt`·경기), `TopMatchesVersion`, 응답 래퍼 | `services/top_matches.py` | 완료(04) |
 | `app/schemas/match_detail.py` | `MatchInfo`, 블록 상태 `BlockStatus`와 `EventsBlock`·`StatisticsBlock`·`LineupsBlock`·`PlayersBlock`, `HeadToHead`(`MeetingsBlock`·`FormBlock`), `ReviewList`·`ReviewItem`·`ReviewSummary` | `routes/matches.py` | 완료(04) |
 | `app/schemas/feedback.py` | `FeedbackCreate`(본문·유형 필수, 페이지 경로, 허니팟 `website`), `FeedbackReceipt` | `routes/feedback.py` | 완료 |
+| `app/schemas/auth.py` | 02: 인증번호·가입·로그인·비밀번호 찾기/변경 요청, `Member` 응답 | `routes/auth.py`·`me.py` | 완료(02) |
 | `app/services/feedback.py` | `create_feedback`, `normalize_body`·`body_hash`, `lock_body_hash`(본문 해시별 트랜잭션 잠금), `is_duplicate`(24시간), `DuplicateFeedbackError` | `routes/feedback.py` | 완료 |
 | `app/services/top_matches.py` | `shown_publication()`(이번 주 공개본 → 바로 지난주 list·none → 지연 안내), `current_version()`, `get_current_top_matches()`, `current_kst_week()`·`week_of()` | `routes/top_matches.py`, 선정 | 완료(04) |
 | `app/services/top5_selection.py` | `run_attempt(trigger)`(주 잠금·시간 제한·데몬 스레드·게시 가드), `select_week`(일정 신선도·후보·순위표·근거 수집·프롬프트·Gemini·검증), `validate_picks`, `_publish`·`_fail`·`_start`, `reconcile_attempts`(중단 시도 정리), `retry_due`·`first_attempt_due`·`recovery_due`, `load_curation`, 00(2026-11-04): `gemini_generate()` 주 모델 오류 시 하위 모델 1회 대체·`AllModelsFailed`, 두 모델 실패 시 운영 알림, 응답 모델 기록 | `sync/top5.py` 2026-11-21(00): `stored_standings` — 06이 저장한 순위 표를 먼저 쓰고 수집된 적 없는 표만 `/standings` 요청. | 완료(04) | 01(2026-11-10): `_missed_week`·`reconcile_attempts`가 시도 기록이 없는 현재 주를 슬롯+60초 뒤 지연 공개(잠금 후 현재 주 재확인).
 | `app/services/match_detail.py` | `store_fixture_records`(06 개선: 경기 본체 저장 `upsert_fixture_items`를 통과한 항목만 이벤트·상세 블록 저장, 받아들인 경기 ID 반환 — 옛 `save_provider_items` 대체), `detail_fetch_due`·`ensure_records`(요청 시 1회 보충, 거부된 경기는 기존 기록 보존·실패 시각만 기록), `mark_record_failures`, `final_record_targets`(종료 전환 대상), `read_records`(블록 상태 판정·통계·라인업·평점 해석, 04 개선: 예정·연기는 외부 조회 없음, `_name()`으로 선수·감독 이름 HTML 엔티티 해제·영문 유지) | 라우트·`sync/fixtures.py` | 완료(04, 06 개선 보완) |
 | `app/services/head_to_head.py` | `fetch_meetings`·`fetch_form`(친선·미종료 제외, 범위 확대 1회), `ensure_meetings`·`ensure_form`(갱신 조건·쿨다운, `strict`는 TOP 5), `recent_form`·`result_for`, `read_head_to_head` | 라우트·TOP 5 | 완료(04, 08 재사용 가능) |
 | `app/services/reviews.py` | `list_reviews(sort)`(인기순·최신순·반응 수·유효 건수, 평균 없음), `review_open`(진행 중(SUSP 제외)·일반 종료만 공개·작성 가능 — 02 쓰기 API도 사용) | `routes/matches.py` | 완료(04, 02가 작성·반응·닉네임) |
+| `app/services/accounts.py` | 02: 인증번호 발송·확인(목적별), 가입(세 필수 확인 기록), 로그인·세션 회전·로그아웃, `reset_password`(인증 후 새 비밀번호·모든 세션 종료 — 기존과 같은 비밀번호도 허용, 2026-11-24 사용자 결정), `change_password`, `delete_account`. 잠금 순서: 계정 행 → 토큰·인증번호 행 | `routes/auth.py`·`me.py` | 완료(02) |
+| `app/services/auth_security.py` | 02: Argon2id 해시, JWT 접근 토큰(15분·`ver`), 인증번호 HMAC, 닉네임·비밀번호 규칙 | `accounts.py` | 완료(02) |
+| `app/services/mailer.py` | 02: Gmail SMTP(STARTTLS) 인증번호 메일, 설정 없으면 콘솔 발송(자동 테스트 전용) | `accounts.py` | 완료(02) |
+| `app/services/member_favorites.py` | 02: 회원 관심 팀 조회·등록(10팀 한도)·해제 | `routes/me.py` | 완료(02) |
+| `app/services/moderation.py` | 02: 평가 작성 제한 설정·해제(약관 제9조) | `app/moderation.py`(CLI `python -m app.moderation`) | 완료(02) |
+| `app/services/retention.py` | 02: 보관 기간 정리(인증번호 마지막 발송 30일, 만료·폐기 세션 30일, 의견 1년, 끝난 평가 작성 제한 해제), 단계별 커밋 | `sync/retention.py` | 완료(02) |
 | `app/services/match_status.py` | `map_status()`: 제공사 상태 → scheduled·live·finished·postponed·cancelled·abandoned·unknown, 종료 유형, 시각 확정 여부 | `services/fixtures.py` | 완료 |
 | `app/services/reference.py` | `normalize_name`, 대회·팀·참가 upsert, `apply_alias_seed`, `team_detail_lookup`(팀 상세 허용 집합 — 08: 팀 목록이 수집된 리그 소속만 true), `team_ref`·`competition_ref`·`crest`, 05: `managed_seasons`, 08: `upsert_teams`가 venue 블록의 있는 필드만 저장 | 전 03 서비스 | 완료 |
 | `app/services/results.py` | `supported_seasons`·`season_item`, `season_coverage`(`SeasonCoverage`: 실패·최초 미적재 구분), `finished_results`(시즌 종료 경기 최신순·대회·팀·페이지) | `routes/results.py`·`schedule.py` | 완료(05) |
@@ -194,6 +210,7 @@
 | `app/sync/scheduler.py` | `SCHEDULER_ENABLED`(전체) 또는 `NEWS_SCHEDULER_ENABLED`(뉴스만)일 때 APScheduler 시작, 중복·누락 실행 방지 | `main.py` | 완료 |
 | `app/sync/__main__.py` | CLI `python -m app.sync <job> [key=value] / --list` | `runner.py` | 완료 |
 | `app/sync/jobs.py` | 작업 모듈 import 지점(`fixtures`·`news`·`reference`, 04: `top5`, 06: `standings`) | `__main__.py`, `scheduler.py` | 완료(기능 채팅이 모듈 추가) |
+| `app/sync/retention.py` | 02: `retention` 매일 18:30 UTC | `services/retention.py` | 완료(02) |
 
 ### 테스트
 
@@ -223,6 +240,9 @@
 | `tests/test_team_detail.py` | 08 규칙 단위 테스트(DB 없이): 현직 감독·시작 전 제외, 선수단·시즌 기록 파싱과 잘린 응답 거부, 반기 분류·7/1 경계·KST 하루 1회, 이적 필터·원본 저장·`merge_transfers`((가) 이름만 복사 줄·(나) 재등록·반대 방향·상대 ID 없음·같은 날 두 팀), 표시 기준 B, 선수 기록 8개 대회·페이지 누락·같은 선수 반복 거부, 승부차기 결과, 프로필 응답 2026-11-20: 대회 마스터 선별(컵·슈퍼컵·클럽 월드컵 포함, 친선·미개최 제외), 판정(근거 있음·완전 수집 0경기·근거 부족·영입 이전 팀), 임대 복귀, 1군 기준, 출전 수 NULL 조합, 구단·대회 없는 줄, 같은 선수 묶음. 2026-11-21: 결정 B NULL 해석, `club_appearances_unknown` 합성 테스트 삭제. 2026-11-24: 중복 정리 응답 저장·실제 이동 누락 거부·허용 폭 경계·재임대 누락. |
 | `tests/test_team_detail_db.py` | `KICKTAB_DB_TESTS=1`일 때 08: 직접 URL 판정·링크 일치(소속 미확인), 영역 API 상태 코드, 선수단 합계 = 대회별 줄 합·평점 0 제외, 최근 5경기 순서, 승격 팀 not_participated, 반기·고정 규칙·Stones 1건·기준 B 표시, 잘린 응답 보존·실패 기록, 7/1 실패 재시도, 같은 날 두 팀 이적 저장, 경기장 부분 응답, 팀 뉴스·24개 상한, 반복 선수 페이지 기록 유지, 선수 기록 작업 단위(롤백) |. 06 비회원 개선(2026-11-20): 최근 5경기 = 공식 경기 원천(슈퍼컵·미지원 공식전 포함, 오래된 순, 요청 없음)·갱신 실패 시 기존 유지·미적재 시 저장 경기  2026-11-20: 합계 대회 범위, 아칸지 한 줄·이동 보존, 기타 이동 = 모두 not_played, 영입 확인 작업 저장·재시도, NULL 근거 방출 표시, 과거 2시즌 작업 단위. 2026-11-21: 결정 B 판정(NULL 줄의 득점·도움·평점). 2026-11-24: 사본 없는 응답이 저장 시즌을 교체, 절반 누락은 거부. |
 | `tests/test_top5_db.py` | `KICKTAB_DB_TESTS=1`일 때 첫 실패→재시도 공개, 두 번 실패→지연·알림 1회→수동 복구, 경기 없음, 오래된 일정 실패, 시간 초과 게시 차단, 후기 정렬·평균(롤백) |, 두 모델 실패 시 시도별 알림과 지연 알림 1회·대체 모델 응답 게시·기록(2026-11-04), 실행 누락 주 지연→수동 복구 교체·주 경계에서 지난주 공개 금지(2026-11-1 2026-11-21(00): 저장 순위 사용 회귀. |
+| `tests/test_auth_rules.py` | 02 규칙(DB 없이): 비밀번호·닉네임·이메일 규칙, Argon2id·토큰 해시·15분 접근 토큰, 메일(SMTP 없으면 미발송), 쿠키·CSRF·비회원 거부 |
+| `tests/test_auth_db.py` | `KICKTAB_DB_TESTS=1`일 때 02: 인증번호·가입·로그인·세션 회전·재사용 감지·비밀번호 찾기/변경·탈퇴·관심 팀 10팀·평가 제한, 잠금 순서 |
+| `tests/test_retention_db.py` | `KICKTAB_DB_TESTS=1`일 때 보관 기간 정리 단계별 |
 
 ## 프런트엔드 (`frontend/`)
 
@@ -237,6 +257,8 @@
 | `tests/team-detail.test.mjs` | 08 테스트(포지션순 기본 정렬, 누락값 두 방향 맨 뒤·같은 선수 집합, 정렬 전환, '—' 표시, 시즌 기록 행, 이적 유형 문구(금액은 완전 이적), 반기 기본값·시작 전 반기 대체, 경기장 표기) |
 | `tests/top5.test.mjs` | 01 테스트 5개(지난주 유지 시 실제 기간·준비 상태·대진 순서, 지연·경기 없음 문구 구분, 띠 고정 제목·배지 렌더, 일반 클릭 판정 `isPlainClick`, 중단 경기 문구 `statusNotes`·변경 일시 사유 중복 없음) |
 | `tests/mypage.test.mjs` | 09 테스트 7개(관심 팀 개수·한도, 팀 링크 규칙, 수정 날짜·KST, 비밀번호 오류 코드↔칸·로컬 판정 순서, 이메일 계정만 변경, 닫힌 경기 409) |
+| `tests/auth.test.mjs` | 02 입력 규칙·가입 상태 문구·`returnTo` 내부 경로 | 완료(02) |
+| `tests/auth-session.test.mjs` | 02 세션: 로그아웃·갱신 경합, 이전 세션 401 무시, `memberRequest` 복귀 | 완료(02) |
 | `tests/match-regressions.test.mjs` | 04 회귀 테스트(경기 정보 갱신 연동 기록 재조회·종료 1회, 상태별 영역, 타임라인 아이콘·문구, 최근 5경기 미리보기, 평가 건수만, 로고+팀명 링크, 선수 평점 카드, 중단 경기 타임라인만, 지연 경고 시계, TOP 5 교체 재시도 등), 실제 TS 모듈을 변환해 실행. 06 비회원 개선(2026-11-20): `formItems`(오래된 순·홈/원정 복원, 옛 `formPreview` 테스트 대체) | 완료(04, 개선 반영) |
 | `next.config.ts` | `cacheComponents`·`partialPrefetching`, `/api/*` → `BACKEND_ORIGIN` rewrites | 완료 |
 | `scripts/gen-api.mjs` | 백엔드 OpenAPI(실행 중 서버 또는 파일)로 `src/lib/api/schema.d.ts` 생성 | 완료 |
@@ -257,6 +279,7 @@
 | `teams/[id]/page.tsx` | `/teams/[id]` 팀 상세(정적 셸 + Suspense 안 `params`, 숫자 아닌 ID는 404 페이지) | `features/team-detail` | 완료(08) |
 | `matches/[id]/page.tsx` | `/matches/[id]` 경기 상세(정적 셸 + Suspense 안에서 params 확인, 숫자 ID만) | `features/match/MatchDetail` | 완료(04) |
 | `mypage/page.tsx` | `/mypage` 마이페이지(메타 제목 '마이페이지', `MyPage`) | `features/mypage` | 완료(09) |
+| `login/page.tsx`·`signup/page.tsx`·`password-reset/page.tsx` | 02: 로그인·회원가입·비밀번호 찾기(Suspense 안 폼) | `features/auth` | 완료(02) |
 | `not-found.tsx` | 없는 경로 안내 | — | 완료 |
 | `icon.svg` | 파비콘(로고 심벌 기반) | — | 완료 |
 
@@ -364,6 +387,14 @@
 | `feedback/FeedbackButton.tsx` | 의견 보내기 진입 버튼(모든 화면에서 푸터 하나) | 푸터 | 완료 |
 | `feedback/FeedbackDialog.tsx` | 의견 입력·검증·전송·실패/중복/요청 제한/성공 상태, 허니팟, 열기 단위 세션(지난 요청 결과가 새 초안을 바꾸지 않음), 전송 중 입력 잠금, 저장소 불가 안내 | `apiFetch`, `draft.ts` | 완료 |
 | `feedback/draft.ts` | 미전송 초안 sessionStorage 저장·복원, 저장 실패 여부 반환, `sameDraft` | `FeedbackDialog` | 완료 |
+| `auth/AuthForm.tsx` | 02: `AuthCard`(440px 카드·단계 줄), `Field`, `FormMessage`, `SocialButtons`(보조 버튼, 누르면 같은 화면 준비 중 안내) | 인증 화면 | 완료(02) |
+| `auth/LoginForm.tsx` | 02 로그인(52:2116): `/auth/me` 확인 후 `returnTo` 복귀·평가 의도 복원, '비밀번호 찾기'·'회원가입' 텍스트 버튼 | `/auth/login` | 완료(02) |
+| `auth/SignupForm.tsx` | 02 회원가입(52:2387): 이메일 인증·닉네임·비밀번호·세 필수 확인, '가입하기' 항상 주요(조건 전 비활성), 가입 후 자동 로그인 확인 중·실패 | `/auth/signup` | 완료(02) |
+| `auth/EmailCodeStep.tsx` | 02 이메일 인증번호: 가입은 같은 화면, 비밀번호 찾기는 단계형(1단계 '인증번호 받기' 주요, 2단계 이메일 칸 숨김·'이메일 다시 입력') — 10분·1분 재발송 | `/auth/email-codes` | 완료(02) |
+| `auth/PasswordResetForm.tsx` | 02 비밀번호 찾기 4단계(134:4077·134:4344·134:4633·134:5037): '인증번호 전송: 이메일', 1~3단계 '로그인으로 돌아가기', 완료 후 다시 로그인, 떠나면 1단계부터 | `/auth/password-reset` | 완료(02) |
+| `auth/session.ts`·`AuthSync.tsx` | 02 세션 상태(`useAuth`·`checkSession`·`logout`·`memberRequest`·세대 `authEpoch`), 회원 변경 시 회원 전용 캐시 제거 | `layout`·헤더·회원 화면 | 완료(02) |
+| `auth/returnTo.ts`·`rules.ts` | 02 내부 경로만 `returnTo`·평가 의도, 입력 규칙·가입 상태 문구 | 인증 화면 | 완료(02) |
+| `legal/documents.ts`·`LegalLink.tsx` | 02 약관·개인정보 문서 목록(공개 전 '보기 준비 중'), 가입 필수 확인 링크 | `SignupForm` | 완료(02)(공개는 배포 시) |
 
 ### 라이브러리 (`src/lib/`)
 
