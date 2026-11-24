@@ -1,6 +1,6 @@
 """Team detail rules without a database (chat 08, TEAM-001·002·005·006)."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -30,6 +30,7 @@ from app.services.team_detail import (
     parse_team_players,
     parse_transfers,
     pick_coach,
+    same_move,
     season_of,
 )
 
@@ -134,11 +135,68 @@ def test_a_cut_squad_or_transfer_season_is_refused():
     for new, stored in ((1, 27), (17, 0), (0, 0), (20, 31)):
         with pytest.raises(IncompleteData):
             check_squad(new, stored)
-    check_transfers(57, 59, 2026)  # the provider dropped a wrong entry or two
-    check_transfers(0, 0, 2026)
-    for new, stored in ((1, 59), (50, 59), (0, 3)):
+
+def stored_season(moves):
+    """`moves` distinct moves (2026, club id 1000+i), each stored twice: the provider's copy
+    re-dated a day later (the pairs the D-08-6 merge turns into one move)."""
+    rows = []
+    for i in range(moves):
+        day = date(2026, 7, 1 + i % 28)
+        for copy, shift in ((0, 0), (1, 1)):
+            rows.append(Transfer(
+                id=2 * i + copy + 1, player_id=500 + i, direction="out", counterpart_id=1000 + i,
+                counterpart_name=f"C{i}", type_raw="Transfer", season=2026, half=1,
+                transfer_date=day + timedelta(days=shift),
+            ))
+    return rows
+
+
+def answer_without(rows, missing):
+    """The provider's new answer: one copy per move (the later date), `missing` moves gone."""
+    later = [r for r in rows if r.id % 2 == 0]
+    return [Transfer(**{c: getattr(r, c) for c in (
+        "player_id", "direction", "counterpart_id", "counterpart_name", "type_raw", "season",
+        "half", "transfer_date")}) for r in later[missing:]]
+
+
+def test_one_entry_never_stands_for_two_loans_to_the_same_club():
+    # Loan out (Aug) · back (Dec) · out again (Feb) to club 300: when the answer drops the
+    # second loan, the first loan's entry does not cover it (self-review 2026-11-24).
+    def loan(player, direction, day, kind):
+        return Transfer(player_id=player, direction=direction, counterpart_id=300,
+                        counterpart_name="C300", type_raw=kind, season=2026,
+                        half=1 if day.month >= 6 else 2, transfer_date=day)
+
+    stored, answer = [], []
+    for player in (1, 2, 3):
+        first = loan(player, "out", date(2026, 8, 1), "Loan")
+        back = loan(player, "in", date(2026, 12, 20), "Return from loan")
+        again = loan(player, "out", date(2027, 2, 1), "Loan")
+        stored += [first, back, again]
+        answer += [first, back]
+    assert not same_move(stored[2], answer[0], {date(2026, 12, 20)})
+    # A copy re-dated a day later, with the loan return on the first day, is the same move.
+    assert same_move(loan(9, "out", date(2026, 6, 29), "Transfer"),
+                     loan(9, "out", date(2026, 6, 30), "Transfer"), {date(2026, 6, 29)})
+    with pytest.raises(IncompleteData):  # 3 lost loans of 9 moves > max(2, 10%)
+        check_transfers(stored, answer, 2026)
+
+
+def test_a_deduplicated_answer_is_stored_and_a_cut_one_refused():
+    # 2026-11-24: the provider stopped repeating moves — 40 rows → 20, the same 20 moves.
+    stored = stored_season(20)
+    check_transfers(stored, answer_without(stored, 0), 2026)
+    check_transfers([], [], 2026)
+    # Lost moves within max(2, 10%) are the provider dropping wrong entries ...
+    check_transfers(stored, answer_without(stored, 2), 2026)
+    many = stored_season(40)
+    check_transfers(many, answer_without(many, 4), 2026)  # 10% of 40
+    # ... beyond it the answer is cut and the stored season is kept.
+    for rows, missing in ((stored, 3), (many, 5), (stored, 20)):
         with pytest.raises(IncompleteData):
-            check_transfers(new, stored, 2026)
+            check_transfers(rows, answer_without(rows, missing), 2026)
+    with pytest.raises(IncompleteData):
+        check_transfers(stored_season(3), [], 2026)
 
 
 @pytest.mark.parametrize(

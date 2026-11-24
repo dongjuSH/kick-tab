@@ -421,6 +421,27 @@ def test_empty_answers_never_replace_stored_rows(session):
     )
 
 
+def test_an_answer_without_repeated_entries_replaces_the_stored_season(session):
+    """2026-11-24: the provider sends each move once — fewer rows, no move lost — and the
+    season is replaced; the same answer missing most moves is still refused."""
+    fields = ("player_id", "player_name", "transfer_date", "direction", "counterpart_id",
+              "counterpart_name", "counterpart_logo", "type_raw", "season", "half")
+    once = [{c: getattr(m, c) for c in fields}
+            for m in detail.merge_transfers(detail.read_transfers(session, CITY, 2026))]
+    # Stored as the provider used to send it: every move once more, a day later.
+    again = [{**m, "transfer_date": m["transfer_date"] + timedelta(days=1)} for m in once
+             if m["counterpart_id"] is not None]
+    detail.save_transfers(session, CITY, 2026, [*once, *again], datetime.now(UTC))
+    session.flush()
+    with pytest.raises(IncompleteData):
+        detail.save_transfers(session, CITY, 2026, once[: len(once) // 2], datetime.now(UTC))
+    detail.save_transfers(session, CITY, 2026, once, datetime.now(UTC))
+    session.flush()
+    assert _count(
+        session, Transfer, Transfer.team_id == CITY, Transfer.season == 2026
+    ) == len(once)
+
+
 def test_team_news_lists_linked_articles_only(session, client):
     now = datetime.now(UTC)
     mine = NewsArticle(
