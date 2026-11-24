@@ -491,25 +491,61 @@ def save_statistics(
     mark_success(session, team_id, season, "statistics", now, 1)
 
 
-def check_transfers(new: int, stored: int, season: int) -> None:
-    """A season's moves only accumulate (Codex 1차 지적 1): the provider may drop a wrong
-    entry or two, but a larger drop (more than max(TRANSFER_SHRINK_ALLOWANCE, 10%)) is a cut
-    answer and keeps the stored season."""
-    allowed = max(TRANSFER_SHRINK_ALLOWANCE, int(stored * TRANSFER_SHRINK_TOLERANCE))
-    if stored - new > allowed:
-        raise IncompleteData(f"transfers: {new} rows would replace {stored} of {season}")
+def same_move(a: Transfer, b: Transfer, other_way: Collection[date] = ()) -> bool:
+    """The same move in two answers, by the D-08-6 identity: same player and direction, and
+    either the same club id in the same season with no move the other way strictly between
+    their dates (`other_way` — the provider re-dates its copies, but loan out · back · out
+    again to one club are separate moves), or, when a club id is missing on one side, the
+    same date (a name-only copy, or two unnamed-id clubs with the same name)."""
+    if (a.player_id, a.direction) != (b.player_id, b.direction):
+        return False
+    if a.counterpart_id is not None and b.counterpart_id is not None:
+        low, high = sorted((a.transfer_date, b.transfer_date))
+        return (
+            a.counterpart_id == b.counterpart_id
+            and a.season == b.season
+            and not any(low < day < high for day in other_way)
+        )
+    return a.transfer_date == b.transfer_date and (
+        a.counterpart_id is not None
+        or b.counterpart_id is not None
+        or a.counterpart_name == b.counterpart_name
+    )
+
+
+def check_transfers(stored: Sequence[Transfer], new: Sequence[Transfer], season: int) -> None:
+    """A season's moves only accumulate (Codex 1차 지적 1). Compared move by move after the
+    D-08-6 merge (2026-11-24): a stored move counts as lost only when the new answer has no
+    entry of the same move (`same_move`, with the player's moves the other way in either
+    answer). Fewer rows because the provider stopped repeating a move (it now keeps one
+    copy, often dated a day later) lose nothing. Up to max(TRANSFER_SHRINK_ALLOWANCE, 10% of
+    the stored moves) lost moves are taken as the provider dropping wrong entries; more is a
+    cut answer and keeps the stored season."""
+    days: dict[tuple[int, str], set[date]] = {}
+    for r in (*stored, *new):
+        days.setdefault((r.player_id, r.direction), set()).add(r.transfer_date)
+    opposite = {"in": "out", "out": "in"}
+    moves = merge_transfers(stored)
+    lost = [
+        m for m in moves
+        if not any(
+            same_move(m, n, days.get((m.player_id, opposite[m.direction]), ())) for n in new
+        )
+    ]
+    allowed = max(TRANSFER_SHRINK_ALLOWANCE, int(len(moves) * TRANSFER_SHRINK_TOLERANCE))
+    if len(lost) > allowed:
+        raise IncompleteData(
+            f"transfers: {len(lost)} of {len(moves)} moves of {season} missing from the answer"
+        )
 
 
 def save_transfers(
     session: Session, team_id: int, season: int, rows: Sequence[dict[str, Any]], now: datetime
 ) -> None:
     """Replace one season of the team's transfers (only rows of that season are given)."""
-    stored = session.scalar(
-        select(func.count()).select_from(Transfer).where(
-            Transfer.team_id == team_id, Transfer.season == season
-        )
-    ) or 0
-    check_transfers(len(rows), stored, season)
+    check_transfers(
+        read_transfers(session, team_id, season), [Transfer(**r) for r in rows], season
+    )
     session.execute(delete(Transfer).where(Transfer.team_id == team_id, Transfer.season == season))
     if rows:
         session.execute(
