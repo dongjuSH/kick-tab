@@ -46,7 +46,7 @@ export function AccountPanel({ member }: { member: Member }) {
           </Button>
         )}
         <div className="border-t border-line pt-4">
-          <Button variant="ghost" fullWidth onClick={() => setDialog("withdraw")}>
+          <Button variant="text" fullWidth onClick={() => setDialog("withdraw")}>
             회원 탈퇴
           </Button>
         </div>

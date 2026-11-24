@@ -187,14 +187,14 @@ export function ReviewComposer({
             <Button variant="secondary" disabled={pending} onClick={() => setConfirmDelete(false)}>
               취소
             </Button>
-            <Button variant="primary" disabled={pending} onClick={remove}>
+            <Button variant="danger" disabled={pending} onClick={remove}>
               {pending ? "삭제 중…" : "삭제"}
             </Button>
           </div>
         ) : (
           <div className="flex justify-end gap-2">
             <Button
-              variant="secondary"
+              variant="text"
               disabled={Boolean(restrictedUntil)}
               onClick={() => {
                 setText(mine.body);
@@ -204,7 +204,7 @@ export function ReviewComposer({
             >
               수정
             </Button>
-            <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
+            <Button variant="text" onClick={() => setConfirmDelete(true)}>
               삭제
             </Button>
           </div>

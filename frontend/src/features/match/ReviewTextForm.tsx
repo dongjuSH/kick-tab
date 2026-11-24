@@ -76,7 +76,7 @@ export function ReviewTextForm({
           {text.length} / {REVIEW_MAX}
         </span>
         {onCancel && (
-          <Button variant="ghost" disabled={pending} onClick={onCancel}>
+          <Button variant="secondary" disabled={pending} onClick={onCancel}>
             취소
           </Button>
         )}

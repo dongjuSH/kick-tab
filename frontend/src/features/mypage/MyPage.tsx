@@ -46,12 +46,15 @@ function MyPageBody() {
           로그인이 필요합니다
         </h2>
         <p className="text-body text-fg-secondary">로그인 후 현재 화면으로 돌아와 이용할 수 있어요.</p>
-        <ButtonLink href={loginHref("/mypage")} variant="primary" fullWidth>
-          로그인하기
-        </ButtonLink>
-        <ButtonLink href="/" variant="ghost" fullWidth>
-          계속 둘러보기
-        </ButtonLink>
+        {/* Same order as the login dialog: keep browsing (secondary) left, log in (primary) right. */}
+        <div className="grid grid-cols-2 gap-2">
+          <ButtonLink href="/" variant="secondary">
+            계속 둘러보기
+          </ButtonLink>
+          <ButtonLink href={loginHref("/mypage")} variant="primary">
+            로그인하기
+          </ButtonLink>
+        </div>
       </section>
     );
   }

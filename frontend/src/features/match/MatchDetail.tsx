@@ -131,7 +131,7 @@ export function MatchDetail({ id }: { id: number }) {
       {query.isError && (
         <div role="alert" className="rounded-control bg-warning-bg p-3 text-small text-warning">
           최신 경기 정보로 갱신하지 못했습니다. 마지막으로 확인한 정보를 보여줍니다.
-          <Button variant="ghost" onClick={() => void query.refetch()}>다시 확인</Button>
+          <Button variant="secondary" onClick={() => void query.refetch()}>다시 확인</Button>
         </div>
       )}
       <StatusNotice info={info} />

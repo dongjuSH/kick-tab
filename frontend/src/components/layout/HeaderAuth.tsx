@@ -9,8 +9,8 @@ import { isMemberOnlyPath } from "@/features/auth/returnTo";
 
 /**
  * Header auth area (guest: Figma 133:4077 / 133:4134; member: 62:1475 desktop, 81:3209
- * mobile menu). Guest: 로그인 ghost + 회원가입 primary. Member: 마이페이지 ghost + 로그아웃
- * secondary. While the session is being checked the same space stays empty, so a member never
+ * mobile menu, button kinds 691:8003). Guest: 로그인 secondary + 회원가입 primary. Member:
+ * 마이페이지 and 로그아웃 both secondary. While the session is being checked the same space stays empty, so a member never
  * sees the guest buttons flash. The header and the mobile menu share this component.
  */
 export function HeaderAuth({
@@ -36,7 +36,7 @@ export function HeaderAuth({
   if (auth.status === "guest") {
     return (
       <div className={box}>
-        <ButtonLink href="/login" variant="ghost" className={item} onClick={onNavigate}>
+        <ButtonLink href="/login" variant="secondary" className={item} onClick={onNavigate}>
           로그인
         </ButtonLink>
         <ButtonLink href="/signup" variant="primary" className={item} onClick={onNavigate}>
@@ -62,7 +62,7 @@ export function HeaderAuth({
   return (
     <div className={cx("relative", layout === "menu" && "w-full")}>
       <div className={box}>
-        <ButtonLink href="/mypage" variant="ghost" className={item} onClick={onNavigate}>
+        <ButtonLink href="/mypage" variant="secondary" className={item} onClick={onNavigate}>
           마이페이지
         </ButtonLink>
         <Button variant="secondary" className={item} disabled={state === "busy"} onClick={signOut}>

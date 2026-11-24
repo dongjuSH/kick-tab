@@ -47,19 +47,15 @@ export function WithdrawDialog({ open, onClose }: { open: boolean; onClose: () =
           계정·관심 팀·경기 평가·반응이 삭제되고 복구되지 않습니다. 보낸 의견은 계정 연결을 해제한 뒤 보관합니다. 다시
           가입해도 이전 데이터는 복구되지 않습니다. 탈퇴 완료 후 경기 일정으로 이동합니다.
         </p>
-        <Button variant="primary" fullWidth disabled={busy} onClick={close}>
-          계속 이용하기
-        </Button>
-        {/* Figma 62:1800: red outline for the destructive choice. */}
-        <button
-          type="button"
-          disabled={busy}
-          aria-busy={busy || undefined}
-          onClick={withdraw}
-          className="inline-flex min-h-11 w-full items-center justify-center rounded-control border border-error bg-surface px-4 text-body font-medium text-error hover:bg-error-bg disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy ? "탈퇴 처리 중…" : "탈퇴 확인"}
-        </button>
+        {/* Figma 62:1800: keep using (secondary) left, withdraw (danger) right, same width. */}
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" disabled={busy} onClick={close}>
+            계속 이용하기
+          </Button>
+          <Button variant="danger" disabled={busy} aria-busy={busy || undefined} onClick={withdraw}>
+            {busy ? "탈퇴 처리 중…" : "탈퇴 확인"}
+          </Button>
+        </div>
         {phase === "failed" && (
           <p role="alert" className="text-small text-error">
             탈퇴하지 못했습니다. 잠시 후 다시 시도해 주세요.

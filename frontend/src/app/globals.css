@@ -17,7 +17,7 @@
   --kt-action-primary: #2563eb;
   --kt-action-hover: #1d4ed8;
   --kt-action-soft: #dbeafe;
-  --kt-action-disabled: #e2e8f0;
+  --kt-text-disabled: #94a3b8;
   --kt-border-default: #e2e8f0;
   --kt-border-strong: #cbd5e1;
   --kt-border-focus: #93c5fd;
@@ -118,7 +118,7 @@
   --color-action: var(--kt-action-primary);
   --color-action-hover: var(--kt-action-hover);
   --color-action-soft: var(--kt-action-soft);
-  --color-action-disabled: var(--kt-action-disabled);
+  --color-fg-disabled: var(--kt-text-disabled);
   --color-line: var(--kt-border-default);
   --color-line-strong: var(--kt-border-strong);
   --color-focus: var(--kt-border-focus);
@@ -185,9 +185,13 @@
     cursor: pointer;
   }
 
-  /* 3px focus ring for keyboard users (Figma 55:27). */
+  /*
+   * 3px focus ring for keyboard users (Figma 55:27, 691:8003 Focus). Uses the source token:
+   * the --color-focus theme variable is not emitted on :root (empty in the browser), so the
+   * ring had fallen back to the text colour.
+   */
   :focus-visible {
-    outline: 3px solid var(--color-focus);
+    outline: 3px solid var(--kt-border-focus);
     outline-offset: 2px;
   }
 }
@@ -198,4 +202,19 @@
   /* Content max 1280px; 24px gutters on small screens, 16px on mobile. */
   max-width: calc(1280px + 2 * var(--kt-gutter));
   padding-inline: var(--kt-gutter);
+}
+
+/*
+ * Pressed/hover overlay of the text colour over a button's own fill (Figma 691:8003: primary
+ * pressed 12%, danger hover 8% / pressed 18%). An inset shadow paints over the background and
+ * under the label, so the fill colour itself stays a token.
+ */
+@utility kt-press-8 {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--kt-text-primary) 8%, transparent);
+}
+@utility kt-press-12 {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--kt-text-primary) 12%, transparent);
+}
+@utility kt-press-18 {
+  box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--kt-text-primary) 18%, transparent);
 }

@@ -218,7 +218,7 @@ export function ResultsSection() {
           <Skeleton className="h-11 w-full max-w-[175px] sm:max-w-[220px]" />
         )}
         <span className="flex-1" />
-        <Button variant="ghost" className="min-w-[76px] shrink-0 whitespace-nowrap" onClick={reset}>
+        <Button variant="secondary" className="min-w-[76px] shrink-0 whitespace-nowrap" onClick={reset}>
           초기화
         </Button>
       </div>

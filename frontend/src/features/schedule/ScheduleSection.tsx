@@ -202,7 +202,7 @@ export function ScheduleSection() {
   const rangeEnd = (teamMode ? byTeam.data?.data.end : null) ?? period?.end ?? null;
   const range = rangeStart && rangeEnd ? formatDateRange(rangeStart, rangeEnd) : null;
   const retry = (
-    <Button variant="ghost" onClick={() => query.refetch()}>
+    <Button variant="secondary" onClick={() => query.refetch()}>
       다시 시도
     </Button>
   );
@@ -219,7 +219,7 @@ export function ScheduleSection() {
   ) : null;
 
   const periodRetry = (
-    <Button variant="ghost" onClick={() => availability.refetch()}>
+    <Button variant="secondary" onClick={() => availability.refetch()}>
       다시 시도
     </Button>
   );
@@ -392,7 +392,7 @@ export function ScheduleSection() {
         <h2 id="schedule-title" className="flex-1 text-title font-bold">
           {teamMode ? "팀 경기 일정" : "전체 경기 일정"}
         </h2>
-        <Button variant="ghost" onClick={reset}>
+        <Button variant="secondary" onClick={reset}>
           초기화
         </Button>
       </div>

@@ -484,7 +484,7 @@ function RefreshFailure({ onRetry }: { onRetry: () => void }) {
   return (
     <div role="alert" className="mt-3 rounded-control bg-warning-bg p-3 text-small text-warning">
       최신 기록으로 갱신하지 못했습니다. 마지막으로 확인한 기록을 보여줍니다.
-      <Button variant="ghost" onClick={onRetry}>다시 확인</Button>
+      <Button variant="secondary" onClick={onRetry}>다시 확인</Button>
     </div>
   );
 }

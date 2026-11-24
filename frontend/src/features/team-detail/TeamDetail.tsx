@@ -194,7 +194,7 @@ function TeamHeader({
       {refreshFailed && (
         <div role="alert" className="flex flex-wrap items-center gap-2 rounded-control bg-warning-bg px-3 py-2 text-small text-warning">
           <span className="min-w-0 flex-1">팀 정보를 다시 확인하지 못했습니다. 마지막으로 확인한 정보입니다.</span>
-          <Button variant="ghost" onClick={onRetry}>다시 시도</Button>
+          <Button variant="secondary" onClick={onRetry}>다시 시도</Button>
         </div>
       )}
       <div className="flex items-center gap-3 lg:gap-4">

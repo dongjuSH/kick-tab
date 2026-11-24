@@ -130,11 +130,11 @@ export function PasswordDialog({ open, onClose, onDone }: { open: boolean; onClo
             {PASSWORD_FAILED_TEXT}
           </p>
         )}
-        <div className="flex gap-2">
-          <Button fullWidth className="flex-1" disabled={saving} onClick={close}>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" disabled={saving} onClick={close}>
             취소
           </Button>
-          <Button type="submit" variant="primary" fullWidth className="flex-1" disabled={saving || !filled}>
+          <Button type="submit" variant="primary" disabled={saving || !filled}>
             {saving ? "변경 중…" : phase === "failed" ? "다시 시도" : "비밀번호 변경"}
           </Button>
         </div>
