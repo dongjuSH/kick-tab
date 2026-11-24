@@ -159,7 +159,7 @@ function FavoriteRow({
         )}
         {note && <span className="text-small text-fg-muted">{note}</span>}
       </span>
-      <Button variant="ghost" aria-label={`${name} 관심 팀 삭제`} disabled={saving} onClick={onRemove}>
+      <Button variant="text" aria-label={`${name} 관심 팀 삭제`} disabled={saving} onClick={onRemove}>
         삭제
       </Button>
     </li>

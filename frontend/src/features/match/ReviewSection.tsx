@@ -198,12 +198,15 @@ export function ReviewSection({
       <Dialog open={loginPrompt && !member} onClose={() => setLoginPrompt(false)} title="로그인이 필요합니다" layout="responsive" width={375}>
         <div className="flex flex-col gap-4">
           <p className="text-body text-fg-secondary">로그인 후 현재 화면으로 돌아와 이용할 수 있어요.</p>
-          <ButtonLink href={loginTarget} variant="primary" fullWidth onClick={() => setLoginPrompt(false)}>
-            로그인하기
-          </ButtonLink>
-          <Button variant="ghost" fullWidth onClick={() => setLoginPrompt(false)}>
-            계속 둘러보기
-          </Button>
+          {/* Cancel left (secondary), action right (primary), same width (Figma 62:1939 / 62:1702). */}
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" onClick={() => setLoginPrompt(false)}>
+              계속 둘러보기
+            </Button>
+            <ButtonLink href={loginTarget} variant="primary" onClick={() => setLoginPrompt(false)}>
+              로그인하기
+            </ButtonLink>
+          </div>
         </div>
       </Dialog>
     </section>

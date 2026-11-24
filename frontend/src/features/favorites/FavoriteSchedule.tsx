@@ -70,7 +70,7 @@ export function FavoriteSchedule() {
   // never "no upcoming matches" and a shown list may be incomplete.
   const failed = failedNames(schedule.data?.meta.failedCompetitionIds ?? [], competitions.data);
   const retry = (
-    <Button variant="ghost" onClick={() => schedule.refetch()}>
+    <Button variant="secondary" onClick={() => schedule.refetch()}>
       다시 시도
     </Button>
   );
@@ -133,7 +133,7 @@ export function FavoriteSchedule() {
           <div role="alert" className="flex flex-col gap-2 rounded-control bg-error-bg p-4">
             <p className="text-body font-bold text-error">관심 팀을 저장하지 못했습니다</p>
             <p className="text-small text-fg-secondary">기존 목록을 유지했습니다. 다시 시도해 주세요.</p>
-            <Button variant="ghost" onClick={() => run(failedChange)}>
+            <Button variant="secondary" onClick={() => run(failedChange)}>
               다시 시도
             </Button>
           </div>
@@ -155,7 +155,7 @@ export function FavoriteSchedule() {
                     <TeamCrest src={team?.crestUrl ?? null} name={name} size={20} />
                     <span className="min-w-0 flex-1 truncate text-body font-medium text-fg">{name}</span>
                     <Button
-                      variant="ghost"
+                      variant="text"
                       aria-label={`${name} 관심 팀 해제`}
                       disabled={saving}
                       onClick={() => run(() => favorites.remove(id))}

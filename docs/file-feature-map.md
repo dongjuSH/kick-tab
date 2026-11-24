@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-24 · 01 공통 버튼 체계·헤더·팝업 버튼 통일(자체 검수·`dev` 병합):** 프런트 `components/ui/Button.tsx`(`variant` primary·secondary·text·danger — `ghost` 삭제·`text`로 이름 변경, 5상태: 호버·누름(`:active`)은 `not-disabled:`만, 비활성 `text-fg-disabled`)·`app/globals.css`(`--kt-text-disabled`/`--color-fg-disabled` 추가, 쓰지 않게 된 `--kt-action-disabled` 삭제, 누름·호버 겹침 `kt-press-8`·`12`·`18`, 전역 포커스 외곽선을 `--kt-border-focus` 직접 참조로 복구)·`layout/HeaderAuth.tsx`(로그인·마이페이지 보조)·팝업 버튼 같은 폭 2칸(`match/ReviewSection.tsx` 로그인 안내, `mypage/WithdrawDialog.tsx` — 빨간 테두리 전용 버튼 삭제·위험 종류, `mypage/MyPage.tsx` 비로그인 카드, `mypage/PasswordDialog.tsx`)·종류 정리(`favorites/FavoriteSchedule.tsx`, `match/HeadToHeadSection.tsx`·`MatchDetail.tsx`·`MatchRecords.tsx`·`ReviewComposer.tsx`·`ReviewTextForm.tsx`, `mypage/AccountPanel.tsx`·`FavoriteTeams.tsx`·`MyReviews.tsx`, `results/ResultsSection.tsx`, `schedule/ScheduleSection.tsx`, `team-detail/TeamDetail.tsx`).
+
 **2026-11-24 · 08 이적 갱신 실패 결함 수정(자체 교차 검증·`dev` 병합):** 백엔드 `services/team_detail.py`(`same_move` 새로, `check_transfers`를 D-08-6 정리 후 이동 단위 비교로), 테스트 `tests/test_team_detail.py`·`tests/test_team_detail_db.py`.
 
 **2026-11-23 · 09 마이페이지(Codex 교차 검증 통과·`dev` 병합):** 프런트 `app/mypage/page.tsx`(새), `features/mypage/`(새 — `MyPage`·`FavoriteTeams`·`MyReviews`·`AccountPanel`·`PasswordDialog`·`WithdrawDialog`·`MyCard`·`model.ts`·`queries.ts`), `features/match/ReviewTextForm.tsx`(새 — 경기 상세·마이페이지 공용 평가 입력 폼)·`ReviewRestriction.tsx`(새 — 작성 제한 안내·만료 재확인 공용), `ReviewComposer.tsx`·`ReviewSection.tsx`(공용 폼·`memberRequest`, 로그인 복귀 포커스), `features/auth/session.ts`(세션 세대 `authEpoch`·`signedOut`·`memberRequest` — 이전 세션의 늦은 응답·401 무시, 로그아웃 정리), `features/favorites/useFavorites.ts`(`memberFavoritesQuery` export·세대 확인), `components/ui/Dialog.tsx`(`closeDisabled`·`sheetInset`), `lib/api/query-keys.ts`(`me.reviews`)·`types.ts`(`MyReview`·`PasswordChange`). 테스트 `tests/mypage.test.mjs`(새)·`auth-session.test.mjs`·`match-regressions.test.mjs`(세션 경합·로그인 복귀 포커스), 백엔드 `tests/test_auth_db.py`(닫힌 경기 수정 409·삭제). 새 서버 API·마이그레이션 없음(02 API 사용).
@@ -245,7 +247,7 @@
 | 파일 | 역할 | 연결 | 상태 |
 | --- | --- | --- | --- |
 | `layout.tsx` | `lang="ko"`, 글꼴, 메타데이터, Provider·의견 Provider·헤더·`main`·푸터 배치 | 아래 컴포넌트 전부 | 완료 |
-| `globals.css` | Figma 색상 토큰(`--kt-*`)·Tailwind 테마(색·글자·반경, 03: `rounded-tile`), 포커스 3px, `kt-container`, 버튼류 포인터 커서(03) | 전 컴포넌트 | 완료 |
+| `globals.css` | Figma 색상 토큰(`--kt-*`)·Tailwind 테마(색·글자·반경, 03: `rounded-tile`), 포커스 3px(01: `--kt-border-focus` 직접 참조), `kt-container`, 버튼류 포인터 커서(03), 01: 비활성 글자 `--kt-text-disabled`·버튼 겹침 `kt-press-8`·`12`·`18` | 전 컴포넌트 | 완료 |
 | `providers.tsx` | TanStack Query 클라이언트(4xx 재시도 안 함) | `layout.tsx` | 완료 |
 | `page.tsx` | 메인: 일정(Suspense)·관심 팀 일정·뉴스·5대 리그 간소 순위 그리드(데스크톱 오른쪽 열 관심 팀 아래, 모바일 뉴스 다음) | `features/schedule`·`favorites`·`news`·`standings` | 완료(06 간소 순위) |
 | `news/original/page.tsx` | `/news/original?id=` 원문 이동 전환 화면(NEWS-004) | `OriginalRedirect` | 완료 |
@@ -262,7 +264,7 @@
 
 | 파일 | 역할 | 상태 |
 | --- | --- | --- |
-| `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, primary·secondary·ghost | 완료 |
+| `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, 01(2026-11-24, Figma `691:8003`): `variant` primary·secondary·text·danger × 기본·호버·누름(`:active`)·비활성·포커스 — 용도는 guide §2 공통 UI | 완료 |
 | `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning·error(04, 최근 흐름 '패'), small 12px·caption 11px) | 완료 |
 | `Pagination.tsx` | 페이지 분할(Figma 530:21586·530:21659, 2026-11-20): 한 줄 `< 1 2 3 … 420 >` — 테두리 없는 44px 화살표(양 끝 비활성·35%), 1·마지막 번호 고정, 사이는 현재 페이지 주변 번호와 '…', 번호 수는 줄 폭으로 3~9개(`numbersFor`), 카드 좌우 여백으로 12px씩(`-mx-3`), `aria-current`. 지난 경기·팀 탐색 공통 | 완료(05) |
 | `Tabs.tsx` | 탭(Figma Tab navigation: 44px·선택 굵은 파랑+밑줄·가로 스크롤, ARIA tabs·방향키/Home/End), `tabId`·`tabPanelId` | 완료(04, 06: `value` null = 선택 없음·첫 탭 Tab 순서, 스크롤 막대 숨김, 08: 항목 `disabled`(흐리게·클릭·방향키 건너뜀·`aria-disabled`)·오른쪽 `trailing` 문구) |

@@ -34,7 +34,7 @@ function FormRow({ name, block, onRetry }: { name: string; block: FormBlock; onR
       ) : (
         <span className="text-small text-fg-muted">
           {block.status === "unavailable" ? "최근 경기 정보를 불러오지 못했습니다." : "최근 공식 경기 기록이 없습니다."}
-          {block.status === "unavailable" && <Button variant="ghost" onClick={onRetry}>다시 확인</Button>}
+          {block.status === "unavailable" && <Button variant="secondary" onClick={onRetry}>다시 확인</Button>}
         </span>
       )}
     </div>
@@ -102,7 +102,7 @@ export function HeadToHeadSection({ info }: { info: MatchInfo }) {
         {query.isError && (
           <p role="alert" className="text-small text-warning">
             최신 상대 전적으로 갱신하지 못했습니다. 마지막으로 확인한 정보를 보여줍니다.
-            <Button variant="ghost" onClick={retry}>다시 확인</Button>
+            <Button variant="secondary" onClick={retry}>다시 확인</Button>
           </p>
         )}
         {list.length ? (

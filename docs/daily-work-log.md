@@ -1,5 +1,20 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-24 (화) — 01 공통 버튼 체계·헤더·팝업 버튼 통일(데스크탑 검수)
+
+브랜치 `feat/01-header-footer`(최신 `dev` f2b1428 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: Figma `KickTab/Button · 4종 × 5상태`(`691:8003`, `55:27` 안), 헤더 `49:58`, 모바일 메뉴 `62:1427`·`62:1475`·`81:3209`, 팝업 `62:1800`·`62:1939`·`62:1702`·`643:658`·`643:755`·`187:1946`. Codex 교차 검증을 쓸 수 없어 사용자 결정으로 자체 검수 후 마무리(보고할 이상 없음, 주석 2곳만 다듬음).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 버튼 4종 | `frontend/src/components/ui/Button.tsx`(`ButtonVariant` primary·secondary·text·danger, `VARIANTS`), `src/app/globals.css`(`--kt-text-disabled`·`--color-fg-disabled`, `kt-press-8`·`12`·`18`, `--kt-action-disabled` 삭제) | 주요·보조·텍스트·위험 × 기본·호버·누름·비활성·포커스를 Figma 값대로. 누름은 `:active`, 겹침은 안쪽 그림자로 토큰 색 유지, 호버·누름은 비활성일 때 적용 안 함 |
+| 포커스 외곽선 | `globals.css` 전역 `:focus-visible` | `--color-focus`가 `:root`에 없어(브라우저 확인: 빈 값) 외곽선이 글자색으로 그려지던 앱 전체 문제 → `--kt-border-focus`(#93c5fd) 직접 참조 |
+| 사용처 종류 | `HeaderAuth.tsx`, `FavoriteSchedule.tsx`, `HeadToHeadSection.tsx`, `MatchDetail.tsx`, `MatchRecords.tsx`, `ReviewComposer.tsx`, `ReviewTextForm.tsx`, `AccountPanel.tsx`, `FavoriteTeams.tsx`, `MyReviews.tsx`, `ResultsSection.tsx`, `ScheduleSection.tsx`, `TeamDetail.tsx` | 보조: 다시 확인·다시 시도·초기화·취소·헤더 로그인/마이페이지/로그아웃. 텍스트: 줄 안의 해제·삭제·수정, 회원 탈퇴. 위험: 평가 삭제 확인 '삭제' 2곳·탈퇴 확인 |
+| 팝업 버튼 | `ReviewSection.tsx`(로그인 안내), `WithdrawDialog.tsx`(빨간 테두리 전용 버튼 삭제), `MyPage.tsx`(비로그인 카드), `PasswordDialog.tsx` | [취소·계속(보조) \| 실행(주요·위험)] 한 줄 같은 폭. `flex-1`은 테두리 있는 보조가 2px 넓어져 `grid grid-cols-2` |
+
+- **실제 확인(헤드리스 Edge·3000):** 1920·375에서 비회원·회원(로그인·`/me/*` 응답 모의, 쓰기 요청 차단) 헤더·모바일 메뉴, 비로그인 마이페이지, 로그인 안내(경기 1557473 반응 버튼), 탈퇴, 비밀번호 변경, 내 평가·경기 상세 평가 삭제 확인. 팝업 두 버튼 같은 폭(159/159, 비밀번호 211/211·375 167/167). 4종 계산값: 기본·호버·누름·비활성이 Figma 값과 일치, 비활성 호버 무변화·`not-allowed`, 높이 44·반경 8·14px 500, 키보드 포커스 3px #93c5fd. 콘솔 오류 0.
+- **범위 밖(변경 없음):** 칩·날짜 막대·페이지 번호·탭, 버튼 위치(03·05 담당). 대회 선택·의견 보내기는 이미 규칙대로.
+- **검사:** 프런트 lint·`tsc --noEmit`·`npm test` 91·build 통과. 외부 호출 0회.
+
 ## 2026-11-24 (화) — 08 이적 갱신 실패 결함 수정
 
 브랜치 `feat/08-team-detail`(최신 `dev` f8c42a9 — 09 마이페이지 병합 포함 — 병합 후 작업)에 커밋·push 후 `dev` 병합. Codex 교차 검증을 쓸 수 없어 자체 교차 검증으로 대신했다.

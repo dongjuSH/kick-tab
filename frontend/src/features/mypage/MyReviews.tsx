@@ -177,7 +177,7 @@ function ReviewRow({ review, restricted }: { review: MyReview; restricted: boole
                 <>
                 <Button
                   ref={editButton}
-                  variant="ghost"
+                  variant="text"
                   disabled={restricted}
                   aria-label={`${title} 평가 수정`}
                   onClick={() => {
@@ -190,7 +190,7 @@ function ReviewRow({ review, restricted }: { review: MyReview; restricted: boole
                 </Button>
                 <Button
                   ref={deleteButton}
-                  variant="ghost"
+                  variant="text"
                   aria-label={`${title} 평가 삭제`}
                   onClick={() => {
                     setError(null);
@@ -211,7 +211,7 @@ function ReviewRow({ review, restricted }: { review: MyReview; restricted: boole
                 <Button ref={keepButton} variant="secondary" disabled={pending} onClick={back}>
                   취소
                 </Button>
-                <Button variant="primary" disabled={pending} onClick={remove} aria-busy={pending || undefined}>
+                <Button variant="danger" disabled={pending} onClick={remove} aria-busy={pending || undefined}>
                   {pending ? "삭제 중…" : "삭제"}
                 </Button>
               </div>
