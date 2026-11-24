@@ -15,7 +15,7 @@ import { rememberReviewIntent, reviewIntent, safeReturnTo } from "./returnTo";
 import {
   NICKNAME_HINT,
   PASSWORD_HINT,
-  nicknameValid,
+  nicknameError,
   passwordFieldErrors,
   signupStatus,
   type Confirmations,
@@ -69,7 +69,7 @@ export function SignupForm() {
 
   const status = signupStatus({ verified: verified !== null, nickname, password, passwordConfirm, confirmations });
   const local = passwordFieldErrors(password, passwordConfirm);
-  const nicknameError = fieldErrors.nickname || (nickname && !nicknameValid(nickname) ? "닉네임은 2~12자 완성형 한글·영문·숫자로 입력해 주세요." : null);
+  const nicknameMessage = fieldErrors.nickname || (nickname ? nicknameError(nickname) : null);
 
   const confirmSession = async () => {
     setPhase("checking");
@@ -179,7 +179,7 @@ export function SignupForm() {
             // A server answer (e.g. nickname taken) is for the old value only.
             if (fieldErrors.nickname) setFieldErrors({ ...fieldErrors, nickname: "" });
           }}
-          error={nicknameError}
+          error={nicknameMessage}
         />
         <Field
           label="비밀번호"

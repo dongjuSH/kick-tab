@@ -20,7 +20,8 @@ function load(request) {
 }
 
 const { safeReturnTo, reviewIntent, loginHref, isMemberOnlyPath } = load("features/auth/returnTo");
-const { signupStatus, nicknameValid, passwordValid } = load("features/auth/rules");
+const { signupStatus, nicknameValid, nicknameError, NICKNAME_BLOCKED, NICKNAME_RULE, passwordValid } =
+  load("features/auth/rules");
 
 test("returnTo keeps internal paths only", () => {
   assert.equal(safeReturnTo("/matches/12?sort=latest#reviews"), "/matches/12?sort=latest#reviews");
@@ -55,7 +56,15 @@ test("only review intents are read and login links stay internal", () => {
 });
 
 test("screen rules match the server (P-04)", () => {
-  assert.equal(nicknameValid("킥탭회원"), true);
+  assert.equal(nicknameValid("축구회원"), true);
+  // User decision 2026-11-24: impersonation words and direct profanity, contained, any case,
+  // digits ignored. The backend test compares the word list with the server's.
+  assert.equal(nicknameError("킥탭운영자"), NICKNAME_BLOCKED);
+  assert.equal(nicknameError("Admin7"), NICKNAME_BLOCKED);
+  assert.equal(nicknameError("씨8발"), NICKNAME_BLOCKED);
+  assert.equal(nicknameError("개새끼"), NICKNAME_BLOCKED);
+  assert.equal(nicknameError("토트넘팬7"), null);
+  assert.equal(nicknameError("가"), NICKNAME_RULE);
   assert.equal(nicknameValid("가"), false);
   assert.equal(nicknameValid("ㄱㄴㄷ"), false);
   assert.equal(nicknameValid("a".repeat(13)), false);
@@ -68,7 +77,7 @@ test("screen rules match the server (P-04)", () => {
 test("signup is ready only with verification, valid input and all three confirmations", () => {
   const all = { termsOfService: true, privacyCollection: true, age14OrOlder: true };
   const none = { termsOfService: false, privacyCollection: false, age14OrOlder: false };
-  const input = { verified: true, nickname: "킥탭회원", password: "abcd1234", passwordConfirm: "abcd1234" };
+  const input = { verified: true, nickname: "축구회원", password: "abcd1234", passwordConfirm: "abcd1234" };
   assert.deepEqual({ ...signupStatus({ ...input, verified: false, confirmations: none }) }, {
     ready: false,
     message: "이메일 인증·입력 조건·필수 확인을 모두 완료해야 가입할 수 있습니다.",
