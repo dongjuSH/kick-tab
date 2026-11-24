@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-24 · 03 경기 일정 데스크탑 검수 시안 반영(자체 검수·`dev` 병합):** 백엔드 `schemas/schedule.py`·`api/routes/schedule.py`(`TeamSchedule.start`·`end` 삭제), 테스트 `tests/test_schedule_rules.py`·`test_schedule_db.py`. 프런트 `features/schedule/ScheduleSection.tsx`(기간 문구 삭제, 필터 줄 초기화), `DateBar.tsx`(`fit`·칸 단위 `page`), `components/common/TeamSearch.tsx`(여백), `features/results/ResultsSection.tsx`(관심 팀 줄 간격), `features/favorites/FavoriteSchedule.tsx`(`TeamChips`·경기 3개 접기·2줄 76px 요약), `FavoriteStar.tsx`(한 줄 팝업·화면 안 보정), `components/ui/Badge.tsx`(`compact`·`raised`), `components/common/MatchStatusBadge.tsx`(`raised`), `components/common/MatchCard.tsx`(모바일 Figma 306:3969 배치), `components/layout/StickyPanel.tsx`(긴 패널 아래 끝 고정), `features/standings/ChipRow.tsx`(흐림 제거·24×44 화살표), `lib/hooks/useScrollRow.ts`(새), `lib/format/kst.ts`(`formatDateRange` 삭제), 생성 타입, `tests/match-regressions.test.mjs`.
+
 **2026-11-24 · 02 금칙어 닉네임 오류 문구(사용자 결정·`dev` 병합):** 백엔드 `services/auth_security.py`(`NICKNAME_BLOCKED` → '운영자 사칭이나 비속어로 볼 수 있는 단어가 포함되어 사용할 수 없는 닉네임입니다.'), `tests/test_auth_rules.py`(문구·예외 없음 'badminton'·'시발점'). 프런트 `features/auth/rules.ts`(`NICKNAME_BLOCKED`), `tests/auth.test.mjs`.
 
 **2026-11-24 · 02 닉네임 금칙어·회원가입 '인증번호 받기' 주요(자체 검수·`dev` 병합):** 백엔드 `services/auth_security.py`(`BLOCKED_NICKNAME_WORDS`·`nickname_blocked`·`NICKNAME_BLOCKED`), 테스트 `tests/test_auth_rules.py`(금칙어·프런트 목록 일치). 프런트 `features/auth/rules.ts`(`BLOCKED_NICKNAME_WORDS`·`nicknameError`·`NICKNAME_RULE`·`NICKNAME_BLOCKED`), `SignupForm.tsx`(닉네임 오류), `EmailCodeStep.tsx`('인증번호 받기' 항상 주요), `tests/auth.test.mjs`.
@@ -292,7 +294,7 @@
 | 파일 | 역할 | 상태 |
 | --- | --- | --- |
 | `Button.tsx` | `Button`·`ButtonLink`·`IconButton`(44px), `buttonClass`, 01(2026-11-24, Figma `691:8003`): `variant` primary·secondary·text·danger × 기본·호버·누름(`:active`)·비활성·포커스 — 용도는 guide §2 공통 UI | 완료 |
-| `Badge.tsx` | 상태 뱃지(accent·live·neutral·warning·error(04, 최근 흐름 '패'), small 12px·caption 11px) | 완료 |
+| `Badge.tsx` | 상태 뱃지(accent·live·neutral·raised(03 2026-11-24: 회색 행 위 흰 바탕)·warning·error(04, 최근 흐름 '패'), small 12px·caption 11px·compact 11px 6×2(03 관심 팀 요약)) | 완료 |
 | `Pagination.tsx` | 페이지 분할(Figma 530:21586·530:21659, 2026-11-20): 한 줄 `< 1 2 3 … 420 >` — 테두리 없는 44px 화살표(양 끝 비활성·35%), 1·마지막 번호 고정, 사이는 현재 페이지 주변 번호와 '…', 번호 수는 줄 폭으로 3~9개(`numbersFor`), 카드 좌우 여백으로 12px씩(`-mx-3`), `aria-current`. 지난 경기·팀 탐색 공통 | 완료(05) |
 | `Tabs.tsx` | 탭(Figma Tab navigation: 44px·선택 굵은 파랑+밑줄·가로 스크롤, ARIA tabs·방향키/Home/End), `tabId`·`tabPanelId` | 완료(04, 06: `value` null = 선택 없음·첫 탭 Tab 순서, 스크롤 막대 숨김, 08: 항목 `disabled`(흐리게·클릭·방향키 건너뜀·`aria-disabled`)·오른쪽 `trailing` 문구) |
 | `Dialog.tsx` | 네이티브 `<dialog>` 모달(center·sheet·responsive, compact 시트: 헤더 아래까지·시트 전체 스크롤 없음·자식 스크롤, `handle`: 하단 시트일 때만 손잡이·16px 여백, 03: `closeButton={false}` 머리말 X 없음·`scrollArea` 내용이 스크롤 영역을 정함), 첫 포커스(대화상자/닫기 버튼), 포커스 복귀·Escape·배경 클릭 닫기, 닫힘 전환 동안 내용 유지·`inert`·늦은 close 이벤트 가드(01, 2026-11-10), `BottomSheet` 09: `closeDisabled`(저장 중 X 비활성), `sheetInset`(손잡이 없는 시트 1024px 미만 좌우 16px·상하 24px — 비밀번호 변경) | 완료 |
@@ -309,10 +311,10 @@
 | `components/common/Logo.tsx` | 승인 `logo-header.svg`(심벌+워드마크) PC 46px·모바일 40px | 헤더 | 완료 |
 | `components/common/TeamCrest.tsx` | `TeamCrest`·`PlayerPhoto`: URL 없음·실패 시 대체 이미지, 고정 크기 | 경기 카드·팀 검색 | 완료 |
 | `components/common/RecentForm.tsx` | 공통 최근 5경기(06 비회원 개선 2026-11-20, LEAG-002 규칙 4·TEAM-001 규칙 3·MAT-005 규칙 4, Figma 567:7275): `FormItem`·`formItem()`·`RESULT_LABEL`, 오래된 순·최신만 테두리(접근성 이름 '최신 경기'), 팝업 '날짜 · 대회' + '홈 – 스코어 – 원정'(PC 호버·포커스, 모바일 탭, 실제 높이로 위/아래/화면 안 배치, 헤더·표 스크롤 밖이면 닫힘, 호버 유지 150ms), 링크·공급사 호출 없음 | 06 순위표·UEFA 표, 08 팀 상세, 04 상대 전적 | 완료 |
-| `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크. 01(2026-11-19): 공통 부품 `useMatchScore`(상태 확인 중·—)·`MatchStatus`(배지 + `statusNotes`, `end` 오른쪽 정렬)·`MatchTeams`(이름·엠블럼·스코어·PK, 긴 한 단어는 칸 안 줄바꿈) 분리 — TOP 5 목록도 사용 | 일정·관심 팀(04·05·08 재사용), `Top5List` | 완료 |
-| `components/common/MatchStatusBadge.tsx` | 상태 뱃지(진행 중 `63′`·예정/종료 회색·변경 주황) | `MatchCard`, TOP 5 | 완료 |
+| `components/common/MatchCard.tsx` | 경기 카드(Figma 187:591/225:1918): `layout` schedule·stacked, `withDate`, 한국어 대회명, 카드 전체 `/matches/[id]` 링크. 01(2026-11-19): 공통 부품 `useMatchScore`(상태 확인 중·—)·`MatchStatus`(배지 + `statusNotes`, `end` 오른쪽 정렬)·`MatchTeams`(이름·엠블럼·스코어·PK, 긴 한 단어는 칸 안 줄바꿈) 분리 — TOP 5 목록도 사용 03(2026-11-24): 1024 미만은 Figma 306:3969 배치 — 상태 우상단, 별 24px 고정 자리, 팀명 12/18px 단어 단위 2줄, 엠블럼 16, 점수 38(`MatchTeams` `card`). | 일정·관심 팀(04·05·08 재사용), `Top5List` | 완료 |
+| `components/common/MatchStatusBadge.tsx` | 상태 뱃지(진행 중 `63′`·예정/종료 회색·변경 주황, 03 2026-11-24: `raised` — 회색 행 위 흰 바탕) | `MatchCard`, TOP 5 | 완료 |
 | `components/common/CompetitionFilter.tsx` | 대회 단일 버튼 + 선택창(체크 초안·적용·취소·'전체 대회 보기'·0개 적용 불가), 데스크톱 560px·모바일 시트, 05: `season`(그 시즌 데이터 없음 표기, 클럽 월드컵은 개최 시즌만 목록에 두고 연도도 그때만 'FIFA 클럽 월드컵 2025') | 메인·지난 경기 | 완료 |
-| `components/common/TeamSearch.tsx` | 팀 검색 combobox(별칭·여러 후보·일치 없음), ×·전체 삭제 시 선택 해제, 05: `season`(선택 시즌 후보), 라벨 '팀 일정 검색'·`description` 보조 문구 묶음을 메인·지난 경기가 함께 씀(05 개선에서 `placeholder` 옵션 삭제), 07 개선: `label`(팀 탐색 '팀 검색')·`defaultText`(단어 검색 표시)·`onSubmitText`(후보 없는 Enter = 단어 검색, 고른 팀 이름 그대로면 무시) | 메인·지난 경기·메인 관심 팀 '팀 추가'·팀 탐색 | 완료 |
+| `components/common/TeamSearch.tsx` | 팀 검색 combobox(별칭·여러 후보·일치 없음), ×·전체 삭제 시 선택 해제, 05: `season`(선택 시즌 후보), 라벨 '팀 일정 검색'·`description` 보조 문구 묶음을 메인·지난 경기가 함께 씀(05 개선에서 `placeholder` 옵션 삭제), 07 개선: `label`(팀 탐색 '팀 검색')·`defaultText`(단어 검색 표시)·`onSubmitText`(후보 없는 Enter = 단어 검색, 고른 팀 이름 그대로면 무시) 03(2026-11-24): 라벨→설명 4px·설명→입력 8px. | 메인·지난 경기·메인 관심 팀 '팀 추가'·팀 탐색 | 완료 |
 | `components/common/SeasonSelect.tsx` | 시즌 드롭다운(Figma 93:3198·65:1616, 트리거·옵션 '2025-26 시즌' 표기, listbox 팝오버·키보드·포커스 복귀, 미지원 시즌은 '시즌 선택') | 지난 경기·리그 순위 | 완료(05, 2026-11-16 표기 개선) |
 | `components/common/NewsCard.tsx` | 뉴스 카드(분류·제목·설명·도메인·상대 시각·원문 보기), `NEWS_BADGE_LABELS` | `MainNews`(08 재사용) | 완료(02가 북마크 버튼 추가) |
 | `components/layout/SiteHeader.tsx` | 고정 헤더(본문 건너뛰기 링크, 로고, 메뉴, 인증 영역, 모바일 메뉴) + TOP 5 띠, 경로를 읽는 부분은 `<Suspense>`(04). 높이 PC 118px·모바일 130px(Figma `128:3700`·`128:4408`) | `layout.tsx` | 완료 |
@@ -321,7 +323,7 @@
 | `components/layout/HeaderAuth.tsx` | 로그인(ghost)·회원가입(primary), 데스크톱·메뉴 배치 | 헤더·모바일 메뉴 | 골격(02가 `useAuth()`로 회원 상태 연결) |
 | `components/layout/nav.ts` | 메뉴 목록·현재 경로 판정 | 메뉴 컴포넌트 | 완료 |
 | `components/layout/HeaderHeight.tsx` | 실제 헤더 높이를 `--kt-header-height`에 동기화(ResizeObserver) | `SiteHeader.tsx`, 스크롤 여백·TOP 5 딤·패널·시트 | 완료 |
-| `components/layout/StickyPanel.tsx` | 메인 PC 우측 패널 고정(헤더·TOP 5 아래 12px, 가용 높이 520px 이상이고 패널이 들어갈 때만, 구간 끝에서 멈춤 — Figma 308:4617) | `app/page.tsx` | 완료 |
+| `components/layout/StickyPanel.tsx` | 메인 PC 우측 패널 고정(헤더·TOP 5 아래 12px, 가용 높이 520px 이상이고 패널이 들어갈 때만, 구간 끝에서 멈춤 — Figma 308:4617) 03(2026-11-24): 창보다 긴 패널은 아래 끝이 창 하단 12px에 닿을 때까지 스크롤 후 고정(가용 높이 조건 삭제). | `app/page.tsx` | 완료 |
 | `components/layout/SiteFooter.tsx` | 로고 없음, 정책 항목(링크 없음)·의견 보내기, 구분선 아래 운영자 안내·출처·저작권(Figma `304:3823`) | `lib/site.ts`, `FeedbackButton` | 완료(정책 문서 생기면 링크 연결, 이미지 출처는 확인 중 더미) |
 
 ### 기능 (`src/features/`)
@@ -348,7 +350,7 @@
 | `results/useResultsParams.ts` | URL 조건(`season`·`competitions`·`team`·`page`), 생략과 잘못된 값 구분(`seasonInvalid`·`invalid`), 조건 변경 시 첫 페이지·push, 시즌 유지 초기화 | `ResultsSection` | 완료(05) |
 | `results/queries.ts` | `seasonsQuery`(`GET /seasons`, 06 재사용), `resultsQuery` | `apiFetch` | 완료(05) |
 | `standings/StandingsSection.tsx` | 리그 순위 흰색 영역 하나: 시즌 드롭다운·대회 칩(5대 리그, 챔스·유로파·컨퍼런스 — `ChipRow`)·UEFA 단계 칩·본문. 5대 리그는 팀 표(PC 좌)·선수 순위(우, 모바일 세로, 리그·시즌별 다시 마운트 → 더 보기 초기화), UEFA는 리그 페이즈 표 또는 토너먼트 단계, 미지원 대회·시즌·단계 안내, 하이드레이션 대기. 06 비회원 개선(2026-11-20): UEFA 리그 페이즈·토너먼트 단계에도 오른쪽 선수 순위, 대회 칩 DB 이름 | `useStandingsParams`·`StandingsTable`·`PlayerRankings`·`LeaguePhaseTable`·`KnockoutStage` | 완료(06, 06 개선) |
-| `standings/ChipRow.tsx` | 06 개선: 대회·단계 칩 줄(가로 스크롤, 선택 칩 자동 표시, 그룹 구분선). 06 비회원 개선(2026-11-20): PC(lg) 넘칠 때만 ‹ › 화살표(끝 비활성), 모바일 스와이프 + 가장자리 흐림, 메인에서도 사용 | `StandingsSection` | 완료(06 개선) |
+| `standings/ChipRow.tsx` | 06 개선: 대회·단계 칩 줄(가로 스크롤, 선택 칩 자동 표시, 그룹 구분선). 06 비회원 개선(2026-11-20): PC(lg) 넘칠 때만 ‹ › 화살표(끝 비활성), 모바일 스와이프 + 가장자리 흐림, 메인에서도 사용 03(2026-11-24): 흐림 제거, 스크롤 영역 = 아래 내용 폭, 화살표 24×44, 공통 `useScrollRow`. | `StandingsSection` | 완료(06 개선) |
 | `standings/StandingsTable.tsx` | 5대 리그 팀 순위 표(role=table 격자, PC 순위·팀·경기·승·무·패·득실·승점·최근 5경기, 모바일 순위·팀·승점·최근 5경기·나머지 가로 스크롤), `TeamCell`(허용 집합 링크·구간 배지·'팀 상세 미제공'), 강등권·승강 PO권은 `leagueZone`으로 순위 위치 판단(종료 후 '강등'·'승강 플레이오프'), `DataState`로 로딩·빈 결과·일부 미제공(갱신 실패·소속 미확인 + '다시 확인')·조회 실패. 06 비회원 개선(2026-11-20): 구간은 행 왼쪽 테두리(`bandRowClass`)·범례(`BandLegend`)·`BasisNote`, 행 접근성 이름에 구간, `TeamCell` 배지 삭제·이름 폭 제한(1024px 말줄임) | `queries`·`model`·`RecentForm` | 완료(06, 06 개선) |
 | `standings/LeaguePhaseTable.tsx` | 06 개선: UEFA 리그 페이즈 36팀 표(순위·팀·승점·최근 5경기, 1~8 직행·9~24 플레이오프·25~36 탈락 구간, '현재 순위 기준'/확정 결과, 모바일 팀 열 최소 120px·가로 스크롤). 06 비회원 개선(2026-11-20): 구간 묶음 머리 대신 행 테두리 + 범례, 대회명 DB 이름 | `queries`·`model`·`RecentForm`·`TeamCell` | 완료(06 개선) |
 | `standings/KnockoutStage.tsx` | 06 개선: UEFA 토너먼트 단계 대진 카드(상태 배지 종료·진행 중·예정·'예정 · 대진 미정', 차전·일시·스코어·승부차기, 합산/결과·진출/우승, 'A–B전 승자'·'상대 미정'). 06 비회원 개선(2026-11-20): 제목 DB 대회명. 2026-11-21: 대진 제목 데스크톱 '팀 로고 vs 로고 팀'(`SlotTitle` `home` — `lg:flex-row-reverse`), 모바일 '로고 팀 vs 로고 팀' | `queries`·`model` | 완료(06 개선) |
@@ -368,16 +370,16 @@
 | `team-detail/TeamNews.tsx` | 팀 뉴스(`NewsCard`, 최신 24개를 6개씩 더 보기, 빈 상태 '현재 확인할 수 있는 팀 관련 뉴스가 없습니다.', 갱신 실패+빈 목록 함께 안내·'다시 시도') | `teamNewsQuery` | 완료(08) |
 | `team-detail/model.ts` | 탭(경기·선수단·기록·뉴스)·시즌 선택·`seasonText`('2026–27'), 포지션 표기·정렬(`sortPlayers`·`nextSort` — 합계 기준), 누락 표시(`statText`·`ratingText`), 시즌 기록 행, 이적 유형 문구(금액 형식은 완전 이적)·`dotDate`, 반기 `HALF_TABS`·`isHalf`·`currentHalf`·`pickHalf`, 경기장 표기 | — | 완료(08) |
 | `team-detail/queries.ts` | `teamOverviewQuery`(404·503 재시도 없음)·`teamFixturesQuery`(진행 경기 폴링)·`teamSquadQuery`·`teamSeasonStatsQuery`·`teamTransfersQuery`·`teamNewsQuery`(무한 조회) | `apiFetch` | 완료(08) |
-| `schedule/ScheduleSection.tsx` | 메인 일정(05: 하이드레이션 전 `SectionSkeleton`, 05 개선: 관심 팀 버튼 줄을 공통 `FavoriteTeamButtons`로): 날짜 보기와 팀 기간 날짜별 보기(03 2026-11-19: 공통 경기일 기간, 팀 진입은 전체 대회·해제 시 복원, 소멸 날짜 이동·안내, 기간 갱신 실패 경고)(기본 6개·한 번에 전체 보기), 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 | 아래 파일, `MatchCard` | 완료 |
+| `schedule/ScheduleSection.tsx` | 메인 일정(05: 하이드레이션 전 `SectionSkeleton`, 05 개선: 관심 팀 버튼 줄을 공통 `FavoriteTeamButtons`로): 날짜 보기와 팀 기간 날짜별 보기(03 2026-11-19: 공통 경기일 기간, 팀 진입은 전체 대회·해제 시 복원, 소멸 날짜 이동·안내, 기간 갱신 실패 경고)(기본 6개·한 번에 전체 보기), 대회·팀·관심 팀 조건, 빈 결과·조회 실패·일부 실패·재조회 실패 구분, 초기화 03(2026-11-24): 기간 문구 삭제, 필터 줄 [대회 선택 / 초기화 80px]. | 아래 파일, `MatchCard` | 완료 |
 | `schedule/useScheduleParams.ts` | URL 조건(`date`·`competitions`·`team`·`from`), `selectTeam`·`clearTeam`(새 팀은 전체 대회, 첫 팀 직전 날짜·대회 보존·해제 시 복원 — `withTeam`·`withoutTeam`), `nearestMatchDate`(대회 적용 시 미확인 날짜를 건너뛴 가장 가까운 확인된 경기일), push/replace 규칙, `useKstToday()`(KST 자정 전환) | `ScheduleSection` | 완료 |
 | `schedule/queries.ts` | `competitionsQuery`, `fixturesByDateQuery`, `favoriteScheduleQuery`, `teamScheduleQuery`, `liveRefetchInterval`(진행 60초·임박 진입 시 시작·숨김 탭 정지, 04 경기 상세도 사용) | `apiFetch` | 완료 |
-| `schedule/DateBar.tsx` | 공통 경기일 날짜 막대(03 2026-11-19: 경기 있는 날만, 월/일·요일; 이전 21일 달력 폐기)(데스크톱 화살표·모바일 터치 스크롤) | `ScheduleSection` | 완료 |
+| `schedule/DateBar.tsx` | 공통 경기일 날짜 막대(03 2026-11-19: 경기 있는 날만, 월/일·요일; 이전 21일 달력 폐기)(데스크톱 화살표·모바일 터치 스크롤) 03(2026-11-24): 온전한 칸만(PC 60px 이상 칸을 늘려 채움, 모바일 5/4칸), 화살표 한 줄 단위·터치 스크롤 칸 맞춤. | `ScheduleSection` | 완료 |
 | `schedule/ScheduleNotice.tsx` | 일정 안내 상자(neutral·warning·error, Figma 225:2374), `failedNames()` | 일정·관심 팀 | 완료 |
 | `favorites/store.ts`·`useFavorites.ts` | 비회원 관심 팀 localStorage(`kt-fav-guest`, 최대 5개, 저장 불가 처리, 다른 탭 반영, 07: 등록·해제 직전 더 새 목록을 발견하면 모든 구독자에 알림 `latest()`) | 관심 팀 UI | 완료(02가 회원 DB 동기화) |
 | `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시 — 누른 직후 목록에 묶이고 목록이 바뀌면 지움, 07: 5개가 차면 다른 팀 비활성 '최대 5개까지 등록할 수 있어요') | 07 사용, 08 사용 예정 | 완료(07) |
-| `favorites/FavoriteSchedule.tsx` | 메인 관심 팀 패널(Figma Guest Favorites 306:6220): n/5·팀 추가(`TeamSearch`, 등록 가능 팀만)·빈 상태·등록 목록 해제·5팀 제한·저장 실패 재시도, 팀별 진행 중·가장 가까운 예정 1경기 요약, 일부 실패·재조회 실패 안내 | `favoriteScheduleQuery`, `useFavorites` | 완료 |
+| `favorites/FavoriteSchedule.tsx` | 메인 관심 팀 패널(Figma Guest Favorites 306:6220): n/5·팀 추가(`TeamSearch`, 등록 가능 팀만)·빈 상태·등록 목록 해제·5팀 제한·저장 실패 재시도, 팀별 진행 중·가장 가까운 예정 1경기 요약, 일부 실패·재조회 실패 안내 03(2026-11-24): 제목 줄 [★ 관심 팀 n/한도 … 팀 추가], 등록 팀 가로 칩 한 줄(`TeamChips`), 요약 경기 2줄 76px, 기본 3경기 + '더 보기 (3/n)'(팀 기준 접기 삭제). | `favoriteScheduleQuery`, `useFavorites` | 완료 |
 | `favorites/FavoriteTeamButtons.tsx` | 팀 검색 아래 '★ 관심 팀' + 파란 글자 버튼(44px), 다시 누르면 해제, 선택돼도 같은 모양·`aria-pressed`, 팀이 없으면 표시 안 함(Figma 49:57·61:883) | 메인 일정·지난 경기 | 완료(05 개선) |
-| `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) | `MatchCard` | 완료 |
+| `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) 03(2026-11-24): 거부 팝업 한 줄, 화면 끝 16px 안쪽 보정. | `MatchCard` | 완료 |
 | `mypage/MyPage.tsx` | 마이페이지 조립(MY-001): 인증 확인 중 스켈레톤, 비회원·만료 세션은 로그인 안내 카드(`loginHref('/mypage')`), 회원은 PC 왼쪽 관심 팀·내 평가 / 오른쪽 360px 계정 관리 | `useAuth()` | 완료(09) |
 | `mypage/FavoriteTeams.tsx` | 관심 팀(MY-002): `useFavorites()` 그대로, n / 10, '관심 팀 추가'(`TeamSearch`), 10팀이면 추가만 막고 한도 안내, 팀 상세 링크 규칙, 추가·삭제 뒤 포커스 | `useFavorites`, `memberFavoritesQuery` | 완료(09) |
 | `mypage/MyReviews.tsx` | 내 평가(MY-003): 최신순, 수정한 평가만 수정 날짜, 수정(공용 폼·닫힌 경기 409 안내)·삭제 확인, 작성 제한 안내·수정 비활성 | `myReviewsQuery`, `ReviewTextForm`, `ReviewRestriction` | 완료(09) |
@@ -413,6 +415,7 @@
 | `hooks/useMediaQuery.ts` | 미디어 쿼리 구독, `DESKTOP_QUERY`(1024px) | 완료 |
 | `hooks/useHydrated.ts` | 하이드레이션 완료 여부(공유 캐시를 읽는 Suspense 영역의 서버·클라이언트 불일치 방지) | 완료(05) |
 | `hooks/useNow.ts` | 30초마다 갱신되는 현재 시각(서버 렌더 0) — 킥오프 후 '상태 확인 중' 판정 | 완료 |
+| `hooks/useScrollRow.ts` | 03(2026-11-24): 가로 스크롤 줄의 끝 판정·‹ › 넘김·선택/포커스 항목 표시(`reveal`), 크기·항목 변화 감지 (`ChipRow`, `FavoriteSchedule`) | 완료 |
 | `site.ts` | 푸터 운영자 정보 설정값(`SITE_OPERATOR_*`) | 완료 |
 
 ### 정적 파일 (`public/`)

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cx } from "@/components/ui/cx";
 import { favoriteRefusal } from "./FavoriteToggle";
 import { useFavorites } from "./useFavorites";
+
+const EDGE = 16;
 
 /**
  * Star beside a team name on a match card (Figma 49:57 / 49:570, 2026-11-09): registers or
@@ -20,6 +22,19 @@ export function FavoriteStar({ teamId, teamName }: { teamId: number; teamName: s
     if (!refusal) return;
     const timer = setTimeout(() => setRefusal(null), 3_000);
     return () => clearTimeout(timer);
+  }, [refusal]);
+
+  // Keep the one-line notice 16px inside the screen (a star near either edge on phones).
+  const popup = useRef<HTMLSpanElement>(null);
+  const [shift, setShift] = useState(0);
+  useLayoutEffect(() => {
+    const box = popup.current;
+    if (!refusal || !box) return;
+    const anchor = box.parentElement!.getBoundingClientRect();
+    const width = box.offsetWidth;
+    const left = anchor.left + anchor.width / 2 - width / 2;
+    const max = document.documentElement.clientWidth - EDGE - width;
+    setShift(Math.round(Math.min(Math.max(left, EDGE), Math.max(max, EDGE)) - left));
   }, [refusal]);
 
   return (
@@ -49,9 +64,13 @@ export function FavoriteStar({ teamId, teamName }: { teamId: number; teamName: s
         </svg>
       </button>
       {refusal && (
+        // One line on every screen (the texts are short and fixed), centred under the star and
+        // moved inward when it would cross the screen edge (2026-11-24).
         <span
+          ref={popup}
           role="status"
-          className="absolute top-full left-1/2 z-20 mt-1 w-max max-w-56 -translate-x-1/2 rounded-control border border-line bg-surface px-2 py-1 text-small text-warning shadow-lg"
+          style={{ translate: `calc(-50% + ${shift}px) 0` }}
+          className="absolute top-full left-1/2 z-20 mt-1 w-max whitespace-nowrap rounded-control border border-line bg-surface px-2 py-1 text-left text-small font-normal text-warning shadow-lg"
         >
           {refusal}
         </span>

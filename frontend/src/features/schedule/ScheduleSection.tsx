@@ -13,7 +13,7 @@ import { useFavorites } from "@/features/favorites/useFavorites";
 import { isApiError } from "@/lib/api/errors";
 import { useHydrated } from "@/lib/hooks/useHydrated";
 import type { MatchSummary, TeamRef } from "@/lib/api/types";
-import { formatDateRange, formatKstMonthDayTime, formatKstTime, formatShortDate } from "@/lib/format/kst";
+import { formatKstMonthDayTime, formatKstTime, formatShortDate } from "@/lib/format/kst";
 import { teamName } from "@/lib/format/match";
 import { DateBar, type DateAvailability } from "./DateBar";
 import { competitionsQuery, favoriteScheduleQuery, fixtureAvailabilityQuery, fixturesByDateQuery, teamScheduleQuery } from "./queries";
@@ -198,9 +198,6 @@ export function ScheduleSection() {
     else params.clearTeam();
   };
 
-  const rangeStart = (teamMode ? byTeam.data?.data.start : null) ?? period?.start ?? null;
-  const rangeEnd = (teamMode ? byTeam.data?.data.end : null) ?? period?.end ?? null;
-  const range = rangeStart && rangeEnd ? formatDateRange(rangeStart, rangeEnd) : null;
   const retry = (
     <Button variant="secondary" onClick={() => query.refetch()}>
       다시 시도
@@ -254,7 +251,7 @@ export function ScheduleSection() {
     body = (
       <ScheduleNotice
         title="조회할 수 없는 날짜입니다"
-        description={`메인 일정은 ${range ?? "표시된 조회 기간"}의 경기일만 제공합니다. 더 이전 결과는 지난 경기에서 확인해 주세요.`}
+        description="메인 일정은 날짜 막대의 경기일만 제공합니다. 더 이전 결과는 지난 경기에서 확인해 주세요."
         action={
           <Button fullWidth onClick={() => params.update({ date: null })}>
             기본 경기일 보기
@@ -297,7 +294,7 @@ export function ScheduleSection() {
       <ScheduleNotice
         busy
         title="팀 경기 일정을 불러오고 있습니다"
-        description="선택한 팀·대회와 표시된 조회 기간을 유지합니다."
+        description="선택한 팀·대회를 유지합니다."
       />
     ) : (
       <ListSkeleton />
@@ -334,7 +331,7 @@ export function ScheduleSection() {
     body = (
       <ScheduleNotice
         title="조회 기간에 등록된 경기 일정이 없습니다"
-        description={`${selectedTeam ? teamName(selectedTeam) : "선택한 팀"}${range ? ` · ${range}` : ""} · 지원 대회 기준`}
+        description={`${selectedTeam ? teamName(selectedTeam) : "선택한 팀"} · 지원 대회 기준`}
       />
     );
   } else if (filtered.length === 0) {
@@ -388,29 +385,18 @@ export function ScheduleSection() {
       aria-labelledby="schedule-title"
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
     >
-      <div className="flex items-center gap-2">
-        <h2 id="schedule-title" className="flex-1 text-title font-bold">
-          {teamMode ? "팀 경기 일정" : "전체 경기 일정"}
-        </h2>
-        <Button variant="secondary" onClick={reset}>
-          초기화
-        </Button>
-      </div>
+      <h2 id="schedule-title" className="text-title font-bold">
+        {teamMode ? "팀 경기 일정" : "전체 경기 일정"}
+      </h2>
 
-      {/* Figma 193:12311: the team's name over the shared period; the date view shows the
-          period alone above the bar (234:8881). */}
-      {teamMode ? (
+      {/* Figma 193:12311: the team's name under the title; no period text (2026-11-24). */}
+      {teamMode && (
         <div className="flex items-end gap-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <p className="text-subtitle font-bold">
-              {selectedTeam ? `${teamName(selectedTeam)} 경기 일정` : "팀 경기 일정"}
-            </p>
-            {range && <p className="text-caption text-fg-muted">{range}</p>}
-          </div>
+          <p className="min-w-0 flex-1 text-subtitle font-bold">
+            {selectedTeam ? `${teamName(selectedTeam)} 경기 일정` : "팀 경기 일정"}
+          </p>
           {live && <UpdatedAt value={byTeam.data?.meta.updatedAt} checkedAt={byTeam.dataUpdatedAt} />}
         </div>
-      ) : (
-        range && <p className="text-caption text-fg-muted">{range}</p>
       )}
 
       {/* Kept mounted in the team view so its scroll position returns with the date view. */}
@@ -430,31 +416,39 @@ export function ScheduleSection() {
         />
       </div>
 
-      {/* Figma 225:1216: competition 12px above the search group; label, help, field and the
-          favourite buttons 6px apart; the date heading 8px under the filters. */}
+      {/* Figma 49:57 (2026-11-24): [competition picker (rest) | 초기화 80px] 8px apart, the
+          search group 12px under it (field and favourite row touching); the date heading 8px
+          under the filters. */}
       <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-3">
-        {competitions.data ? (
-          <CompetitionFilter
-            competitions={competitions.data}
-            selected={params.competitions}
-            onChange={selectCompetitions}
-            unavailable={unavailable}
-          />
-        ) : competitions.isError ? (
-          <p className="flex items-center gap-2 text-small text-error">
-            대회 목록을 불러오지 못했습니다.
-            <Button className="min-h-9" onClick={() => competitions.refetch()}>
-              다시 확인
-            </Button>
-          </p>
-        ) : (
-          <Skeleton className="h-11 w-full" />
-        )}
-        <div className="flex flex-col gap-1.5">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            {competitions.data ? (
+              <CompetitionFilter
+                competitions={competitions.data}
+                selected={params.competitions}
+                onChange={selectCompetitions}
+                unavailable={unavailable}
+              />
+            ) : competitions.isError ? (
+              <p className="flex min-h-11 items-center gap-2 text-small text-error">
+                대회 목록을 불러오지 못했습니다.
+                <Button className="min-h-9" onClick={() => competitions.refetch()}>
+                  다시 확인
+                </Button>
+              </p>
+            ) : (
+              <Skeleton className="h-11 w-full" />
+            )}
+          </div>
+          <Button variant="secondary" className="w-20 shrink-0 px-0" onClick={reset}>
+            초기화
+          </Button>
+        </div>
+        <div className="flex flex-col">
         {/* Remounted by a reset: also clears a typed term that never selected a team. */}
         <TeamSearch key={resetKey} selected={selectedTeam} onSelect={selectTeam}
-          description="팀을 선택하면 표시된 조회 기간의 경기를 모아봅니다. 대회별로 좁혀볼 수 있습니다."
+          description="팀을 선택하면 공통 경기일 범위의 경기를 모아봅니다. 대회별로 좁혀볼 수 있습니다."
         />
         <FavoriteTeamButtons teams={favoriteTeams} activeId={params.team} onSelect={selectTeam} label="관심 팀 일정" />
         </div>

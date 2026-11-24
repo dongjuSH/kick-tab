@@ -95,14 +95,6 @@ export function formatShortDate(value: string): string {
   return p ? `${p.month}/${p.day}(${p.weekday})` : MISSING;
 }
 
-/** "2026.11.06–12.02" (Figma 234:8881); the end repeats the year only when it changes. */
-export function formatDateRange(start: string, end: string): string {
-  const [a, b] = [parseIsoDate(start), parseIsoDate(end)];
-  if (!a || !b) return MISSING;
-  const md = (p: KstDateParts) => `${String(p.month).padStart(2, "0")}.${String(p.day).padStart(2, "0")}`;
-  return `${a.year}.${md(a)}–${b.year === a.year ? "" : `${b.year}.`}${md(b)}`;
-}
-
 /** Today's KST calendar date as "2026-11-02". */
 export function kstTodayIso(now: Date = new Date()): string {
   const p = kstParts(now)!;

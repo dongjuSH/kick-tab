@@ -1,5 +1,26 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-24 (화) — 03 경기 일정 데스크탑 검수 시안 반영
+
+브랜치 `feat/03-schedule`(최신 `dev` c8004c3 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: Figma 메인 `49:57`·`49:570`, 팀 화면 `193:12311`, 관심 팀 `KickTab/Guest Favorites` `306:6220`·회원 `669:7801`·요약 카드 `669:7794`, 모바일 경기 카드 `306:3969`. 관심 팀 요약 경기는 Figma를 먼저 고치고 사용자 확인 후 코드 반영.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 기간 문구 삭제 | `frontend/src/features/schedule/ScheduleSection.tsx`(기간 표시·계산 삭제, '표시된 조회 기간' 문구 정리), `lib/format/kst.ts`(`formatDateRange` 삭제), `backend/app/schemas/schedule.py`·`api/routes/schedule.py`(`TeamSchedule.start`·`end` 삭제), 생성 타입 | 03-1: 날짜·팀 화면 모두 기간 문구 없음 |
+| 날짜 막대 | `features/schedule/DateBar.tsx`(`fit` — PC 60px 이상 칸을 들어가는 만큼 늘려 채움(1920 11칸 약 64px), 모바일 5칸/240px 이하 4칸, `page` 한 줄 단위·`snap-mandatory`) | 03-2: 처음·끝·넘김 후 잘린 칸 없음 |
+| 필터 줄·검색 | `ScheduleSection.tsx`([대회 선택 / 초기화 80px], 제목 줄 초기화 이동), `components/common/TeamSearch.tsx`(라벨→설명 4·설명→입력 8), `features/results/ResultsSection.tsx`(입력→관심 팀 줄 0) | 03-3·03-4 |
+| 관심 팀 패널 | `features/favorites/FavoriteSchedule.tsx`(제목 줄 [★ 관심 팀 n/한도 … 팀 추가], 상시 한도 문구 삭제, `TeamChips` 가로 칩 한 줄(PC 넘칠 때만 24×44 ‹ ›), 요약 경기 2줄 76px·행 사이 12, 접기 기준 경기 3개(`FOLDED_MATCHES`) — 팀 기준 접기 삭제, 해제한 팀 경기 즉시 제외, 칩 '해제' 버튼 칩 안 호버·포커스), `components/ui/Badge.tsx`(크기 `compact`·톤 `raised`), `components/common/MatchStatusBadge.tsx`(`raised`) | 03-5와 사용자 검수: 한 줄형(A안)은 팀명 잘림·대회명 누락으로 미채택, 3경기 + 더 보기 패널이 경기 1개인 날 일정 카드와 같은 482px, 예정 뱃지는 시안 색(흰 바탕·보조 글자) |
+| 칩 줄 | `lib/hooks/useScrollRow.ts`(새 — 끝 판정·넘김·`reveal`, 내용 변화 감지), `features/standings/ChipRow.tsx`(흐림 제거, 스크롤 영역 = 아래 내용 폭, 칩 포커스 외곽선 안쪽, 화살표 24×44) | 03-6, 순위 화살표 폭 사용자 요청 |
+| 별 한도 팝업 | `features/favorites/FavoriteStar.tsx`(한 줄 고정, 화면 끝 16px 안쪽 보정) | 홈·원정 팝업 양식이 달랐음 |
+| 우측 패널 고정 | `components/layout/StickyPanel.tsx`(창보다 긴 패널은 아래 끝이 창 하단 12px에 닿을 때까지 스크롤 후 고정) | 관심 팀 펼친 뒤 일정이 길어져도 패널이 따라오지 않던 문제 |
+| 모바일 경기 카드 | `components/common/MatchCard.tsx`(1024 미만 Figma `306:3969`: 상태 우상단, 별 24px 고정 자리, 팀명 12/18px 단어 단위 2줄, 엠블럼 16, 점수 38, `MatchTeams` `card`) | 375·320에서 팀명이 단어 중간에서 끊기던 문제. PC·TOP 5 대진 줄은 그대로 |
+| 테스트 | `backend/tests/test_schedule_rules.py`·`test_schedule_db.py`, `frontend/tests/match-regressions.test.mjs`(`formatDateRange` 검사 삭제) | |
+
+- **Figma:** `Guest Favorites` 4개 상태·회원 요약 카드·`Member Schedule Favorites`(간격 16 → 12, 접힘/5팀 상태 3경기 + '더 보기 (3/n)', 펼침 '접기 (n/n)', 뱃지 색 비회원과 통일)·컴포넌트 설명 갱신, 한 줄형 비교 프레임 `767:7842`(미채택 표시) 남김.
+- **실제 확인(앱 내 브라우저·3000):** 1920·1280·1024·768·375·320 가로 넘침 0·날짜 막대 잘린 칸 0, 검색 여백(메인·지난 경기·팀 탐색), 관심 팀 비회원 0·2·5팀(회원 10팀 더 보기·접기는 사용자 확인), 해제 후 목록·일정 버튼·별 동기화, 3경기 패널 = 일정 카드 482px, 1368×500 패널 고정, 모바일 카드(메인·지난 경기·팀 상세), 새 탭 콘솔 오류 0. 브라우저 관심 팀 저장값은 확인 후 원래대로.
+- **검사:** ruff, pytest 400(DB 포함 556), alembic check 변경 없음, frontend lint·`tsc --noEmit`·test 91·build 통과.
+- **문서:** `guide.md`(상단 요약·§3 03 행·최종 갱신), 이 문서, `file-feature-map.md`.
+
 ## 2026-11-24 (화) — 02 로그인·회원가입 버튼 체계 적용·비밀번호 찾기 시안 맞춤
 
 브랜치 `feat/02-auth`(01 버튼 체계가 들어간 `dev` ed2e49d 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: 버튼 `691:8003`, 로그인 `52:2116`·`52:2265`, 회원가입 `52:2387`·`52:2545`, 자동 로그인 `62:1177`·`62:1306`, 비밀번호 찾기 `134:4077`·`134:4344`·`134:4633`·`134:5037`.

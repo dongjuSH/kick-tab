@@ -6,22 +6,26 @@ import { cx } from "./cx";
  * such as "진행 중 63′" or "경기 중단" (guide §6.6).
  * Tone "accent" is the action-soft badge of the TOP 5 strip/panel ("AI 선정", rank); "error" is
  * a loss in the recent-form row of the match detail (Figma 63:1909 승·무·패).
- * Size "small" = 12px (status badges, Figma 159:924·187:591); "caption" = 11px (news, 49:457).
+ * Size "small" = 12px (status badges, Figma 159:924·187:591); "caption" = 11px (news, 49:457);
+ * "compact" = 11px in a 6×2 box (favourite-team summary rows, Figma 306:6025).
+ * Tone "raised" is the neutral badge on a grey (subtle) row: white, so it stays visible.
  */
-export type BadgeTone = "accent" | "live" | "neutral" | "warning" | "error";
-export type BadgeSize = "small" | "caption";
+export type BadgeTone = "accent" | "live" | "neutral" | "raised" | "warning" | "error";
+export type BadgeSize = "small" | "caption" | "compact";
 
 const TONES: Record<BadgeTone, string> = {
   accent: "bg-action-soft text-action",
   live: "bg-live-bg text-live",
   neutral: "bg-subtle text-fg-secondary",
+  raised: "bg-surface text-fg-secondary",
   warning: "bg-warning-bg text-warning",
   error: "bg-error-bg text-error",
 };
 
 const SIZES: Record<BadgeSize, string> = {
-  small: "text-small",
-  caption: "text-caption",
+  small: "px-2 py-1 text-small",
+  caption: "px-2 py-1 text-caption",
+  compact: "px-1.5 py-0.5 text-caption leading-[17px]",
 };
 
 export function Badge({
@@ -38,7 +42,7 @@ export function Badge({
   return (
     <span
       className={cx(
-        "inline-flex shrink-0 items-center whitespace-nowrap rounded-badge px-2 py-1 font-medium",
+        "inline-flex shrink-0 items-center whitespace-nowrap rounded-badge font-medium",
         SIZES[size],
         TONES[tone],
         className,

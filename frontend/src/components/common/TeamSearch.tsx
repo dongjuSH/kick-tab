@@ -104,9 +104,10 @@ export function TeamSearch({
 
   return (
     <div ref={boxRef} className="relative">
-      {/* Label, help and field read as one group (Figma 49:57 '팀 일정 검색'). */}
+      {/* Label, help and field read as one group (Figma 49:57 '팀 일정 검색', 2026-11-24): label
+          → help 4px, help → field 8px. */}
       {description && (
-        <div className="mb-1.5 flex flex-col gap-1.5">
+        <div className="mb-2 flex flex-col gap-1">
           <label htmlFor={`${listId}-input`} className="text-body font-bold">{label}</label>
           <p id={`${listId}-help`} className="text-small text-fg-secondary">{description}</p>
         </div>

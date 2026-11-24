@@ -103,9 +103,6 @@ class FavoriteScheduleResponse(ApiModel):
 
 class TeamSchedule(ApiModel):
     team: TeamRef
-    # Inclusive KST dates: first and last day of the common match-day period.
-    start: date
-    end: date
     matches: list[MatchSummary]
 
 
