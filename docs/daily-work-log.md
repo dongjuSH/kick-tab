@@ -16,6 +16,21 @@
 
 검수: 백엔드 ruff·pytest 383(DB 포함 539, 다른 기능의 기존 건너뜀 3)·alembic check, 프런트 lint·`tsc --noEmit`·npm test 90·Turbopack 빌드.
 
+## 2026-11-24 (화) — 데스크탑 검수 간단 수정(00)
+
+사용자 데스크탑 전체 검수 중 디자인 없이 진행하기로 한 항목. 08 이적 갱신 결함(b73806c)은 08 채팅에서 별도 처리·병합.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| TOP 5 띠 | `frontend/src/features/top5/Top5Strip.tsx`(바깥 띠 클릭 → 토글 버튼) | 하늘색 띠가 화면 전체인데 가운데 1280px만 눌림 |
+| 딤 배경 | `frontend/src/components/ui/Dialog.tsx`(`backdrop:cursor-pointer`), `app/globals.css`(TOP 5 시트 전용 규칙 삭제) | 딤을 누르면 닫힌다는 것을 포인터로 알림(의견 보내기 등 모든 다이얼로그·시트) |
+| 경기일 기간 | `backend/app/services/fixtures.py`(`FUTURE_MATCH_DAYS` 28), `schemas/schedule.py`·생성 타입·`ScheduleSection.tsx` 설명, `tests/test_schedule_db.py` | 미래 경기일 17 → 28개(사용자 결정) |
+| 통계 이름 | `frontend/src/features/match/model.ts`(`STAT_LABELS` Free Kicks), `tests/match-regressions.test.mjs` | 영문 그대로 보이던 항목 |
+| 내 평가 갱신 | `frontend/src/features/match/ReviewComposer.tsx`(`refresh`에 `queryKeys.me.reviews`) | 경기 상세에서 평가를 바꿔도 마이페이지 목록이 바로 바뀌지 않음 |
+
+- **검사:** ruff, 기본 pytest 383 통과/159 건너뜀, DB 포함 pytest 539 통과(기간 테스트 갱신), lint·tsc·프런트 테스트 91. build는 개발 서버 실행 중이라 미실행.
+- **브라우저(1920):** 띠 왼쪽 빈 영역 클릭 → 목록 열림, 의견 보내기 딤 포인터, 날짜 막대 32개(과거 3 + 오늘 + 미래 28). 프리킥은 테스트로 확인, 내 평가 즉시 갱신은 회원 로그인 브라우저 확인 미실행.
+
 ## 2026-11-23 (월) — 09 마이페이지(관심 팀·내 평가·계정 관리)
 
 브랜치 `feat/09-mypage`(최신 `dev` 2c39a4d)에 커밋·push 후 `dev` 병합. 02 API만 사용했고 새 서버 API·마이그레이션은 없다. Codex 교차 검증 4차례(1차 N1~N4·7번 의견, 2차 N1 잔여·N5~N7, 3차 N8·N9, 최종 N10·N11은 Codex가 직접 보완) 후 통과.

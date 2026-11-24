@@ -693,3 +693,10 @@ test("a vanished date announces the new target again when Back restores differen
   assert.ok(render().includes("11/23(월) 경기로 이동했습니다."));
   assert.equal(date, "2026-11-23");
 });
+
+test("team statistics read in Korean, Free Kicks included (desktop review 2026-11-24)", () => {
+  const { statLabel } = loader()("@/features/match/model");
+  assert.equal(statLabel({ key: "Free Kicks" }), "프리킥");
+  assert.equal(statLabel({ key: "Corner Kicks" }), "코너킥");
+  assert.equal(statLabel({ key: "Unknown Stat" }), "Unknown Stat"); // a new provider key stays readable
+});

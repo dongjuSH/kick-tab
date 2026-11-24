@@ -306,7 +306,7 @@ def _after_every_stored_match(session, days):
     return max(last, kst_today()) + timedelta(days=days)
 
 
-def test_period_is_three_past_match_days_today_and_seventeen_ahead(session):
+def test_period_is_three_past_match_days_today_and_twenty_eight_ahead(session):
     now = datetime.now(UTC)
     today = _after_every_stored_match(session, 60)
     yesterday = today - timedelta(days=1)
@@ -320,22 +320,22 @@ def test_period_is_three_past_match_days_today_and_seventeen_ahead(session):
         item(46, _at(today - timedelta(days=9)), "FT"),  # fourth past match day: left out
         item(47, _at(today - timedelta(days=2), 13), "FT"),  # same day twice counts once
     ]
-    rows += [item(50 + n, _at(today + timedelta(days=n)), "NS") for n in range(1, 19)]
+    rows += [item(50 + n, _at(today + timedelta(days=n)), "NS") for n in range(1, 30)]
     upsert_fixtures(session, rows, now)
     session.flush()
 
     period = schedule_period(session, today)
-    ahead = [today + timedelta(days=n) for n in range(1, 18)]  # the 18th day is left out
+    ahead = [today + timedelta(days=n) for n in range(1, 29)]  # the 29th day is left out
     assert period.dates == (
         today - timedelta(days=5), today - timedelta(days=2), yesterday, today, *ahead
     )
-    assert period.bounds() == (today - timedelta(days=5), today + timedelta(days=17))
+    assert period.bounds() == (today - timedelta(days=5), today + timedelta(days=28))
 
     # A day without a match: no "today" entry, and the range still includes today.
     later = today + timedelta(days=40)
     empty = schedule_period(session, later)
     assert later not in empty.dates and len(empty.dates) == 3
-    assert empty.end == today + timedelta(days=18) and empty.bounds()[1] == later
+    assert empty.end == today + timedelta(days=29) and empty.bounds()[1] == later
 
 
 def test_team_schedule_covers_the_common_period(session):

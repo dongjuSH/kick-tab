@@ -200,41 +200,51 @@ export function Top5Strip() {
 
   return (
     <div className="border-b border-line bg-selected">
-      <div className="kt-container">
-        <button
-          ref={toggle}
-          type="button"
-          aria-expanded={open}
-          aria-controls={panelId}
-          aria-haspopup="dialog"
-          onClick={() => {
-            // Expanding shows the latest data when the cached copy is older than 5 min.
-            if (!open && isStale) void refetch();
-            setOpen((value) => !value);
-          }}
-          className={cx("kt-ticker-trigger rounded-control", STRIP)}
-        >
-          <span className={FIRST_ROW}>
-            <span className={BADGE}>AI 선정</span>
-            <span className={TITLE}>{TOP5_TITLE}</span>
-            {data ? <span className={META}>{weekLabel(data)}</span> : <Skeleton className="h-4 w-20" />}
-          </span>
-          <span className={SECOND_ROW}>
-            {/* Last week's result is kept until this week's is published. */}
-            {data && isPrevious(data) && <span className={META}>{PREPARING}</span>}
-            <span className={VIEWPORT}>
-              {data ? (
-                notice ? <span className="block truncate lg:text-small">{noticeCopy(notice, data).title}</span>
-                  : <Lineup items={lineupItems(data)} />
-              ) : isPending ? <Skeleton className="h-4 w-40" />
-                : <span className="block truncate text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>}
+      {/* The whole light-blue band opens the list, not only the centred container (desktop
+          review 2026-11-24). Keyboard users keep the one button; this only forwards clicks
+          on the band's empty sides to it. */}
+      <div
+        className="cursor-pointer"
+        onClick={(event) => {
+          if (!(event.target instanceof Element && event.target.closest("button"))) toggle.current?.click();
+        }}
+      >
+        <div className="kt-container">
+          <button
+            ref={toggle}
+            type="button"
+            aria-expanded={open}
+            aria-controls={panelId}
+            aria-haspopup="dialog"
+            onClick={() => {
+              // Expanding shows the latest data when the cached copy is older than 5 min.
+              if (!open && isStale) void refetch();
+              setOpen((value) => !value);
+            }}
+            className={cx("kt-ticker-trigger rounded-control", STRIP)}
+          >
+            <span className={FIRST_ROW}>
+              <span className={BADGE}>AI 선정</span>
+              <span className={TITLE}>{TOP5_TITLE}</span>
+              {data ? <span className={META}>{weekLabel(data)}</span> : <Skeleton className="h-4 w-20" />}
             </span>
-          </span>
-          <span className={ARROW}>
-            <Icon name="chevron-down" className={cx("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
-          </span>
-          <span className="sr-only">{open ? "목록 접기" : "목록 펼치기"}</span>
-        </button>
+            <span className={SECOND_ROW}>
+              {/* Last week's result is kept until this week's is published. */}
+              {data && isPrevious(data) && <span className={META}>{PREPARING}</span>}
+              <span className={VIEWPORT}>
+                {data ? (
+                  notice ? <span className="block truncate lg:text-small">{noticeCopy(notice, data).title}</span>
+                    : <Lineup items={lineupItems(data)} />
+                ) : isPending ? <Skeleton className="h-4 w-40" />
+                  : <span className="block truncate text-error">불러오지 못했습니다. 눌러서 다시 확인하세요.</span>}
+              </span>
+            </span>
+            <span className={ARROW}>
+              <Icon name="chevron-down" className={cx("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+            </span>
+            <span className="sr-only">{open ? "목록 접기" : "목록 펼치기"}</span>
+          </button>
+        </div>
       </div>
 
       {isDesktop ? (

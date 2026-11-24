@@ -158,6 +158,9 @@ export function Dialog({
         // whole dialog scrolls instead so the list and the buttons stay reachable (Codex N6).
         scrollArea && "[@media(max-height:500px)]:open:block [@media(max-height:500px)]:overflow-y-auto",
         "backdrop:bg-fg/12 lg:max-w-(--kt-dialog-width)",
+        // The dim closes it: show that with the pointer, like the TOP 5 panel's dim (desktop
+        // review 2026-11-24). Not while closing is blocked (a request still running).
+        !closeDisabled && "backdrop:cursor-pointer",
         layout === "center" && "max-w-(--kt-dialog-width)",
         // Sheet height: 85% of the screen; the compact sheet stops at the bottom of the sticky
         // header + TOP 5 strip instead (Figma 128:4408).

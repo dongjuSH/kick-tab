@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/api/query-keys";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -106,7 +107,13 @@ export function ReviewComposer({
     writeDraft(memberId, fixtureId, value);
   };
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["matches", "reviews"] });
+  // The match's list and the member's own list on the my page (written, edited or deleted
+  // here — desktop review 2026-11-24: 내 평가 stayed stale until it refetched by itself).
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["matches", "reviews"] }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.me.reviews() }),
+    ]);
 
   const fail = (caught: unknown, fallback: string) => {
     if (caught instanceof DOMException && caught.name === "AbortError") return;

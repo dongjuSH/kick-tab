@@ -59,7 +59,7 @@ function UpdatedAt({ value, checkedAt }: { value: string | null | undefined; che
  * `KickTab/Schedule Explorer` 225:2013 and `Schedule Feedback` 225:2374).
  *
  * - Date view: one KST match day of every supported competition, picked on the date bar of
- *   the common period (three past match days, today when it has a match, 17 ahead).
+ *   the common period (three past match days, today when it has a match, 28 ahead).
  * - Team view (search pick or favourite button): that team's matches in the same period,
  *   grouped by date, starting from every competition. The date in the URL is left untouched,
  *   so clearing the team returns to the previous date, date-bar position and competitions.
