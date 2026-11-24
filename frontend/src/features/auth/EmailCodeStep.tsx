@@ -33,7 +33,8 @@ function mmss(ms: number): string {
 
 /**
  * Email + 6-digit code (AUTH-001 rule 1). 10 minutes valid, resend after 1 minute (the new
- * code replaces the old one), five wrong codes make it unusable.
+ * code replaces the old one), five wrong codes make it unusable. '인증번호 받기' is primary on
+ * both screens (user decision 2026-11-24; Figma 52:2387 still draws it secondary).
  * - signup: both on the same screen (Figma 52:2387 → 134:5398 → 134:5623); changing the
  *   address after a send starts over, and once confirmed the address is locked.
  * - password_reset: separate steps (Figma 134:4077 → 134:4344). After the send the address
@@ -157,7 +158,7 @@ export function EmailCodeStep({
         />
       )}
       {!sent ? (
-        <Button variant={steps ? "primary" : "secondary"} fullWidth disabled={pending !== null} onClick={send}>
+        <Button variant="primary" fullWidth disabled={pending !== null} onClick={send}>
           {pending === "send" ? "보내는 중…" : "인증번호 받기"}
         </Button>
       ) : (

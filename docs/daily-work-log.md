@@ -12,6 +12,7 @@
 - **실제 확인(앱 내 브라우저·3000):** 1920·375에서 로그인, 회원가입 조건 전·후(가입하기 비활성 회색 → 활성 파랑), 가입 완료 확인 중·실패, 비밀번호 찾기 1→2→'이메일 다시 입력'→다른 주소로 2→3→'로그인으로 돌아가기'→재방문 시 1단계, 3단계 규칙 위반 오류, 소셜 안내, 호버·비활성·키보드 포커스(3px). 메일 단계는 페이지 안에서 응답만 대체해 실제 발송·가입·변경 0회. 가로 넘침 없음.
 - **검사:** frontend lint·`tsc --noEmit`·test 91 통과·build 통과.
 - **문서:** `guide.md` §3 02 행, 이 문서, `file-feature-map.md`(02 파일 항목을 처음 추가 — 백엔드·프런트·테스트).
+- **추가(같은 날, 사용자 요청):** 회원가입 '인증번호 받기'를 주요로(`EmailCodeStep.tsx` — 두 화면 모두 주요) 하고 Figma `52:2387`(`52:2459`)·`52:2545`(`52:2596`) 버튼을 Primary + KickTab 주요 색 토큰(비밀번호 찾기 `134:4205`와 같은 덮어쓰기)으로 변경. 닉네임 금칙어(P-04 갱신): 운영자 사칭 단어와 직설적인 욕설·비속어가 포함되면 가입 거부, 대소문자 무시·숫자 제거 후 비교(`backend/app/services/auth_security.py` `BLOCKED_NICKNAME_WORDS`·`nickname_blocked`·`NICKNAME_BLOCKED`, `frontend/src/features/auth/rules.ts` `nicknameError`, `SignupForm.tsx` 오류 표시), 사용자 테스트 계정 'admin'은 유지. 검사: backend ruff·pytest 397 passed/159 skipped, `KICKTAB_DB_TESTS=1` `test_auth_db` 42 passed, frontend lint·tsc·91 tests·build 통과. 화면: 1920에서 '킥탭운영자'·'Admin7' 오류와 '가입하기' 비활성, 'Sonny7' 정상(메일 응답 대체, 실제 발송 0).
 - **확인 결과(사용자 질문):** 비밀번호 찾기에서 기존과 같은 비밀번호로 바꾸는 것은 기획 문서(PRD·기능 명세서 v1.14)에 금지 규칙이 없어 현재 동작은 명세와 일치. 사용자 결정(2026-11-24): 현재처럼 허용 유지(막으려면 오류 문구·상태(Figma)와 서버 오류 코드를 새로 정해야 함).
 
 ## 2026-11-24 (화) — 01 공통 버튼 체계·헤더·팝업 버튼 통일(데스크탑 검수)

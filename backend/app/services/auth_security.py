@@ -33,6 +33,22 @@ EMAIL_MAX = 254
 EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 
 NICKNAME_RULE = "닉네임은 2~12자 완성형 한글·영문·숫자로 입력해 주세요."
+NICKNAME_BLOCKED = "사용할 수 없는 닉네임입니다."
+# A nickname may not contain these (user decision 2026-11-24): words that pass for the
+# operator, and direct profanity. Compared in lower case with digits removed, so "Admin1" or
+# "씨8발" are caught too. Accounts made before the rule keep their nickname. The signup
+# screen uses the same list (frontend `features/auth/rules.ts`, kept equal by a test).
+# fmt: off
+BLOCKED_NICKNAME_WORDS = (
+    # operator impersonation
+    "관리자", "운영자", "운영진", "운영팀", "킥탭", "고객센터", "공식",
+    "kicktab", "admin", "moderator", "official", "staff",
+    # direct profanity and its common spellings
+    "씨발", "시발", "씨바", "씨빨", "시빨", "씹", "병신", "븅신", "빙신", "개새", "개색",
+    "좆", "존나", "지랄", "썅", "미친놈", "미친년", "엠창", "느금", "섹스",
+    "fuck", "shit", "bitch", "sibal", "ssibal", "tlqkf", "qudtls",
+)
+# fmt: on
 PASSWORD_RULE = "비밀번호는 8~64자, 영문과 숫자를 각각 1자 이상 포함해 주세요."
 EMAIL_RULE = "이메일 주소 형식을 확인해 주세요."
 CONFIRM_RULE = "비밀번호 확인이 일치하지 않습니다."
@@ -59,7 +75,14 @@ def nickname_error(value: str) -> str | None:
     # fullmatch: `$` alone also matches before a trailing line break.
     if not NICKNAME_MIN <= len(value) <= NICKNAME_MAX or not NICKNAME_PATTERN.fullmatch(value):
         return NICKNAME_RULE
+    if nickname_blocked(value):
+        return NICKNAME_BLOCKED
     return None
+
+
+def nickname_blocked(value: str) -> bool:
+    plain = re.sub(r"[0-9]", "", value).lower()
+    return any(word in plain for word in BLOCKED_NICKNAME_WORDS)
 
 
 def password_error(value: str) -> str | None:

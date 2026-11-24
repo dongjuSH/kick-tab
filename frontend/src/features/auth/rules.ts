@@ -6,8 +6,31 @@
 export const NICKNAME_HINT = "2~12자 · 완성형 한글·영문·숫자 · 중복 불가";
 export const PASSWORD_HINT = "8~64자 · 영문·숫자 각각 1자 이상 포함";
 
+/**
+ * A nickname may not contain these (user decision 2026-11-24): words that pass for the
+ * operator, and direct profanity. Compared in lower case with digits removed. Must equal the
+ * server's `BLOCKED_NICKNAME_WORDS` (backend `auth_security.py`; a backend test compares them).
+ */
+export const BLOCKED_NICKNAME_WORDS = [
+  "관리자", "운영자", "운영진", "운영팀", "킥탭", "고객센터", "공식",
+  "kicktab", "admin", "moderator", "official", "staff",
+  "씨발", "시발", "씨바", "씨빨", "시빨", "씹", "병신", "븅신", "빙신", "개새", "개색",
+  "좆", "존나", "지랄", "썅", "미친놈", "미친년", "엠창", "느금", "섹스",
+  "fuck", "shit", "bitch", "sibal", "ssibal", "tlqkf", "qudtls",
+];
+
+export const NICKNAME_RULE = "닉네임은 2~12자 완성형 한글·영문·숫자로 입력해 주세요.";
+export const NICKNAME_BLOCKED = "사용할 수 없는 닉네임입니다.";
+
+/** The message the server would give for this nickname, or null when it is allowed. */
+export function nicknameError(value: string): string | null {
+  if (!/^[가-힣A-Za-z0-9]{2,12}$/.test(value)) return NICKNAME_RULE;
+  const plain = value.replace(/[0-9]/g, "").toLowerCase();
+  return BLOCKED_NICKNAME_WORDS.some((word) => plain.includes(word)) ? NICKNAME_BLOCKED : null;
+}
+
 export function nicknameValid(value: string): boolean {
-  return /^[가-힣A-Za-z0-9]{2,12}$/.test(value);
+  return nicknameError(value) === null;
 }
 
 export function passwordValid(value: string): boolean {

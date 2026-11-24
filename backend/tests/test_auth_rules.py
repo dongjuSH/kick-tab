@@ -1,7 +1,9 @@
 """Chat 02 rules that need no database: input rules (P-04), tokens, codes, mail, CSRF."""
 
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,7 +24,7 @@ def jwt_secret(monkeypatch):
 @pytest.mark.parametrize(
     ("nickname", "ok"),
     [
-        ("킥탭", True),
+        ("축구팬", True),
         ("Kick1", True),
         ("가나다라마바사아자차카타", True),  # 12
         ("가", False),  # 1
@@ -36,6 +38,39 @@ def jwt_secret(monkeypatch):
 )
 def test_nickname_rule(nickname, ok):
     assert (sec.nickname_error(nickname) is None) is ok
+
+
+@pytest.mark.parametrize(
+    ("nickname", "blocked"),
+    [
+        ("관리자", True),
+        ("킥탭운영자", True),
+        ("Admin", True),
+        ("admin7", True),
+        ("KickTab공식", True),
+        ("씨발", True),
+        ("씨8발", True),  # digits do not hide a word
+        ("병신123", True),
+        ("개새끼", True),
+        ("FuckYou", True),
+        ("축구팬", False),
+        ("토트넘팬7", False),
+        ("Sonny", False),
+    ],
+)
+def test_blocked_nicknames(nickname, blocked):
+    """User decision 2026-11-24: impersonation words and direct profanity, contained."""
+    assert (sec.nickname_error(nickname) == sec.NICKNAME_BLOCKED) is blocked
+
+
+def test_signup_screen_blocks_the_same_words():
+    """The signup screen checks the same list before sending (frontend rules.ts)."""
+    rules = (Path(__file__).resolve().parents[2] / "frontend/src/features/auth/rules.ts").read_text(
+        encoding="utf-8"
+    )
+    listed = re.search(r"BLOCKED_NICKNAME_WORDS = \[(.*?)\]", rules, re.S)
+    assert listed is not None
+    assert tuple(re.findall(r'"([^"]+)"', listed.group(1))) == sec.BLOCKED_NICKNAME_WORDS
 
 
 @pytest.mark.parametrize(

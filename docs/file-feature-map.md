@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-24 · 02 닉네임 금칙어·회원가입 '인증번호 받기' 주요(자체 검수·`dev` 병합):** 백엔드 `services/auth_security.py`(`BLOCKED_NICKNAME_WORDS`·`nickname_blocked`·`NICKNAME_BLOCKED`), 테스트 `tests/test_auth_rules.py`(금칙어·프런트 목록 일치). 프런트 `features/auth/rules.ts`(`BLOCKED_NICKNAME_WORDS`·`nicknameError`·`NICKNAME_RULE`·`NICKNAME_BLOCKED`), `SignupForm.tsx`(닉네임 오류), `EmailCodeStep.tsx`('인증번호 받기' 항상 주요), `tests/auth.test.mjs`.
+
 **2026-11-24 · 02 버튼 체계 적용·비밀번호 찾기 시안 맞춤(자체 검수·`dev` 병합):** 프런트 `features/auth/AuthForm.tsx`(`SocialButtons` 보조), `LoginForm.tsx`(하단 링크 텍스트), `SignupForm.tsx`('가입하기'·'자동 로그인 확인 중' 주요, '경기 일정 보기' 텍스트), `EmailCodeStep.tsx`(`password_reset` 단계형·`onEditEmail`·`onSent(email)`), `PasswordResetForm.tsx`(`sentTo`, 단계별 '로그인으로 돌아가기', 3단계 이메일 칸·규칙 안내 제거). 02 파일 항목을 이 문서에 처음 추가(백엔드·프런트·테스트). 비밀번호 찾기에서 기존과 같은 비밀번호 허용은 유지(사용자 결정).
 
 **2026-11-24 · 01 공통 버튼 체계·헤더·팝업 버튼 통일(자체 검수·`dev` 병합):** 프런트 `components/ui/Button.tsx`(`variant` primary·secondary·text·danger — `ghost` 삭제·`text`로 이름 변경, 5상태: 호버·누름(`:active`)은 `not-disabled:`만, 비활성 `text-fg-disabled`)·`app/globals.css`(`--kt-text-disabled`/`--color-fg-disabled` 추가, 쓰지 않게 된 `--kt-action-disabled` 삭제, 누름·호버 겹침 `kt-press-8`·`12`·`18`, 전역 포커스 외곽선을 `--kt-border-focus` 직접 참조로 복구)·`layout/HeaderAuth.tsx`(로그인·마이페이지 보조)·팝업 버튼 같은 폭 2칸(`match/ReviewSection.tsx` 로그인 안내, `mypage/WithdrawDialog.tsx` — 빨간 테두리 전용 버튼 삭제·위험 종류, `mypage/MyPage.tsx` 비로그인 카드, `mypage/PasswordDialog.tsx`)·종류 정리(`favorites/FavoriteSchedule.tsx`, `match/HeadToHeadSection.tsx`·`MatchDetail.tsx`·`MatchRecords.tsx`·`ReviewComposer.tsx`·`ReviewTextForm.tsx`, `mypage/AccountPanel.tsx`·`FavoriteTeams.tsx`·`MyReviews.tsx`, `results/ResultsSection.tsx`, `schedule/ScheduleSection.tsx`, `team-detail/TeamDetail.tsx`).
@@ -173,7 +175,7 @@
 | `app/services/head_to_head.py` | `fetch_meetings`·`fetch_form`(친선·미종료 제외, 범위 확대 1회), `ensure_meetings`·`ensure_form`(갱신 조건·쿨다운, `strict`는 TOP 5), `recent_form`·`result_for`, `read_head_to_head` | 라우트·TOP 5 | 완료(04, 08 재사용 가능) |
 | `app/services/reviews.py` | `list_reviews(sort)`(인기순·최신순·반응 수·유효 건수, 평균 없음), `review_open`(진행 중(SUSP 제외)·일반 종료만 공개·작성 가능 — 02 쓰기 API도 사용) | `routes/matches.py` | 완료(04, 02가 작성·반응·닉네임) |
 | `app/services/accounts.py` | 02: 인증번호 발송·확인(목적별), 가입(세 필수 확인 기록), 로그인·세션 회전·로그아웃, `reset_password`(인증 후 새 비밀번호·모든 세션 종료 — 기존과 같은 비밀번호도 허용, 2026-11-24 사용자 결정), `change_password`, `delete_account`. 잠금 순서: 계정 행 → 토큰·인증번호 행 | `routes/auth.py`·`me.py` | 완료(02) |
-| `app/services/auth_security.py` | 02: Argon2id 해시, JWT 접근 토큰(15분·`ver`), 인증번호 HMAC, 닉네임·비밀번호 규칙 | `accounts.py` | 완료(02) |
+| `app/services/auth_security.py` | 02: Argon2id 해시, JWT 접근 토큰(15분·`ver`), 인증번호 HMAC, 닉네임·비밀번호 규칙, 닉네임 금칙어(사칭·욕설 포함 시 거부, 프런트 목록과 같음) | `accounts.py` | 완료(02) |
 | `app/services/mailer.py` | 02: Gmail SMTP(STARTTLS) 인증번호 메일, 설정 없으면 콘솔 발송(자동 테스트 전용) | `accounts.py` | 완료(02) |
 | `app/services/member_favorites.py` | 02: 회원 관심 팀 조회·등록(10팀 한도)·해제 | `routes/me.py` | 완료(02) |
 | `app/services/moderation.py` | 02: 평가 작성 제한 설정·해제(약관 제9조) | `app/moderation.py`(CLI `python -m app.moderation`) | 완료(02) |
@@ -240,7 +242,7 @@
 | `tests/test_team_detail.py` | 08 규칙 단위 테스트(DB 없이): 현직 감독·시작 전 제외, 선수단·시즌 기록 파싱과 잘린 응답 거부, 반기 분류·7/1 경계·KST 하루 1회, 이적 필터·원본 저장·`merge_transfers`((가) 이름만 복사 줄·(나) 재등록·반대 방향·상대 ID 없음·같은 날 두 팀), 표시 기준 B, 선수 기록 8개 대회·페이지 누락·같은 선수 반복 거부, 승부차기 결과, 프로필 응답 2026-11-20: 대회 마스터 선별(컵·슈퍼컵·클럽 월드컵 포함, 친선·미개최 제외), 판정(근거 있음·완전 수집 0경기·근거 부족·영입 이전 팀), 임대 복귀, 1군 기준, 출전 수 NULL 조합, 구단·대회 없는 줄, 같은 선수 묶음. 2026-11-21: 결정 B NULL 해석, `club_appearances_unknown` 합성 테스트 삭제. 2026-11-24: 중복 정리 응답 저장·실제 이동 누락 거부·허용 폭 경계·재임대 누락. |
 | `tests/test_team_detail_db.py` | `KICKTAB_DB_TESTS=1`일 때 08: 직접 URL 판정·링크 일치(소속 미확인), 영역 API 상태 코드, 선수단 합계 = 대회별 줄 합·평점 0 제외, 최근 5경기 순서, 승격 팀 not_participated, 반기·고정 규칙·Stones 1건·기준 B 표시, 잘린 응답 보존·실패 기록, 7/1 실패 재시도, 같은 날 두 팀 이적 저장, 경기장 부분 응답, 팀 뉴스·24개 상한, 반복 선수 페이지 기록 유지, 선수 기록 작업 단위(롤백) |. 06 비회원 개선(2026-11-20): 최근 5경기 = 공식 경기 원천(슈퍼컵·미지원 공식전 포함, 오래된 순, 요청 없음)·갱신 실패 시 기존 유지·미적재 시 저장 경기  2026-11-20: 합계 대회 범위, 아칸지 한 줄·이동 보존, 기타 이동 = 모두 not_played, 영입 확인 작업 저장·재시도, NULL 근거 방출 표시, 과거 2시즌 작업 단위. 2026-11-21: 결정 B 판정(NULL 줄의 득점·도움·평점). 2026-11-24: 사본 없는 응답이 저장 시즌을 교체, 절반 누락은 거부. |
 | `tests/test_top5_db.py` | `KICKTAB_DB_TESTS=1`일 때 첫 실패→재시도 공개, 두 번 실패→지연·알림 1회→수동 복구, 경기 없음, 오래된 일정 실패, 시간 초과 게시 차단, 후기 정렬·평균(롤백) |, 두 모델 실패 시 시도별 알림과 지연 알림 1회·대체 모델 응답 게시·기록(2026-11-04), 실행 누락 주 지연→수동 복구 교체·주 경계에서 지난주 공개 금지(2026-11-1 2026-11-21(00): 저장 순위 사용 회귀. |
-| `tests/test_auth_rules.py` | 02 규칙(DB 없이): 비밀번호·닉네임·이메일 규칙, Argon2id·토큰 해시·15분 접근 토큰, 메일(SMTP 없으면 미발송), 쿠키·CSRF·비회원 거부 |
+| `tests/test_auth_rules.py` | 02 규칙(DB 없이): 비밀번호·닉네임·이메일 규칙, 닉네임 금칙어·프런트 목록 일치, Argon2id·토큰 해시·15분 접근 토큰, 메일(SMTP 없으면 미발송), 쿠키·CSRF·비회원 거부 |
 | `tests/test_auth_db.py` | `KICKTAB_DB_TESTS=1`일 때 02: 인증번호·가입·로그인·세션 회전·재사용 감지·비밀번호 찾기/변경·탈퇴·관심 팀 10팀·평가 제한, 잠금 순서 |
 | `tests/test_retention_db.py` | `KICKTAB_DB_TESTS=1`일 때 보관 기간 정리 단계별 |
 
@@ -257,7 +259,7 @@
 | `tests/team-detail.test.mjs` | 08 테스트(포지션순 기본 정렬, 누락값 두 방향 맨 뒤·같은 선수 집합, 정렬 전환, '—' 표시, 시즌 기록 행, 이적 유형 문구(금액은 완전 이적), 반기 기본값·시작 전 반기 대체, 경기장 표기) |
 | `tests/top5.test.mjs` | 01 테스트 5개(지난주 유지 시 실제 기간·준비 상태·대진 순서, 지연·경기 없음 문구 구분, 띠 고정 제목·배지 렌더, 일반 클릭 판정 `isPlainClick`, 중단 경기 문구 `statusNotes`·변경 일시 사유 중복 없음) |
 | `tests/mypage.test.mjs` | 09 테스트 7개(관심 팀 개수·한도, 팀 링크 규칙, 수정 날짜·KST, 비밀번호 오류 코드↔칸·로컬 판정 순서, 이메일 계정만 변경, 닫힌 경기 409) |
-| `tests/auth.test.mjs` | 02 입력 규칙·가입 상태 문구·`returnTo` 내부 경로 | 완료(02) |
+| `tests/auth.test.mjs` | 02 입력 규칙·닉네임 금칙어·가입 상태 문구·`returnTo` 내부 경로 | 완료(02) |
 | `tests/auth-session.test.mjs` | 02 세션: 로그아웃·갱신 경합, 이전 세션 401 무시, `memberRequest` 복귀 | 완료(02) |
 | `tests/match-regressions.test.mjs` | 04 회귀 테스트(경기 정보 갱신 연동 기록 재조회·종료 1회, 상태별 영역, 타임라인 아이콘·문구, 최근 5경기 미리보기, 평가 건수만, 로고+팀명 링크, 선수 평점 카드, 중단 경기 타임라인만, 지연 경고 시계, TOP 5 교체 재시도 등), 실제 TS 모듈을 변환해 실행. 06 비회원 개선(2026-11-20): `formItems`(오래된 순·홈/원정 복원, 옛 `formPreview` 테스트 대체) | 완료(04, 개선 반영) |
 | `next.config.ts` | `cacheComponents`·`partialPrefetching`, `/api/*` → `BACKEND_ORIGIN` rewrites | 완료 |
@@ -390,10 +392,10 @@
 | `auth/AuthForm.tsx` | 02: `AuthCard`(440px 카드·단계 줄), `Field`, `FormMessage`, `SocialButtons`(보조 버튼, 누르면 같은 화면 준비 중 안내) | 인증 화면 | 완료(02) |
 | `auth/LoginForm.tsx` | 02 로그인(52:2116): `/auth/me` 확인 후 `returnTo` 복귀·평가 의도 복원, '비밀번호 찾기'·'회원가입' 텍스트 버튼 | `/auth/login` | 완료(02) |
 | `auth/SignupForm.tsx` | 02 회원가입(52:2387): 이메일 인증·닉네임·비밀번호·세 필수 확인, '가입하기' 항상 주요(조건 전 비활성), 가입 후 자동 로그인 확인 중·실패 | `/auth/signup` | 완료(02) |
-| `auth/EmailCodeStep.tsx` | 02 이메일 인증번호: 가입은 같은 화면, 비밀번호 찾기는 단계형(1단계 '인증번호 받기' 주요, 2단계 이메일 칸 숨김·'이메일 다시 입력') — 10분·1분 재발송 | `/auth/email-codes` | 완료(02) |
+| `auth/EmailCodeStep.tsx` | 02 이메일 인증번호('인증번호 받기' 두 화면 모두 주요): 가입은 같은 화면, 비밀번호 찾기는 단계형(1단계 이메일, 2단계 이메일 칸 숨김·'이메일 다시 입력') — 10분·1분 재발송 | `/auth/email-codes` | 완료(02) |
 | `auth/PasswordResetForm.tsx` | 02 비밀번호 찾기 4단계(134:4077·134:4344·134:4633·134:5037): '인증번호 전송: 이메일', 1~3단계 '로그인으로 돌아가기', 완료 후 다시 로그인, 떠나면 1단계부터 | `/auth/password-reset` | 완료(02) |
 | `auth/session.ts`·`AuthSync.tsx` | 02 세션 상태(`useAuth`·`checkSession`·`logout`·`memberRequest`·세대 `authEpoch`), 회원 변경 시 회원 전용 캐시 제거 | `layout`·헤더·회원 화면 | 완료(02) |
-| `auth/returnTo.ts`·`rules.ts` | 02 내부 경로만 `returnTo`·평가 의도, 입력 규칙·가입 상태 문구 | 인증 화면 | 완료(02) |
+| `auth/returnTo.ts`·`rules.ts` | 02 내부 경로만 `returnTo`·평가 의도, 입력 규칙·닉네임 금칙어 `nicknameError`·가입 상태 문구 | 인증 화면 | 완료(02) |
 | `legal/documents.ts`·`LegalLink.tsx` | 02 약관·개인정보 문서 목록(공개 전 '보기 준비 중'), 가입 필수 확인 링크 | `SignupForm` | 완료(02)(공개는 배포 시) |
 
 ### 라이브러리 (`src/lib/`)
