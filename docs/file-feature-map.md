@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-25 · 07 팀 탐색 별 아이콘 팀 카드(자체 검수·`dev` 병합):** 프런트 `features/teams/TeamsSection.tsx`(팀 카드 한 줄 — 엠블럼·팀명/보조 글씨·오른쪽 끝 별, 큰 등록 버튼 제거, 여백 16px·둥글기 12px), `features/favorites/FavoriteStar.tsx`(`iconSize` 16·18). 아래 표는 이 변경을 반영했다.
+
 **2026-11-25 · 06 단계 탭 첫 화면 왼쪽 맞춤 결함 수정(00 검수·`dev` 병합):** 프런트 `features/standings/StageTabs.tsx`(칩 줄 안쪽 내용 폭·글꼴 로딩 완료에도 다시 측정).
 
 **2026-11-25 · 06 리그 순위 데스크톱 검수 반영(사용자 결정 반영·`dev` 병합):** 프런트 `features/standings/StageTabs.tsx`(새, UEFA 단계 하위 탭), `StandingsSection.tsx`, `model.ts`·`StandingsTable.tsx`(구간 색 토큰), `PlayerRankings.tsx`(고정 열 폭·줄바꿈·20위 안내), `KnockoutStage.tsx`(긴 단어 줄바꿈), `app/globals.css`(`--kt-band-*`). 백엔드 `api/routes/standings.py`(0 제외·최대 20명). 테스트 `standings.test.mjs`·`test_standings_db.py`.
@@ -74,7 +76,7 @@
 
 > TOP 5는 기획 문서의 2026-11-02 개정 정책(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.
 
-기준: 2026-11-24 (화, 02 로그인·회원가입 버튼 체계 적용·비밀번호 찾기 시안 맞춤 완료 — 자체 검수), 브랜치 `feat/02-auth`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+기준: 2026-11-25 (수, 07 팀 탐색 별 아이콘 팀 카드 반영 — 자체 검수), 브랜치 `feat/07-team-browse`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -369,7 +371,7 @@
 | `standings/useStandingsParams.ts` | URL 상태(`league`·`season`·`stage`·`type`), 미지원 대회·시즌·단계·유형 구분, 대회·시즌·단계는 push·유형은 `replaceState`, 06 개선: UEFA 대회 허용·대회 변경 시 단계 삭제·리그 페이즈는 단계 파라미터 없음 | `StandingsSection` | 완료(06, 06 개선) |
 | `standings/queries.ts` | `standingsQuery`·`standingsSummaryQuery`·`playerRankingsQuery`, 06 개선 `knockoutsQuery`(5분 신선도) | `apiFetch` | 완료(06, 06 개선) |
 | `standings/model.ts` | `LEAGUES`(탭·칩 이름), 06 개선 `UEFA`·`isUefa`·`competitionLabel`·`STAGES`·`stageLabel`·`leagueZone`(리그별 강등·승강 PO 위치, 종료 후 결과)·`phaseBands`·`RESULT_LABEL`·`legRows`(차전 표기), `RANKING_TYPES`, `signed`·`numberText`·`rankText`, `dataStatus`(실패 우선 → partial). 06 개선에서 `formResults`·`zoneLabel` 삭제. 06 비회원 개선(2026-11-20): `LEAGUES`·`UEFA` 이름은 `name_ko` 값·`COMPETITIONS`, `tableBands`·`bandOf`·`rangeText`, 삭제 `leagueZone`·`phaseBands`·`Zone`·`RESULT_LABEL`·`chip`·`short`. 2026-11-25(06 데스크톱 검수): `Band.tone` = 색 토큰 이름(direct·playoff·out·relegation) | 06 화면, 07 리그 칩·상태 판정 | 완료(06, 06 개선) |
-| `teams/TeamsSection.tsx` | 팀 탐색 화면(Figma 52:624/52:949, 상태 57:766·57:836): 리그 칩(06 `ChipRow`, 모바일 한 줄 가로 스크롤), 공통 `TeamSearch`(라벨 '팀 검색', 후보는 현재 5대 리그 팀 — 선택 = `team`·리그 '전체', 후보 없는 Enter = `q`, 같은 조건 Enter는 이동 없음), 관심 팀 안내(5팀일 때만·저장소 차단), 소속 미확인 안내(57:836), 카드(엠블럼·이름·영문명 · 리그, `/teams/{id}` 링크, `FavoriteToggle`, 등록 시 파란 테두리), `Pagination`, `DataState`(로딩·검색 결과 없음+검색어 지우기·조회 실패·재조회 실패 시 확인된 목록 유지), 잘못된 URL·페이지 초과 안내 2026-11-21(00): 팀 카드 리그명 `competitionName()`(한글 대회명). | `useTeamsParams`·`queries`·`favorites` | 완료(07) |
+| `teams/TeamsSection.tsx` | 팀 탐색 화면(Figma 52:624/52:949, 상태 57:766·57:836): 리그 칩(06 `ChipRow`, 모바일 한 줄 가로 스크롤), 공통 `TeamSearch`(라벨 '팀 검색', 후보는 현재 5대 리그 팀 — 선택 = `team`·리그 '전체', 후보 없는 Enter = `q`, 같은 조건 Enter는 이동 없음), 관심 팀 안내(5팀일 때만·저장소 차단), 소속 미확인 안내(57:836), 카드(한 줄: 엠블럼 40px · 이름 16px Bold / 영문명 · 리그 12px · 오른쪽 끝 `FavoriteStar` 18px(영역 44px), 여백 16px·둥글기 12px, `/teams/{id}` 링크, 등록 시 파란 테두리 — 2026-11-25), `Pagination`, `DataState`(로딩·검색 결과 없음+검색어 지우기·조회 실패·재조회 실패 시 확인된 목록 유지), 잘못된 URL·페이지 초과 안내 2026-11-21(00): 팀 카드 리그명 `competitionName()`(한글 대회명). | `useTeamsParams`·`queries`·`favorites` | 완료(07) |
 | `teams/useTeamsParams.ts` | URL 상태(`league`·`q`·`team`·`page`), 잘못된 리그·페이지·팀(32비트 상한)·40자 넘는 검색어는 `invalid`, 리그·검색 변경 시 첫 페이지, 모든 변경 push, 초기화 | Next 라우터 | 완료(07) |
 | `teams/queries.ts` | `teamsQuery`(`GET /teams`, `team`이면 `q` 미전송, 10분 신선도, key `teams.list`) | `apiFetch` | 완료(07) |
 | `team-detail/TeamDetail.tsx` | 팀 상세(Figma 52:1254/52:1866, 헤더 472:18198, 상태 57:766·57:836): '‹ 팀 탐색', PC 왼쪽(기본 정보·경기·선수단·뉴스)/오른쪽(시즌 기록·이적), 기본 정보(엠블럼 56·이름·영문명·리그·`FavoriteToggle`·저장소 차단 안내·리그·감독·홈구장·최근 5경기 06 `RecentForm`), 모바일 4탭(경기·선수단·기록·뉴스), URL `tab`·`stats`·`transfers`·`half`(pushState — 뒤로 가기 복원), 404·503 안내. 06 비회원 개선(2026-11-20): 최근 5경기 공통 `RecentForm` + `formItem` 2026-11-21(00): 기본 정보 리그명 `competitionName()`(한글 대회명). | 영역 컴포넌트·`queries` | 완료(08) |
@@ -385,10 +387,10 @@
 | `schedule/DateBar.tsx` | 공통 경기일 날짜 막대(03 2026-11-19: 경기 있는 날만, 월/일·요일; 이전 21일 달력 폐기)(데스크톱 화살표·모바일 터치 스크롤) 03(2026-11-24): 온전한 칸만(PC 60px 이상 칸을 늘려 채움, 모바일 5/4칸), 화살표 한 줄 단위·터치 스크롤 칸 맞춤. | `ScheduleSection` | 완료 |
 | `schedule/ScheduleNotice.tsx` | 일정 안내 상자(neutral·warning·error, Figma 225:2374), `failedNames()` | 일정·관심 팀 | 완료 |
 | `favorites/store.ts`·`useFavorites.ts` | 비회원 관심 팀 localStorage(`kt-fav-guest`, 최대 5개, 저장 불가 처리, 다른 탭 반영, 07: 등록·해제 직전 더 새 목록을 발견하면 모든 구독자에 알림 `latest()`) | 관심 팀 UI | 완료(02가 회원 DB 동기화) |
-| `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시 — 누른 직후 목록에 묶이고 목록이 바뀌면 지움, 07: 5개가 차면 다른 팀 비활성 '최대 5개까지 등록할 수 있어요') | 07 사용, 08 사용 예정 | 완료(07) |
+| `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시 — 누른 직후 목록에 묶이고 목록이 바뀌면 지움, 07: 5개가 차면 다른 팀 비활성 '최대 5개까지 등록할 수 있어요') | 팀 상세(08). 팀 탐색은 2026-11-25부터 `FavoriteStar` | 완료(07) |
 | `favorites/FavoriteSchedule.tsx` | 메인 관심 팀 패널(Figma Guest Favorites 306:6220): n/5·팀 추가(`TeamSearch`, 등록 가능 팀만)·빈 상태·등록 목록 해제·5팀 제한·저장 실패 재시도, 팀별 진행 중·가장 가까운 예정 1경기 요약, 일부 실패·재조회 실패 안내 03(2026-11-24): 제목 줄 [★ 관심 팀 n/한도 … 팀 추가], 등록 팀 가로 칩 한 줄(`TeamChips`), 요약 경기 2줄 76px, 기본 3경기 + '더 보기 (3/n)'(팀 기준 접기 삭제). | `favoriteScheduleQuery`, `useFavorites` | 완료 |
 | `favorites/FavoriteTeamButtons.tsx` | 팀 검색 아래 '★ 관심 팀' + 파란 글자 버튼(44px), 다시 누르면 해제, 선택돼도 같은 모양·`aria-pressed`, 팀이 없으면 표시 안 함(Figma 49:57·61:883) | 메인 일정·지난 경기 | 완료(05 개선) |
-| `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) 03(2026-11-24): 거부 팝업 한 줄, 화면 끝 16px 안쪽 보정. | `MatchCard` | 완료 |
+| `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) 03(2026-11-24): 거부 팝업 한 줄, 화면 끝 16px 안쪽 보정. 07(2026-11-25): `iconSize` 16(기본)·18 — 팀 탐색 카드는 18. | `MatchCard`, 팀 탐색 `TeamsSection` | 완료 |
 | `mypage/MyPage.tsx` | 마이페이지 조립(MY-001): 인증 확인 중 스켈레톤, 비회원·만료 세션은 로그인 안내 카드(`loginHref('/mypage')`), 회원은 PC 왼쪽 관심 팀·내 평가 / 오른쪽 360px 계정 관리 | `useAuth()` | 완료(09) |
 | `mypage/FavoriteTeams.tsx` | 관심 팀(MY-002): `useFavorites()` 그대로, n / 10, '관심 팀 추가'(`TeamSearch`), 10팀이면 추가만 막고 한도 안내, 팀 상세 링크 규칙, 추가·삭제 뒤 포커스 | `useFavorites`, `memberFavoritesQuery` | 완료(09) |
 | `mypage/MyReviews.tsx` | 내 평가(MY-003): 최신순, 수정한 평가만 수정 날짜, 수정(공용 폼·닫힌 경기 409 안내)·삭제 확인, 작성 제한 안내·수정 비활성 | `myReviewsQuery`, `ReviewTextForm`, `ReviewRestriction` | 완료(09) |

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { DataState, StateMessage } from "@/components/ui/DataState";
 import { Pagination } from "@/components/ui/Pagination";
 import { cx } from "@/components/ui/cx";
-import { FavoriteToggle } from "@/features/favorites/FavoriteToggle";
+import { FavoriteStar } from "@/features/favorites/FavoriteStar";
 import { useFavorites } from "@/features/favorites/useFavorites";
 import { ListSkeleton } from "@/features/schedule/ScheduleSection";
 import { ChipRow, type ChipItem } from "@/features/standings/ChipRow";
@@ -212,21 +212,29 @@ function TeamCard({ item }: { item: BrowseTeam }) {
       </span>
     </>
   );
+  // One row (Figma 52:624 / 52:949): crest · name and its line · star at the end. The name
+  // opens the team detail; the star registers or removes the team in place.
   return (
     <li
       className={cx(
-        "flex min-w-0 flex-col gap-3.5 rounded-card border bg-surface p-4",
+        "flex min-w-0 items-center gap-3 rounded-tile border bg-surface p-4",
         favorites.has(team.id) ? "border-action" : "border-line",
       )}
     >
       {team.detailAvailable === true ? (
-        <Link href={`/teams/${team.id}`} prefetch={false} className="group flex min-h-12 items-center gap-3 rounded-control">
+        <Link
+          href={`/teams/${team.id}`}
+          prefetch={false}
+          className="group flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-control"
+        >
           {info}
         </Link>
       ) : (
-        <div className="flex min-h-12 items-center gap-3">{info}</div>
+        <div className="flex min-h-12 min-w-0 flex-1 items-center gap-3">{info}</div>
       )}
-      <FavoriteToggle teamId={team.id} teamName={name} />
+      <span className="flex size-11 shrink-0 items-center justify-center">
+        <FavoriteStar teamId={team.id} teamName={name} iconSize={18} />
+      </span>
     </li>
   );
 }
