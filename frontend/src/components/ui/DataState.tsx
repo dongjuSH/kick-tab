@@ -43,6 +43,7 @@ export function StateMessage({
   description,
   action,
   tone = "neutral",
+  heading = false,
   className,
 }: {
   title: ReactNode;
@@ -50,8 +51,14 @@ export function StateMessage({
   action?: ReactNode;
   /** neutral = search icon (Figma empty/success state), error = info icon (57:150), plain = no icon. */
   tone?: "neutral" | "plain" | "error";
+  /**
+   * The title is the page's h1 (full-page "not found" screens): same look, read once as the
+   * page heading instead of a separate hidden h1.
+   */
+  heading?: boolean;
   className?: string;
 }) {
+  const Title = heading ? "h1" : "p";
   return (
     <div
       role={tone === "error" ? "alert" : "status"}
@@ -59,7 +66,7 @@ export function StateMessage({
     >
       {tone === "neutral" && <Icon name="search" />}
       {tone === "error" && <Icon name="info" />}
-      <p className="text-lead font-bold text-fg">{title}</p>
+      <Title className="text-lead font-bold text-fg">{title}</Title>
       {description && <p className="text-body text-fg-secondary">{description}</p>}
       {action}
     </div>

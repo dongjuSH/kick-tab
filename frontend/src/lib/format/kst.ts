@@ -71,12 +71,6 @@ export function formatKstDateTime(value: string | Date): string {
   return `${p.year}-${pad(p.month)}-${pad(p.day)} ${formatKstTime(value)}`;
 }
 
-/** "10월 29일 목요일". */
-export function formatKstLongDate(value: string | Date): string {
-  const p = kstParts(value);
-  return p ? `${p.month}월 ${p.day}일 ${p.weekday}요일` : MISSING;
-}
-
 /**
  * Calendar date without time ("2026-10-26", e.g. kickoffDateKst or the TOP 5 week).
  * Parsed as-is so no timezone shift can move the day.
@@ -101,13 +95,6 @@ export function kstTodayIso(now: Date = new Date()): string {
   return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
 }
 
-/** Calendar arithmetic on "YYYY-MM-DD" (no timezone involved). */
-export function addDaysIso(value: string, days: number): string {
-  const p = parseIsoDate(value);
-  if (!p) return value;
-  return new Date(Date.UTC(p.year, p.month - 1, p.day + days)).toISOString().slice(0, 10);
-}
-
 /** "방금 전" / "12분 전" / "3시간 전", then "11/1(일) 13:00" from one day old. */
 export function formatRelativeKst(value: string, now: Date = new Date()): string {
   const date = toDate(value);
@@ -121,7 +108,3 @@ export function formatRelativeKst(value: string, now: Date = new Date()): string
 
 /** Shown for values the provider did not supply (guide §4). */
 export const MISSING = "—";
-
-export function orMissing<T>(value: T | null | undefined, format: (v: T) => string = String): string {
-  return value === null || value === undefined ? MISSING : format(value);
-}

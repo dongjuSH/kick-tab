@@ -8,11 +8,9 @@ export type CompetitionRef = Schemas["CompetitionRef"];
 export type MatchScore = Schemas["MatchScore"];
 export type MatchSummary = Schemas["MatchSummary"];
 export type MatchStatus = MatchSummary["status"];
-export type FinishType = NonNullable<MatchSummary["finishType"]>;
 
 export type TopMatches = Schemas["TopMatches"];
 export type TopMatchItem = Schemas["TopMatchItem"];
-export type TopMatchesView = TopMatches["view"];
 export type TopMatchesMeta = Schemas["TopMatchesMeta"];
 export type TopMatchesVersion = Schemas["TopMatchesVersion"];
 

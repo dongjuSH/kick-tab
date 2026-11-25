@@ -123,6 +123,7 @@ function OverviewFailure({ pending, error, onRetry }: { pending: boolean; error:
     return (
       <StateMessage
         tone="error"
+        heading
         className="rounded-card border border-line bg-surface"
         title={unavailable ? "팀 상세를 제공하지 않는 팀입니다" : "팀을 찾을 수 없습니다"}
         description={error.message}

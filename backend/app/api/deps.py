@@ -1,12 +1,10 @@
 """Shared FastAPI dependencies: CSRF header check and per-client request limits."""
 
 import threading
-from collections.abc import Callable, Coroutine, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
 
-from fastapi import Request, Response
-from fastapi.routing import APIRoute
+from fastapi import Request
 
 from app.api.errors import ApiError
 from app.config import settings
@@ -53,9 +51,7 @@ class RateLimit:
     `shared_global` lets several limits (e.g. members and guests of one form) count against
     one scope-wide counter (and share its lock) instead of each getting its own.
 
-    Use `route_class()` on the router so the limit runs before the body is parsed: a
-    malformed JSON body then still counts (P-10). Calling the instance directly also works
-    (e.g. as a dependency) for routes without a body.
+    Call the instance (e.g. as a dependency).
     """
 
     def __init__(
@@ -101,19 +97,3 @@ class RateLimit:
             "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.",
             headers={"Retry-After": retry_after_header(max(blocked))},
         )
-
-    def route_class(self) -> type[APIRoute]:
-        """APIRoute subclass that applies this limit before request parsing."""
-        limit = self
-
-        class RateLimitedRoute(APIRoute):
-            def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-                handler = super().get_route_handler()
-
-                async def limited(request: Request) -> Response:
-                    limit(request)
-                    return await handler(request)
-
-                return limited
-
-        return RateLimitedRoute

@@ -86,6 +86,7 @@ export function MatchDetail({ id }: { id: number }) {
       return (
         <StateMessage
           tone="error"
+          heading
           title="경기를 찾을 수 없습니다"
           description="주소가 바뀌었거나 제공되지 않는 경기입니다. 다른 경기로 대신 안내하지 않습니다."
           action={<ButtonLink href="/">경기 일정으로 이동</ButtonLink>}
