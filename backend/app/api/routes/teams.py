@@ -405,7 +405,7 @@ def read_team_transfers(
         raise _not_collected("이적")
     today = kst_today()
     rows = detail.merge_transfers(detail.read_transfers(db, team_id, season))
-    evidence = detail.move_evidence(db, team_id, season, rows)
+    evidence = detail.move_evidence(db, team_id, season)
     known = detail.counterpart_names(db, (r.counterpart_id for r in rows))
     short = f"{season % 100:02d}-{(season + 1) % 100:02d}"
 

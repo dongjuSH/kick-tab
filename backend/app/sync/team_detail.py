@@ -29,33 +29,32 @@ from app.config import settings
 from app.core.kst import kst_today
 from app.providers.api_football import ApiFootballClient, ApiFootballError
 from app.seed.competitions import LEAGUE_IDS
+from app.services.match_detail import mark_record_failures, store_fixture_records
 from app.services.reference import managed_seasons
 from app.services.standings import IncompleteData
 from app.services.team_detail import (
     current_members,
     is_due,
     mark_failure,
-    mark_player_season_failure,
     missing_nationalities,
     never_stored,
-    parse_player_season,
     parse_profile_nationality,
     parse_squad,
     parse_statistics,
     parse_team_players,
     parse_transfers,
-    pending_checks,
     pick_coach,
+    played_competitions,
     played_league,
     record_competitions,
     save_coach,
     save_nationality,
-    save_player_season,
     save_squad,
     save_statistics,
     save_team_player_stats,
     save_transfers,
     transfer_seasons,
+    unread_record_matches,
     unsynced_leagues,
 )
 from app.sync.reference import FATAL
@@ -64,16 +63,8 @@ from app.sync.registry import JobContext, JobPartialFailure, register_job
 logger = logging.getLogger(__name__)
 
 # (team, seasons, kind, label): one request; every season it writes is marked on failure.
-# The prior-club checks use (player, (season,), "player_season", label).
 Unit = tuple[int, tuple[int, ...], str, str]
 Store = Callable[[Session, datetime], None]
-Mark = Callable[[Session, Unit, datetime, str], None]
-
-
-def _mark_team_unit(session: Session, unit: Unit, now: datetime, reason: str) -> None:
-    team, seasons, kind, _ = unit
-    for season in seasons:
-        mark_failure(session, team, season, kind, now, reason)
 
 
 def _forced(params: Mapping[str, Any]) -> bool:
@@ -104,7 +95,6 @@ def _run_units(
     ctx: JobContext,
     units: list[Unit],
     fetch: Callable[[ApiFootballClient, Unit], Store],
-    mark: Mark = _mark_team_unit,
 ) -> tuple[list[str], bool]:
     """Fetch, parse and store each unit in its own transaction. Returns failed labels and
     whether a fatal provider stop ended the run (every remaining unit is marked failed)."""
@@ -125,9 +115,10 @@ def _run_units(
             reason, fatal = type(exc).__name__, False
         session.rollback()
         now = datetime.now(UTC)
-        for failed_unit in units[index:] if fatal else [unit]:
-            mark(session, failed_unit, now, reason)
-            failed.append(failed_unit[3])
+        for team, seasons, kind, label in units[index:] if fatal else [unit]:
+            for season in seasons:
+                mark_failure(session, team, season, kind, now, reason)
+            failed.append(label)
         session.commit()
         logger.warning("%s failed: %s", unit[3], reason)
         if fatal:
@@ -273,6 +264,34 @@ def sync_transfers(ctx: JobContext) -> None:
         ))
 
 
+RECORD_IDS_PER_REQUEST = 20
+
+
+def _read_record_matches(ctx: JobContext, teams: list[int]) -> list[str]:
+    session = ctx.session
+    targets = sorted({f for team in teams for f in unread_record_matches(session, team)})
+    failed: list[str] = []
+    if not targets:
+        return failed
+    client = ctx.api_football()
+    for start in range(0, len(targets), RECORD_IDS_PER_REQUEST):
+        chunk = targets[start : start + RECORD_IDS_PER_REQUEST]
+        now = datetime.now(UTC)
+        try:
+            result = client.get("/fixtures", {"ids": "-".join(map(str, chunk)), "timezone": "UTC"})
+            stored = store_fixture_records(session, result.response or [], now)
+        except (ApiFootballError, SQLAlchemyError) as exc:
+            session.rollback()
+            stored = set()
+            logger.warning("match records %s failed: %s", chunk, type(exc).__name__)
+        lost = [f for f in chunk if f not in stored]
+        if lost:
+            mark_record_failures(session, lost, now)
+            failed += [f"record:{f}" for f in lost]
+        session.commit()
+    return failed
+
+
 # Past seasons kept for the squad (last season) and as appearance evidence for the moves of
 # the managed seasons (2026-11-20: the season before last too, e.g. 2024 for 2025-26 moves).
 PLAYER_PAST_SEASONS = 2
@@ -333,71 +352,22 @@ def sync_team_player_stats(ctx: JobContext) -> None:
         for page in range(2, total + 1):
             result = client.get("/players", {**params, "page": page})
             pages.append({"response": result.response, "paging": result.paging})
-        parsed = parse_team_players(pages, team, season, scopes[season])
+        scope = scopes[season]
+        if season == settings.current_season:
+            # Lines of a competition not played yet this season (last season's cup listed
+            # again by the provider) are not stored: they come back once it is played.
+            scope = scope & played_competitions(session, team, season)
+        parsed = parse_team_players(pages, team, season, scope)
         return lambda s, now: save_team_player_stats(s, team, season, parsed, now)
 
-    unit_failures, _ = _run_units(ctx, units, fetch)
+    unit_failures, stopped = _run_units(ctx, units, fetch)
     failed += unit_failures
-    if failed:
-        raise JobPartialFailure(f"Failed: {', '.join(failed[:40])}" + (
-            f" (+{len(failed) - 40})" if len(failed) > 40 else ""
-        ))
-
-
-# Prior-club checks per run (TEAM-006 rule 6): the first backlog (thousands of signings) is
-# spread over several days inside the daily budget; afterwards only new signings remain.
-PLAYER_CHECKS_PER_RUN = 1500
-
-
-def _check_units(session: Session, params: Mapping[str, Any]) -> list[Unit]:
-    limit = int(params.get("limit") or PLAYER_CHECKS_PER_RUN)
-    if limit < 1:
-        raise ValueError("limit must be positive")
-    pending = pending_checks(session, (team for team, _ in _ordered(_teams(session, params))))
-    return [
-        (player, (season,), "player_season", f"player_season:{player}:{season}")
-        for player, season in pending[:limit]
-    ]
-
-
-def _mark_check_unit(session: Session, unit: Unit, now: datetime, reason: str) -> None:
-    player, (season,), _, _ = unit
-    mark_player_season_failure(session, player, season, now, reason)
-
-
-def _checks_precheck(session: Session, params: Mapping[str, Any]) -> bool:
-    try:
-        return bool(_check_units(session, {**params, "limit": 1}))
-    except (JobPartialFailure, ValueError):
-        return True
-
-
-@register_job(
-    "transfer_player_checks",
-    description="First-team appearances of signings at the club they came from (/players?id=)",
-    schedule={"trigger": "cron", "hour": 15, "minute": 40},  # 00:40 KST, after transfers
-    precheck=_checks_precheck,
-)
-def sync_transfer_player_checks(ctx: JobContext) -> None:
-    """TEAM-006 rule 6 (2026-11-20): for each signing of the managed seasons that still waits
-    for evidence (`check_pending`), one /players?id=&season= request for the season of the
-    club he came from (`check_season`); the first-team appearances per club are stored
-    (`player_club_seasons`) and the player-season is never asked again. A failed request is
-    asked again on a later run. At most `limit` (default PLAYER_CHECKS_PER_RUN) a run;
-    `team=`/`league=` narrow the signings."""
-    session = ctx.session
-    units = _check_units(session, ctx.params)
-
-    def fetch(client: ApiFootballClient, unit: Unit) -> Store:
-        player, (season,), _, _ = unit
-        result = client.get("/players", {"id": player, "season": season})
-        total = int((result.paging or {}).get("total") or 1)
-        if total > 1:
-            raise IncompleteData(f"player season: {total} pages")
-        clubs = parse_player_season(result.response, player, season)
-        return lambda s, now: save_player_season(s, player, season, clubs, now)
-
-    failed, _ = _run_units(ctx, units, fetch, _mark_check_unit)
+    if not stopped:
+        # 2026-11-25: a played competition still without player lines — read its match
+        # records once (04 storage, 20 a request) to tell a provider without player data
+        # (not partial) from records not collected yet.
+        teams = {team for team, (season,), _, _ in units if season == settings.current_season}
+        failed += _read_record_matches(ctx, sorted(teams))
     if failed:
         raise JobPartialFailure(f"Failed: {', '.join(failed[:40])}" + (
             f" (+{len(failed) - 40})" if len(failed) > 40 else ""

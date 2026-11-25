@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.main import app
+from app.models.fixture import Fixture
 from app.models.match_detail import TeamForm
 from app.models.news import NewsArticle, NewsArticleTeam
 from app.models.reference import Competition, CompetitionSeason, Team
@@ -488,6 +489,68 @@ def test_team_news_is_capped_at_24(session, client):
     assert body["meta"]["total"] == 24 and body["meta"]["nextCursor"] is None
 
 
+def test_lines_of_a_competition_not_played_yet_are_left_out(session, client, monkeypatch):
+    """2026-11-24: the provider lists last January's Spanish Super Cup (556) under 2026-27,
+    whose matches are on 2027-02-02. Lines of a competition the team has not played yet this
+    season are neither shown nor stored."""
+    from app.models.team_detail import TeamPlayerStat
+    from app.sync import team_detail as job
+
+    assert 556 not in detail.played_competitions(session, CITY, 2026)
+    before = {p["player"]["id"]: p["totals"] for p in
+              client.get(f"/api/v1/teams/{CITY}/squad").json()["data"]["players"]}
+    member = session.scalars(
+        select(SquadMember.player_id).where(SquadMember.team_id == CITY)
+    ).first()
+    session.execute(insert(TeamPlayerStat).values(
+        team_id=CITY, player_id=member, competition_id=556, season=2026,
+        appearances=2, goals=None, assists=None, rating=None, synced_at=datetime.now(UTC),
+    ))
+    session.flush()
+    squad = client.get(f"/api/v1/teams/{CITY}/squad").json()["data"]
+    row = next(p for p in squad["players"] if p["player"]["id"] == member)
+    assert 556 not in {line["competition"]["id"] for line in row["competitions"]}
+    assert row["totals"] == before[member]  # no extra games, no '부분 집계' from it
+
+    # Collection: the same answer with the 556 line stores everything but that line.
+    stored = session.scalars(select(TeamPlayerStat).where(
+        TeamPlayerStat.team_id == CITY, TeamPlayerStat.season == 2026)).all()
+    by_player: dict[int, list] = {}
+    for line in stored:
+        by_player.setdefault(line.player_id, []).append({
+            "team": {"id": CITY}, "league": {"id": line.competition_id, "season": 2026},
+            "games": {"appearences": line.appearances, "rating": None},
+            "goals": {"total": line.goals, "assists": line.assists},
+        })
+    listings = [{"player": {"id": pid, "name": f"P{pid}"}, "statistics": stats}
+                for pid, stats in sorted(by_player.items())]
+    pages = [listings[i:i + 20] for i in range(0, len(listings), 20)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["page"])
+        return httpx.Response(200, json={
+            "errors": [], "paging": {"current": page, "total": len(pages)},
+            "response": pages[page - 1],
+        })
+
+    def fake_client(self, **_):
+        api = ApiFootballClient(
+            SecretStr("test"), transport=httpx.MockTransport(handler),
+            limiter=MinuteRateLimiter(1000), budget=DailyBudget(1000),
+        )
+        self._clients.append(api)
+        return api
+
+    monkeypatch.setattr(JobContext, "api_football", fake_client)
+    job.sync_team_player_stats(
+        JobContext(session=session, params={"team": CITY, "season": 2026, "force": "1"})
+    )
+    session.expire_all()
+    kept = session.scalars(select(TeamPlayerStat.competition_id).where(
+        TeamPlayerStat.team_id == CITY, TeamPlayerStat.season == 2026)).all()
+    assert 556 not in kept and len(kept) == len(stored) - 1
+
+
 def test_shifted_player_pages_keep_the_stored_lines(session, monkeypatch):
     """Codex 1차 지적 1: page 2 repeats page 1's last player instead of another one. The job
     fails for the team; the stored lines and the success time stay."""
@@ -532,11 +595,11 @@ def test_shifted_player_pages_keep_the_stored_lines(session, monkeypatch):
 
 
 def test_folded_rows_are_only_confirmed_non_appearances(session, client):
-    """TEAM-006 rule 6: a row goes under '기타 이동' only when every move is `not_played`;
-    undecided moves stay shown."""
+    """A row goes under '기타 이동' only when every move is `not_played`; undecided moves
+    stay shown (user decision 2026-11-25)."""
     for season in (2025, 2026):
         rows = detail.merge_transfers(detail.read_transfers(session, CITY, season))
-        evidence = detail.move_evidence(session, CITY, season, rows)
+        evidence = detail.move_evidence(session, CITY, season)
         for group in detail.group_moves(rows, evidence):
             reasons = {detail.judge_move(m, evidence)[1] for m in group.moves}
             assert group.shown == (reasons != {"not_played"})
@@ -550,7 +613,7 @@ def test_null_team_lines_follow_user_decision_b(session):
     session.execute(update(TeamPlayerStat).where(
         TeamPlayerStat.team_id == CITY, TeamPlayerStat.player_id == rodri.player_id,
     ).values(appearances=None, goals=None, assists=None, rating=None))
-    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026, rows)) == (
+    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026)) == (
         False, "not_played",
     )
     line = session.scalar(select(TeamPlayerStat).where(
@@ -559,68 +622,72 @@ def test_null_team_lines_follow_user_decision_b(session):
     ))
     line.assists, line.rating = 2, 7.287
     session.flush()
-    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026, rows)) == (
+    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026)) == (
         True, "played_here",
     )
     # A past fixed season is read at response time; no collection is necessary.
-    assert 325975 in detail.move_evidence(session, 157, 2025, []).played
+    assert 325975 in detail.move_evidence(session, 157, 2025).played
     session.execute(TeamSync.__table__.delete().where(
         TeamSync.team_id == CITY, TeamSync.kind == "player_stats", TeamSync.season == 2025,
     ))
-    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026, rows)) == (
+    assert detail.judge_move(rodri, detail.move_evidence(session, CITY, 2026)) == (
         True, "records_incomplete",
     )
 
 
-def test_signing_checks_store_first_team_clubs_and_retry_failures(session, monkeypatch):
-    """transfer_player_checks: one /players?id=&season= per pending signing; youth lines are
-    not first-team; a failed answer is marked and asked again later."""
-    from app.models.team_detail import PlayerClubSeason, PlayerSeasonCheck
-    from app.sync import team_detail as job
+def test_only_league_uefa_and_club_world_cup_appearances_show_a_move(session):
+    """User decision 2026-11-25: a youth whose only appearances here are domestic-cup games
+    (EFL Cup / FA Cup) is folded; one with a Club World Cup appearance is shown."""
+    from app.models.team_detail import TeamPlayerStat
 
-    session.execute(PlayerSeasonCheck.__table__.delete())
-    session.execute(PlayerClubSeason.__table__.delete())
-    pending = detail.pending_checks(session, [CITY])
-    assert pending
-    (good_player, good_season), (bad_player, bad_season) = pending[0], pending[1]
+    first_team = detail.first_team_competitions(session)
+    assert {39, 2, 3, 848, 15} <= first_team
+    assert not {45, 48, 528, 531, 556} & first_team  # domestic cups and super cups
+    rows = detail.merge_transfers(detail.read_transfers(session, CITY, 2026))
+    evidence = detail.move_evidence(session, CITY, 2026)
+    shown = {r.player_name for r in rows if detail.judge_move(r, evidence)[0]}
+    folded = {r.player_name for r in rows if not detail.judge_move(r, evidence)[0]}
+    # Akanji / Echeverri played the 2025 Club World Cup; Mfuni only an FA Cup game.
+    assert {"M. Akanji", "C. Echeverri", "Rodri", "E. Anderson"} <= shown
+    assert "S. Mfuni" in folded
+    mfuni = next(r for r in rows if r.player_name == "S. Mfuni")
+    # One Premier League game (his stored 2025 line says 0) shows the move.
+    session.execute(update(TeamPlayerStat).where(
+        TeamPlayerStat.team_id == CITY, TeamPlayerStat.player_id == mfuni.player_id,
+        TeamPlayerStat.competition_id == 39, TeamPlayerStat.season == 2025,
+    ).values(appearances=1))
+    session.flush()
+    assert detail.judge_move(mfuni, detail.move_evidence(session, CITY, 2026))[0] is True
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        player = int(request.url.params["id"])
-        if player == bad_player:
-            return httpx.Response(200, json={"errors": [], "paging": {"current": 1, "total": 1},
-                                             "response": [{"player": {"id": 1}, "statistics": []}]})
-        stats = [
-            {"team": {"id": 4242}, "league": {"name": "Eredivisie", "season": good_season},
-             "games": {"appearences": 20}},
-            {"team": {"id": 4243}, "league": {"name": "Premier League 2", "season": good_season},
-             "games": {"appearences": 9}},
-        ]
-        return httpx.Response(200, json={"errors": [], "paging": {"current": 1, "total": 1},
-                                         "response": [{"player": {"id": player},
-                                                       "statistics": stats}]})
 
-    def fake_client(self, **_):
-        client = ApiFootballClient(
-            SecretStr("test"), transport=httpx.MockTransport(handler),
-            limiter=MinuteRateLimiter(1000), budget=DailyBudget(1000),
-        )
-        self._clients.append(client)
-        return client
+def test_a_match_without_provider_player_data_is_not_partial(session):
+    """2026-11-25: a played competition without player lines is partial unless every match
+    record of the team in it has no player stats from the provider (early Copa del Rey
+    rounds); a match whose record was never read keeps it partial until it is read."""
+    from app.models.match_detail import FixtureDetail
+    from app.models.team_detail import TeamPlayerStat
 
-    monkeypatch.setattr(JobContext, "api_football", fake_client)
-    ctx = JobContext(session=session, params={"team": CITY, "limit": "2"})
-    with pytest.raises(JobPartialFailure):
-        job.sync_transfer_player_checks(ctx)
-    assert ctx.api_requests == 2
-    good = session.get(PlayerSeasonCheck, (good_player, good_season))
-    assert good.checked_at is not None
-    clubs = {c.team_id: c.appearances for c in session.scalars(
-        select(PlayerClubSeason).where(PlayerClubSeason.player_id == good_player)
-    )}
-    assert clubs == {4242: 20}  # the youth side's Premier League 2 line is not first-team
-    bad = session.get(PlayerSeasonCheck, (bad_player, bad_season))
-    assert bad.checked_at is None and bad.failed_at is not None
-    assert (bad_player, bad_season) in detail.pending_checks(session, [CITY])  # asked again
+    valencia = 532
+    session.execute(TeamPlayerStat.__table__.delete().where(
+        TeamPlayerStat.team_id == valencia, TeamPlayerStat.competition_id == 143,
+    ))
+    matches = detail.unread_record_matches(session, valencia)
+    assert matches == []  # read on 2026-11-25: the provider gave no player stats
+    assert 143 not in detail.missing_record_competitions(session, valencia)
+    copa = session.scalars(select(FixtureDetail).join(
+        Fixture, Fixture.id == FixtureDetail.fixture_id
+    ).where(Fixture.competition_id == 143, Fixture.season == 2026,
+            (Fixture.home_team_id == valencia) | (Fixture.away_team_id == valencia))).all()
+    assert copa and all(not detail._gives_player_data(d, valencia) for d in copa)
+    # Never read → partial and listed to read; with player stats → partial (lines missing).
+    copa[0].fetched_at = None
+    session.flush()
+    assert detail.unread_record_matches(session, valencia) == [copa[0].fixture_id]
+    assert 143 in detail.missing_record_competitions(session, valencia)
+    copa[0].fetched_at = datetime.now(UTC)
+    copa[0].players = [{"team": {"id": valencia}, "players": [{"player": {"id": 1}}]}]
+    session.flush()
+    assert 143 in detail.missing_record_competitions(session, valencia)
 
 
 def test_player_record_units_current_daily_and_past_until_stored(session):
