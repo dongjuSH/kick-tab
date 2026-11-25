@@ -17,15 +17,28 @@ import { reactionsText, reviewDatesText, reviewEditRefusal } from "./model";
 import { AreaError, MyCard } from "./MyCard";
 import { myReviewsQuery } from "./queries";
 
+/** Reviews shown at first and added by each '더 보기' (Figma 52:2674, 2026-11-24). */
+const REVIEWS_STEP = 5;
+
 /**
  * 내 평가 (MY-003, Figma 639:8131 — List 639:8132 / Empty 639:8151 / Error 639:8154; mobile
  * 639:8161 / 639:8180 / 639:8183). Newest first: the match (link to its page), the text,
  * '작성 YYYY.MM.DD' (+ ' · 수정 YYYY.MM.DD' only for edited reviews) and the reaction counts.
  * No rating or average. Edit uses the match page's text rules; a closed match refuses it.
  * A restricted member (terms 제9조) sees the match page's notice and no edit, delete stays.
+ * Five at first; '더 보기' shows five more each time and leaves once all are shown. The server
+ * sends the whole list at once; the shown count stays through edits and deletions.
  */
 export function MyReviews() {
   const query = useQuery(myReviewsQuery);
+  const [shown, setShown] = useState(REVIEWS_STEP);
+  const list = useRef<HTMLUListElement>(null);
+  // '더 보기' may disappear when pressed: focus moves to the first newly shown review.
+  const showMore = () => {
+    const first = shown;
+    setShown(first + REVIEWS_STEP);
+    requestAnimationFrame(() => list.current?.children[first]?.querySelector<HTMLElement>("a")?.focus());
+  };
   const auth = useAuth();
   const restrictedUntil = auth.status === "member" ? (auth.member.reviewRestrictedUntil ?? null) : null;
   useRestrictionEnd(restrictedUntil);
@@ -39,11 +52,16 @@ export function MyReviews() {
     body = (
       <>
         {restrictedUntil && <ReviewRestrictionNotice until={restrictedUntil} />}
-        <ul className="flex flex-col">
-          {query.data.map((review) => (
+        <ul ref={list} className="flex flex-col">
+          {query.data.slice(0, shown).map((review) => (
             <ReviewRow key={review.id} review={review} restricted={Boolean(restrictedUntil)} />
           ))}
         </ul>
+        {query.data.length > shown && (
+          <Button fullWidth onClick={showMore}>
+            더 보기
+          </Button>
+        )}
       </>
     );
 

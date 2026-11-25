@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-25 · 09 마이페이지 데스크톱 검수 반영(자체 검수·`dev` 병합):** 프런트 `features/favorites/nextMatches.ts`(새 — `favoriteMatches`·`teamNextMatch`, 메인 관심 팀 패널과 공유), `FavoriteSchedule.tsx`(경기 필터를 공통 함수로), `features/mypage/FavoriteTeams.tsx`(제목 줄 '★ 관심 팀 n / 10 … 팀 추가', 팀별 다음 경기·경기 없음·스켈레톤·일정 경고), `MyCard.tsx`(제목 줄 `icon`·`note`·`action`), `MyReviews.tsx`(5개씩 더 보기), `model.ts`(개수 'n / 10'), `MyPage.tsx`·`app/mypage/page.tsx`(상단 제목·소개 제거 — sr-only H1, 계정 관리 `StickyPanel`), `components/layout/StickyPanel.tsx`(`minWidth`, 기본 1280). 테스트 `tests/mypage.test.mjs`(팀별 다음 경기). Figma 52:2674·52:2912·643:658·643:755 상단 제목 제거, 642:21111 고정 주석.
+
 **2026-11-25 · 08 선수단 정렬·부분 집계 해소·이적 기준 변경(사용자 요청·결정, 자체 검수·`dev` 병합):** 백엔드 `services/team_detail.py`(`played_competitions`·`missing_record_competitions`·`unread_record_matches`·`first_team_competitions`·`move_evidence`·`judge_move`, 이전 팀 확인 코드 삭제), `sync/team_detail.py`(`team_player_stats` 현재 시즌 범위·`_read_record_matches`, `transfer_player_checks` 삭제), `models/team_detail.py`·`models/__init__.py`(두 모델 삭제), `api/routes/teams.py`, `migrations/versions/20261125_0021_drop_player_season_checks.py`(새), 테스트 `tests/test_team_detail.py`·`tests/test_team_detail_db.py`. 프런트 `features/team-detail/SquadTable.tsx`(가운데 정렬·PC 열 폭·제목 아래 설명 삭제). 아래 표는 이 변경을 반영했다.
 
 **2026-11-25 · 07 팀 탐색 별 아이콘 팀 카드(자체 검수·`dev` 병합):** 프런트 `features/teams/TeamsSection.tsx`(팀 카드 한 줄 — 엠블럼·팀명/보조 글씨·오른쪽 끝 별, 큰 등록 버튼 제거, 여백 16px·둥글기 12px), `features/favorites/FavoriteStar.tsx`(`iconSize` 16·18). 아래 표는 이 변경을 반영했다.
@@ -78,7 +80,7 @@
 
 > TOP 5는 기획 문서의 2026-11-02 개정 정책(00:00/00:05·지난주 유지·UI 3종·지연 안내·운영 알림·수동 복구·공개 버전 교체)대로 04에서 구현했다.
 
-기준: 2026-11-25 (수, 07 팀 탐색 별 아이콘 팀 카드 반영 — 자체 검수), 브랜치 `feat/07-team-browse`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
+기준: 2026-11-25 (수, 09 마이페이지 데스크톱 검수 반영 — 자체 검수), 브랜치 `feat/09-mypage`(`dev` 병합). 실제 존재하는 파일만 적는다. 잠금 파일(`uv.lock`, `package-lock.json`), 빈 `__init__.py`, 생성 파일(`frontend/src/lib/api/schema.d.ts` — `npm run gen:api`로 생성, 직접 수정 금지)은 제외한다. 상태는 **완료**(현재 범위 구현 끝) / **골격**(계약·구조만 있고 담당 채팅이 채움)으로 표시한다.
 
 ## 루트·문서
 
@@ -297,7 +299,7 @@
 | `teams/page.tsx` | `/teams?league=&q=&team=&page=` 팀 탐색(보이는 제목·소개 없음, sr-only H1, Suspense 안 `TeamsSection`) | `features/teams` | 완료(07) |
 | `teams/[id]/page.tsx` | `/teams/[id]` 팀 상세(정적 셸 + Suspense 안 `params`, 숫자 아닌 ID는 404 페이지) | `features/team-detail` | 완료(08) |
 | `matches/[id]/page.tsx` | `/matches/[id]` 경기 상세(정적 셸 + Suspense 안에서 params 확인, 숫자 ID만) | `features/match/MatchDetail` | 완료(04) |
-| `mypage/page.tsx` | `/mypage` 마이페이지(메타 제목 '마이페이지', `MyPage`) | `features/mypage` | 완료(09) |
+| `mypage/page.tsx` | `/mypage` 마이페이지(메타 제목 '마이페이지', 보이는 제목·소개 없이 카드부터 — sr-only H1, `MyPage`) | `features/mypage` | 완료(09) |
 | `login/page.tsx`·`signup/page.tsx`·`password-reset/page.tsx` | 02: 로그인·회원가입·비밀번호 찾기(Suspense 안 폼) | `features/auth` | 완료(02) |
 | `not-found.tsx` | 없는 경로 안내 | — | 완료 |
 | `icon.svg` | 파비콘(로고 심벌 기반) | — | 완료 |
@@ -336,7 +338,7 @@
 | `components/layout/HeaderAuth.tsx` | 로그인(ghost)·회원가입(primary), 데스크톱·메뉴 배치 | 헤더·모바일 메뉴 | 골격(02가 `useAuth()`로 회원 상태 연결) |
 | `components/layout/nav.ts` | 메뉴 목록·현재 경로 판정 | 메뉴 컴포넌트 | 완료 |
 | `components/layout/HeaderHeight.tsx` | 실제 헤더 높이를 `--kt-header-height`에 동기화(ResizeObserver) | `SiteHeader.tsx`, 스크롤 여백·TOP 5 딤·패널·시트 | 완료 |
-| `components/layout/StickyPanel.tsx` | 메인 PC 우측 패널 고정(헤더·TOP 5 아래 12px, 가용 높이 520px 이상이고 패널이 들어갈 때만, 구간 끝에서 멈춤 — Figma 308:4617) 03(2026-11-24): 창보다 긴 패널은 아래 끝이 창 하단 12px에 닿을 때까지 스크롤 후 고정(가용 높이 조건 삭제). | `app/page.tsx` | 완료 |
+| `components/layout/StickyPanel.tsx` | 메인 PC 우측 패널 고정(헤더·TOP 5 아래 12px, 가용 높이 520px 이상이고 패널이 들어갈 때만, 구간 끝에서 멈춤 — Figma 308:4617) 03(2026-11-24): 창보다 긴 패널은 아래 끝이 창 하단 12px에 닿을 때까지 스크롤 후 고정(가용 높이 조건 삭제). | `app/page.tsx` 09: `minWidth`(두 칸이 되는 폭, 기본 1280 — 마이페이지 계정 관리는 1024) | 완료 |
 | `components/layout/SiteFooter.tsx` | 로고 없음, 정책 항목(링크 없음)·의견 보내기, 구분선 아래 운영자 안내·출처·저작권(Figma `304:3823`) | `lib/site.ts`, `FeedbackButton` | 완료(정책 문서 생기면 링크 연결, 이미지 출처는 확인 중 더미) |
 
 ### 기능 (`src/features/`)
@@ -391,12 +393,13 @@
 | `schedule/ScheduleNotice.tsx` | 일정 안내 상자(neutral·warning·error, Figma 225:2374), `failedNames()` | 일정·관심 팀 | 완료 |
 | `favorites/store.ts`·`useFavorites.ts` | 비회원 관심 팀 localStorage(`kt-fav-guest`, 최대 5개, 저장 불가 처리, 다른 탭 반영, 07: 등록·해제 직전 더 새 목록을 발견하면 모든 구독자에 알림 `latest()`) | 관심 팀 UI | 완료(02가 회원 DB 동기화) |
 | `favorites/FavoriteToggle.tsx` | 관심 팀 등록/해제 버튼(거부 사유 표시 — 누른 직후 목록에 묶이고 목록이 바뀌면 지움, 07: 5개가 차면 다른 팀 비활성 '최대 5개까지 등록할 수 있어요') | 팀 상세(08). 팀 탐색은 2026-11-25부터 `FavoriteStar` | 완료(07) |
+| `favorites/nextMatches.ts` | 관심 팀 경기 선별(FAV-004): `favoriteMatches`(현재 목록의 경기만 — 해제한 팀 경기는 즉시 제외), `teamNextMatch`(서버 순서에서 그 팀이 나오는 첫 경기 = 진행 중·가장 가까운 경기, 관심 팀끼리 경기는 두 팀 모두) | `FavoriteSchedule`, `mypage/FavoriteTeams` | 완료(09) |
 | `favorites/FavoriteSchedule.tsx` | 메인 관심 팀 패널(Figma Guest Favorites 306:6220): n/5·팀 추가(`TeamSearch`, 등록 가능 팀만)·빈 상태·등록 목록 해제·5팀 제한·저장 실패 재시도, 팀별 진행 중·가장 가까운 예정 1경기 요약, 일부 실패·재조회 실패 안내 03(2026-11-24): 제목 줄 [★ 관심 팀 n/한도 … 팀 추가], 등록 팀 가로 칩 한 줄(`TeamChips`), 요약 경기 2줄 76px, 기본 3경기 + '더 보기 (3/n)'(팀 기준 접기 삭제). | `favoriteScheduleQuery`, `useFavorites` | 완료 |
 | `favorites/FavoriteTeamButtons.tsx` | 팀 검색 아래 '★ 관심 팀' + 파란 글자 버튼(44px), 다시 누르면 해제, 선택돼도 같은 모양·`aria-pressed`, 팀이 없으면 표시 안 함(Figma 49:57·61:883) | 메인 일정·지난 경기 | 완료(05 개선) |
 | `favorites/FavoriteStar.tsx` | 경기 카드 팀 옆 별표(이동 없이 등록·해제, 거부 문구 잠시 표시) 03(2026-11-24): 거부 팝업 한 줄, 화면 끝 16px 안쪽 보정. 07(2026-11-25): `iconSize` 16(기본)·18 — 팀 탐색 카드는 18. | `MatchCard`, 팀 탐색 `TeamsSection` | 완료 |
-| `mypage/MyPage.tsx` | 마이페이지 조립(MY-001): 인증 확인 중 스켈레톤, 비회원·만료 세션은 로그인 안내 카드(`loginHref('/mypage')`), 회원은 PC 왼쪽 관심 팀·내 평가 / 오른쪽 360px 계정 관리 | `useAuth()` | 완료(09) |
-| `mypage/FavoriteTeams.tsx` | 관심 팀(MY-002): `useFavorites()` 그대로, n / 10, '관심 팀 추가'(`TeamSearch`), 10팀이면 추가만 막고 한도 안내, 팀 상세 링크 규칙, 추가·삭제 뒤 포커스 | `useFavorites`, `memberFavoritesQuery` | 완료(09) |
-| `mypage/MyReviews.tsx` | 내 평가(MY-003): 최신순, 수정한 평가만 수정 날짜, 수정(공용 폼·닫힌 경기 409 안내)·삭제 확인, 작성 제한 안내·수정 비활성 | `myReviewsQuery`, `ReviewTextForm`, `ReviewRestriction` | 완료(09) |
+| `mypage/MyPage.tsx` | 마이페이지 조립(MY-001): 인증 확인 중 스켈레톤, 비회원·만료 세션은 로그인 안내 카드(`loginHref('/mypage')`), 회원은 PC 왼쪽 관심 팀·내 평가 / 오른쪽 360px 계정 관리(1024px부터 `StickyPanel`로 스크롤 고정) | `useAuth()`, `StickyPanel` | 완료(09) |
+| `mypage/FavoriteTeams.tsx` | 관심 팀(MY-002, Figma 52:2674·797:20589): 제목 줄 '★ 관심 팀 n / 10 … 팀 추가'(10팀이면 추가만 막고 한도 안내), 팀 줄 [엠블럼·팀명 링크·해제] 아래 다음 경기(PC 한 줄·모바일 두 줄, 상태 배지), 경기 없음·스켈레톤, 일부 미확인·갱신 실패·전체 실패 경고와 '다시 확인' | `useFavorites`, `memberFavoritesQuery`, `favoriteScheduleQuery`, `nextMatches` | 완료(09) |
+| `mypage/MyReviews.tsx` | 내 평가(MY-003): 최신순, 처음 5개·'더 보기'마다 5개(새로 보인 첫 평가로 포커스, 수정·삭제 후 개수 유지), 수정한 평가만 수정 날짜, 수정(공용 폼·닫힌 경기 409 안내)·삭제 확인, 작성 제한 안내·수정 비활성 | `myReviewsQuery`, `ReviewTextForm`, `ReviewRestriction` | 완료(09) |
 | `mypage/AccountPanel.tsx` | 계정 관리(MY-004): 닉네임·이메일·로그인 방식·가입일 표시, 이메일 계정만 비밀번호 변경, 회원 탈퇴, 변경 완료 안내 | `PasswordDialog`, `WithdrawDialog` | 완료(09) |
 | `mypage/PasswordDialog.tsx` | 비밀번호 변경(PC 다이얼로그·모바일 시트): 오류 코드↔칸 1:1, 저장 중 잠금, 실패 시 입력 유지·다시 시도, 401은 로그인 안내 | `PATCH /me/password`, `memberRequest` | 완료(09) |
 | `mypage/WithdrawDialog.tsx` | 회원 탈퇴 확인(62:1800): 성공 시 `signedOut({ forget: true })` 후 메인, 실패 시 머무름 | `DELETE /me` | 완료(09) |

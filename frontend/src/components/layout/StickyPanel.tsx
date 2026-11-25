@@ -9,20 +9,28 @@ const GAP = 12;
  * PC side panel of the main page that follows the scroll inside its own band (favourites
  * beside the schedule, standings beside the news) and stops at the band's end. Below 1280px
  * the page is one column and this is plain flow (schedule, favourites, news, standings).
+ * My page uses it for the account panel from 1024px (`minWidth`, 2026-11-25).
  *
  * A panel taller than the window (favourites opened with '더 보기', a low window) used to drop
  * the sticking and scroll away (2026-11-24 report): it now scrolls with the page until its
  * bottom is 12px above the window's bottom and stays there, so every part of it is reachable
  * and it still follows the band.
  */
-export function StickyPanel({ children }: { children: ReactNode }) {
+export function StickyPanel({
+  children,
+  minWidth = 1280,
+}: {
+  children: ReactNode;
+  /** Width from which the page has two columns (main 1280px; my page 1024px). */
+  minWidth?: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState<number | null>(null);
 
   useEffect(() => {
     const panel = ref.current;
     if (!panel) return;
-    const desktop = matchMedia("(min-width: 1280px)");
+    const desktop = matchMedia(`(min-width: ${minWidth}px)`);
     const check = () => {
       if (!desktop.matches) return setTop(null);
       const header = document.querySelector("header")?.getBoundingClientRect().height ?? 0;
@@ -42,7 +50,7 @@ export function StickyPanel({ children }: { children: ReactNode }) {
       removeEventListener("resize", check);
       desktop.removeEventListener("change", check);
     };
-  }, []);
+  }, [minWidth]);
 
   const style: CSSProperties | undefined = top === null ? undefined : { position: "sticky", top };
   return (

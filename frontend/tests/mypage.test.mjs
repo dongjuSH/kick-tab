@@ -21,10 +21,11 @@ function load(request) {
 
 const m = load("features/mypage/model");
 const { passwordValid } = load("features/auth/rules");
+const next = load("features/favorites/nextMatches");
 
 test("favourite count and limit: n / 10, only adding stops at 10", () => {
-  assert.equal(m.favoriteCountText(3, 10), "3 / 10 · 내 계정에 저장");
-  assert.equal(m.favoriteCountText(0, 10), "0 / 10 · 내 계정에 저장");
+  assert.equal(m.favoriteCountText(3, 10), "3 / 10");
+  assert.equal(m.favoriteCountText(0, 10), "0 / 10");
   assert.equal(m.favoriteAddBlocked(9, 10), false);
   assert.equal(m.favoriteAddBlocked(10, 10), true);
   assert.equal(m.favoriteLimitText(10), "관심 팀은 최대 10팀까지 등록할 수 있습니다. 다른 팀을 해제한 뒤 추가해 주세요.");
@@ -82,4 +83,18 @@ test("a closed match refuses the edit with its own notice", () => {
   assert.equal(m.reviewEditRefusal(403, "REVIEW_RESTRICTED"), null);
   assert.equal(m.reviewEditRefusal(404, "NOT_FOUND"), null);
   assert.equal(m.reviewEditRefusal(409, "REVIEW_EXISTS"), null);
+});
+
+test("each favourite team shows its own next match; a match between two favourites shows on both rows", () => {
+  const match = (id, home, away) => ({ id, home: { id: home }, away: { id: away } });
+  // Server order: live first, then by kickoff; the 1–2 match is the pick of both teams.
+  const list = [match(10, 1, 2), match(11, 3, 99), match(12, 4, 3)];
+  assert.equal(next.teamNextMatch(list, 1).id, 10);
+  assert.equal(next.teamNextMatch(list, 2).id, 10);
+  // Team 3's own pick (11) comes before the later match team 4 picked.
+  assert.equal(next.teamNextMatch(list, 3).id, 11);
+  assert.equal(next.teamNextMatch(list, 4).id, 12);
+  assert.equal(next.teamNextMatch(list, 5), null);
+  // A released team's match leaves at once (the panel's list and my page alike).
+  assert.deepEqual(next.favoriteMatches(list, [3]).map((m) => m.id), [11, 12]);
 });

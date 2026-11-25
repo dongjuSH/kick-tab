@@ -1,5 +1,22 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-25 (수) — 09 마이페이지 데스크톱 검수 반영(관심 팀 제목 줄·팀별 다음 경기·내 평가 더 보기·상단 문구·계정 관리 고정)
+
+브랜치 `feat/09-mypage`(최신 `dev` b190ff8 병합 후)에 커밋·push 후 `dev` 병합. 기준 Figma 52:2674 / 52:2912, 상태 797:20589(2026-11-25 사용자 결정). 사용자 추가 결정: 다른 페이지처럼 최상단 제목·소개 제거, 계정 관리 패널은 경기 일정 우측 패널처럼 스크롤 고정 — Figma에도 반영.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 관심 팀 제목 줄 | `features/mypage/MyCard.tsx`(`icon`·`note`·`action`), `FavoriteTeams.tsx`, `model.ts`(`favoriteCountText` 'n / 10') | 09-1: '★ 관심 팀 n / 10 … 팀 추가'(접근성 이름 '관심 팀 추가'), 10/10 비활성·한도 안내·포커스 유지 |
+| 팀별 다음 경기 | `features/favorites/nextMatches.ts`(새), `FavoriteSchedule.tsx`, `mypage/FavoriteTeams.tsx`(`FavoriteRow`·`NextMatch`) | 09-2: 메인 패널과 같은 `favoriteScheduleQuery`·같은 기준으로 팀마다 1경기(관심 팀끼리 경기는 두 줄 모두), '해제'('○○ 관심 팀 해제'), 경기 없음·스켈레톤·`ScheduleNotice` 경고+'다시 확인'(전체 실패면 2행 비움) |
+| 내 평가 더 보기 | `features/mypage/MyReviews.tsx`(`REVIEWS_STEP` 5) | 09-4: 5개씩, 다 보이면 버튼 없음, 수정·삭제 후 펼친 개수 유지 |
+| 상단 문구 | `app/mypage/page.tsx`, `features/mypage/MyPage.tsx` | 다른 페이지와 같이 sr-only H1만, 첫 카드부터 표시 |
+| 계정 관리 고정 | `components/layout/StickyPanel.tsx`(`minWidth`), `MyPage.tsx` | 메인 우측 패널과 같은 고정(헤더 아래 12px, 창보다 길면 아래 끝 유지), 마이페이지는 1024px부터 |
+| Figma | 52:2674·52:2912·643:658·643:755('Page title' 삭제), 642:21111(고정 주석) | 화면과 시안 일치 |
+| 테스트 | `frontend/tests/mypage.test.mjs`(팀별 다음 경기·해제 즉시 제외, 개수 문구) | 회귀 |
+
+- **브라우저 확인(테스트 계정 A):** 1920·1280·1024·1023·375·320, 관심 팀 0·3·10, 관심 팀끼리 경기 두 줄, 모의 응답으로 경기 없음·일부 미확인·갱신 실패·전체 실패·다시 확인·추가 중 스켈레톤·긴 팀명, 해제 후 메인 패널·별 동기화, 평가 모의 12개 5→10→12·펼친 상태 수정·삭제, 계정 관리 고정(top 130)·1280×460 아래 끝 유지·1023 한 줄, 비회원 안내·로그인 복귀, 비밀번호 창 포커스 복귀. 관심 팀은 원래 10팀 순서로 되돌림. 진행 중 경기는 확인 시점에 없어 미확인.
+- **검사:** frontend lint, tsc, npm test 93, build, `git diff --check`. 외부 API 호출 없음.
+
 ## 2026-11-25 (수) — 08 선수단 정렬·부분 집계 해소·이적 기준 변경(사용자 요청·결정)
 
 브랜치 `feat/08-team-detail`(최신 `dev` 3689620 위)에 커밋·push 후 `dev` 병합. 사용자 결정 2건(이적 메인 = 리그·UEFA·클럽 월드컵 출전, 공급사 미제공 경기 제외), 마이그레이션 `0021` 사용자 확인 후 공유 DB 적용. 자체 검수, 외부 호출 API-Football 3회(발렌시아 확인 2·경기 기록 읽기 1).

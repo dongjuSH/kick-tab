@@ -1,5 +1,6 @@
 "use client";
 
+import { StickyPanel } from "@/components/layout/StickyPanel";
 import { ButtonLink } from "@/components/ui/Button";
 import { DataState } from "@/components/ui/DataState";
 import { loginHref } from "@/features/auth/returnTo";
@@ -12,24 +13,10 @@ import { MyReviews } from "./MyReviews";
  * `/mypage` (MY-001~004, Figma 52:2674 / 52:2912). Members only: while the session is checked
  * nothing personal is drawn, guests and expired sessions get the login notice (Figma 62:1939 /
  * 62:1702) that comes back here after login. Each area loads and fails on its own.
- * PC: records (896) left, account (360) right; below 1024px one column.
+ * PC: records (896) left, account (360) right — the account panel follows the scroll like the
+ * main page's side panels (`StickyPanel`); below 1024px one column.
  */
 export function MyPage() {
-  const auth = useAuth();
-  return (
-    <>
-      <div className="flex flex-col gap-1.5">
-        <h1 className="text-heading font-bold text-fg">마이페이지</h1>
-        {auth.status === "member" && (
-          <p className="text-body text-fg-secondary">{auth.member.nickname} 님, 관심 팀과 나의 기록을 관리하세요.</p>
-        )}
-      </div>
-      <MyPageBody />
-    </>
-  );
-}
-
-function MyPageBody() {
   const auth = useAuth();
 
   if (auth.status === "loading") {
@@ -60,12 +47,17 @@ function MyPageBody() {
   }
 
   return (
-    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-6">
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-6">
       <div className="flex min-w-0 flex-col gap-4 lg:gap-6">
         <FavoriteTeams />
         <MyReviews />
       </div>
-      <AccountPanel key={auth.member.id} member={auth.member} />
+      {/* The column stretches to the records' height, the room the panel sticks in. */}
+      <div className="min-w-0">
+        <StickyPanel minWidth={1024}>
+          <AccountPanel key={auth.member.id} member={auth.member} />
+        </StickyPanel>
+      </div>
     </div>
   );
 }
