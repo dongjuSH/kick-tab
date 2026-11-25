@@ -63,7 +63,7 @@ function FormCard({ info, homeForm, awayForm, onRetry }: {
 
 /**
  * Before kickoff only (MAT-005, Figma 63:1909 PC / 63:2116 mobile): last official meetings
- * (friendlies excluded, up to five, no links to past matches) with a win/draw/loss summary,
+ * (friendlies excluded, up to five, no links to past matches) with win/draw/loss chips below,
  * and both teams' last five official results — side by side on PC, stacked on mobile.
  * Fetched once and refreshed only after a new meeting.
  */
@@ -107,41 +107,47 @@ export function HeadToHeadSection({ info }: { info: MatchInfo }) {
         )}
         {list.length ? (
           <>
+            {/* PC [날짜 110 | 대회 180 | 결과], mobile [날짜·대회 94 | 결과] (Figma 63:1909 / 63:2116).
+                This match's home team is always left, with the score turned to match. */}
+            <table className="w-full table-fixed text-left text-label text-fg">
+              <caption className="sr-only">{`최근 공식 맞대결, 스코어는 ${home} 기준`}</caption>
+              <thead className="bg-subtle text-small font-medium text-fg-muted">
+                <tr>
+                  <th scope="col" className="w-[94px] p-2.5 font-medium lg:w-[110px]">날짜</th>
+                  <th scope="col" className="hidden w-[180px] p-2.5 font-medium lg:table-cell">대회</th>
+                  <th scope="col" className="p-2.5 text-center font-medium">결과</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((meeting, index) => {
+                  const competition = competitionName({
+                    nameKo: meeting.competition,
+                    shortName: meeting.competition,
+                  });
+                  return (
+                    <tr key={index} className="border-line not-last:border-b">
+                      <td className="h-14 px-2.5 py-1 align-middle">
+                        <span className="block whitespace-nowrap">
+                          {meeting.kickoffDateKst.replaceAll("-", ".")}
+                        </span>
+                        <span className="block break-keep [overflow-wrap:anywhere] lg:hidden">{competition}</span>
+                      </td>
+                      <td className="hidden h-14 px-2.5 py-1 align-middle break-keep lg:table-cell">{competition}</td>
+                      <td className="h-14 px-2.5 py-1 text-center align-middle font-bold break-keep text-action [overflow-wrap:anywhere]">
+                        {`${home} ${score(meeting)} ${away}`}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
             {meetings.summary && (
-              <ul className="flex flex-wrap gap-2" aria-label="맞대결 요약">
+              <ul className="flex flex-wrap gap-x-2 gap-y-1.5" aria-label="맞대결 요약">
                 <li><Badge>{`${home} ${meetings.summary.homeWins}승`}</Badge></li>
                 <li><Badge>{`${meetings.summary.draws}무`}</Badge></li>
                 <li><Badge>{`${away} ${meetings.summary.awayWins}승`}</Badge></li>
               </ul>
             )}
-            <table className="w-full text-left text-body">
-              <caption className="sr-only">{`최근 공식 맞대결, 장소와 스코어는 ${home} 기준`}</caption>
-              <thead className="bg-subtle text-small text-fg-muted">
-                <tr>
-                  <th scope="col" className="px-2 py-2 font-normal lg:px-4">날짜 · 장소</th>
-                  <th scope="col" className="px-2 py-2 font-normal lg:px-4">대회</th>
-                  <th scope="col" className="px-2 py-2 text-right font-normal lg:px-4">결과</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((meeting, index) => (
-                  <tr key={index} className="border-b border-line">
-                    <td className="px-2 py-2 whitespace-nowrap lg:px-4">
-                      <span className="block">{meeting.kickoffDateKst.replaceAll("-", ".")}</span>
-                      <span className="block text-small text-fg-muted">
-                        {meeting.homeIsCurrentHome ? "홈" : "원정"}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2 lg:px-4">
-                      {competitionName({ nameKo: meeting.competition, shortName: meeting.competition })}
-                    </td>
-                    <td className="px-2 py-2 text-right font-bold whitespace-nowrap text-action lg:px-4">
-                      {score(meeting)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </>
         ) : meetings.status === "unavailable" ? (
           <StateMessage

@@ -243,7 +243,7 @@ test("timeline puts home events left, away right, unknown-team events in the mid
   });
   const { MatchRecords } = load("@/features/match/MatchRecords");
   const { html } = h.render(MatchRecords, { info: info("finished"), tab: "timeline", onTab() {} });
-  assert.equal((html.match(/<svg/g) ?? []).length, 4);
+  assert.equal((html.match(/<svg/g) ?? []).length, 3); // sided events only (Figma 52:151)
   // Header: home | 시간 | away.
   assert.match(html, /팀 50[\s\S]*시간[\s\S]*팀 42/);
   const rows = html.match(/<li[\s\S]*?<\/li>/g) ?? [];
@@ -253,8 +253,11 @@ test("timeline puts home events left, away right, unknown-team events in the mid
   const minute = (m) => String.raw`<span class="flex min-h-\[52px\] items-center"><span class="[^"]*"><span[^>]*>${m}</span></span></span>`;
   assert.match(rows[0], /79′/);
   assert.match(cells(rows[0]), new RegExp(String.raw`^<span class="sr-only">팀 50, </span><span class="[^"]*justify-end">[\s\S]*골 취소 · A[\s\S]*</span>${minute("79′")}<span class="[^"]*"></span>$`));
-  assert.match(rows[1], /50′[\s\S]*소속 미확인[\s\S]*Unknown Player/);
-  assert.doesNotMatch(rows[1], /sr-only/);
+  // Figma 52:151: only '50′ / 소속 미확인' on the line; the event itself is read out only.
+  assert.match(rows[1], /<span class="sr-only">소속 미확인, 경고 · Unknown Player, <\/span>/);
+  const visible = rows[1].replace(/<span class="sr-only">[^<]*<\/span>/, "");
+  assert.match(visible, /50′[\s\S]*소속 미확인/);
+  assert.doesNotMatch(visible, /Unknown Player|<svg/);
   assert.match(cells(rows[2]), new RegExp(String.raw`^<span class="sr-only">팀 42, </span><span class="[^"]*justify-end"></span>${minute("30′")}<span class="[^"]*">[\s\S]*경고 · Away Player`));
   assert.doesNotMatch(html, /데이터 제공사가 전달한 이벤트만/);
 });
@@ -480,6 +483,40 @@ test("HTTP 200 unavailable H2H and both team forms have retry buttons", () => {
   const { html } = h.render(HeadToHeadSection, { info: info("scheduled") });
   assert.equal((html.match(/다시 확인<\/button>/g) ?? []).length, 3);
   assert.match(html, /상대 전적을 불러오지 못했습니다/);
+});
+
+test("head-to-head rows read 'home score away' from this match's home side, chips below (Figma 63:1909)", () => {
+  const h = hooks();
+  const meeting = (homeIsCurrentHome, scoreHome, scoreAway, extra = {}) => ({
+    kickoffDateKst: "2026-04-12", competition: "프리미어리그", homeIsCurrentHome,
+    scoreHome, scoreAway, penaltyHome: null, penaltyAway: null, ...extra,
+  });
+  const form = { status: "available", data: [] };
+  const render = (meetings) => {
+    const load = loader({ ...leaves, react: h.react,
+      "@tanstack/react-query": { useQuery: () => ({ data: { data: { meetings, homeForm: form, awayForm: form } }, refetch() {} }) },
+      "./queries": { headToHeadQuery: () => ({}) },
+    });
+    const { HeadToHeadSection } = load("@/features/match/HeadToHeadSection");
+    return h.render(HeadToHeadSection, { info: info("scheduled") }).html;
+  };
+  const html = render({ status: "available", summary: { homeWins: 1, draws: 1, awayWins: 0 }, data: [
+    meeting(true, 2, 1),
+    meeting(false, 3, 1),  // played at the other ground: turned to this match's home side
+    meeting(true, 1, 1, { penaltyHome: 4, penaltyAway: 3 }),
+  ] });
+  const text = html.replace(/<[^>]+>/g, "|");
+  assert.match(text, /팀 50 2 : 1 팀 42/);
+  assert.match(text, /팀 50 1 : 3 팀 42/);
+  assert.match(text, /팀 50 1 : 1 \(PK 4:3\) 팀 42/);
+  assert.doesNotMatch(text, /\|홈\||\|원정\|/);  // no venue line under the date
+  assert.match(html, /<caption[^>]*>최근 공식 맞대결, 스코어는 팀 50 기준<\/caption>/);
+  // Win/draw/win chips come after the table.
+  assert.ok(html.indexOf("맞대결 요약") > html.indexOf("</table>"));
+  assert.match(text, /팀 50 1승[\s\S]*1무[\s\S]*팀 42 0승/);
+  const none = render({ status: "available", summary: null, data: [] });
+  assert.match(none, /맞대결 기록이 없습니다/);
+  assert.doesNotMatch(none, /맞대결 요약|<table/);
 });
 
 test("unchanged version checks retry a failed TOP5 replacement with TanStack structural sharing", async () => {
