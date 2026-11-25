@@ -75,13 +75,18 @@ export function numberText(value: number | null): string {
   return value === null ? "—" : String(value);
 }
 
-/** A band of table places marked by one border colour and named once in the legend. */
+/**
+ * A band of table places marked by one colour (row left bar and legend bar) and named once in
+ * the legend. `tone` names the band colour token (`--kt-band-*`, 2026-11-24): UEFA direct
+ * #2563eb / play-off #F59E0B / out #64748b, domestic relegation #b91c1c, and the domestic
+ * relegation play-off in the same play-off colour (user decision).
+ */
 export interface Band {
   key: "direct" | "playoff" | "out" | "promotion-playoff" | "relegation";
   label: string;
   from: number;
   to: number;
-  tone: "live" | "warning" | "error";
+  tone: "direct" | "playoff" | "out" | "relegation";
 }
 
 /**
@@ -95,9 +100,9 @@ export interface Band {
 export function tableBands(league: number, size: number, complete: boolean): Band[] {
   if (isUefa(league)) {
     return [
-      { key: "direct", label: complete ? "16강 직행" : "16강 직행권", from: 1, to: 8, tone: "live" },
-      { key: "playoff", label: complete ? "플레이오프 진출" : "플레이오프권", from: 9, to: 24, tone: "warning" },
-      { key: "out", label: complete ? "탈락" : "탈락권", from: 25, to: 36, tone: "error" },
+      { key: "direct", label: complete ? "16강 직행" : "16강 직행권", from: 1, to: 8, tone: "direct" },
+      { key: "playoff", label: complete ? "플레이오프 진출" : "플레이오프권", from: 9, to: 24, tone: "playoff" },
+      { key: "out", label: complete ? "탈락" : "탈락권", from: 25, to: 36, tone: "out" },
     ];
   }
   if (size < 4) return [];
@@ -107,11 +112,11 @@ export function tableBands(league: number, size: number, complete: boolean): Ban
     label: complete ? "강등" : "강등권",
     from: playoff ? size - 1 : size - 2,
     to: size,
-    tone: "error",
+    tone: "relegation",
   };
   if (!playoff) return [relegation];
   const label = complete ? "승강 플레이오프" : "승강 플레이오프권";
-  return [{ key: "promotion-playoff", label, from: size - 2, to: size - 2, tone: "warning" }, relegation];
+  return [{ key: "promotion-playoff", label, from: size - 2, to: size - 2, tone: "playoff" }, relegation];
 }
 
 export function bandOf(bands: readonly Band[], rank: number): Band | null {

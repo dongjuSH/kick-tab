@@ -11,8 +11,9 @@ import { useHydrated } from "@/lib/hooks/useHydrated";
 import { ChipRow } from "./ChipRow";
 import { KnockoutStage } from "./KnockoutStage";
 import { LeaguePhaseTable } from "./LeaguePhaseTable";
-import { LEAGUES, STAGES, UEFA, type UefaStage } from "./model";
+import { LEAGUES, UEFA } from "./model";
 import { PlayerRankings } from "./PlayerRankings";
+import { StageTabs } from "./StageTabs";
 import { StandingsTable } from "./StandingsTable";
 import { useCompetitionLabel } from "./useCompetitionLabel";
 import { useStandingsParams } from "./useStandingsParams";
@@ -106,23 +107,25 @@ export function StandingsSection() {
       ) : (
         <Skeleton className="h-11 w-full sm:w-[220px]" />
       )}
-      <ChipRow
-        items={[
-          ...LEAGUES.map((l) => ({ value: String(l.id), label: label(l.id) })),
-          ...UEFA.map((c, index) => ({ value: String(c.id), label: label(c.id), groupStart: index === 0 })),
-        ]}
-        value={params.league === null ? null : String(params.league)}
-        onChange={(league) => params.select({ league: Number(league) })}
-        label="대회"
-      />
-      {params.uefa && (
-        <ChipRow<UefaStage>
-          items={STAGES}
-          value={params.stageInvalid ? null : params.stage}
-          onChange={(stage) => params.select({ stage })}
-          label="단계"
+      {/* The UEFA stage tabs sit 10px under the competition chips (2026-11-24). */}
+      <div data-competition-choices className="flex flex-col gap-2.5">
+        <ChipRow
+          items={[
+            ...LEAGUES.map((l) => ({ value: String(l.id), label: label(l.id) })),
+            ...UEFA.map((c, index) => ({ value: String(c.id), label: label(c.id), groupStart: index === 0 })),
+          ]}
+          value={params.league === null ? null : String(params.league)}
+          onChange={(league) => params.select({ league: Number(league) })}
+          label="대회"
         />
-      )}
+        {params.uefa && (
+          <StageTabs
+            value={params.stageInvalid ? null : params.stage}
+            onChange={(stage) => params.select({ stage })}
+            firstUefa={LEAGUES.length}
+          />
+        )}
+      </div>
       <div className="mt-3 border-t border-line pt-6">{content}</div>
     </div>
   );

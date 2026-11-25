@@ -1,5 +1,20 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-25 (수) — 06 리그 순위 데스크톱 검수 반영(단계 탭·구간 색·선수 순위)
+
+브랜치 `feat/06-standings`(최신 `dev` 96ba335 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: 00 지시(2026-11-24 데스크톱 검수), Figma `53:1353`·`53:2047`·`61:1653`·`61:2355`·`451:20753`·`451:20778`·선택부 `449:6666`, 이후 사용자 결정(0 기록 제외·선방 20명·20위 밖 동률 안내). `ChipRow.tsx`는 03 담당이라 고치지 않음. 외부 호출 없음.
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| UEFA 단계 선택 | `features/standings/StageTabs.tsx`(새), `StandingsSection.tsx`(`[data-competition-choices]` 묶음) | 칩 → 하위 탭(44px·간격 4·둥글기 6px·13px Medium, 선택 #f1f5f9·#2563eb, 비선택 #475569), `useScrollRow`로 넘김·선택 탭 보이기, 칩 줄 10px 아래, PC는 'UEFA 챔피언스리그' 칩 실제 위치에 왼쪽 맞춤(칩 줄 스크롤·창 크기 따라감; 부모 ref가 자식 layout effect 뒤에 붙어 `closest()`로 찾음), 모바일 왼쪽 시작. URL·뒤로 가기·`aria-pressed` 유지 |
+| 순위 구간 색 | `app/globals.css`(`--kt-band-direct`·`-playoff`·`-out`·`-relegation`), `standings/model.ts`(`Band.tone`), `StandingsTable.tsx`(`BAND_BORDER`·`BAND_BAR`, export 제거) | UEFA 직행 #2563eb·플레이오프 #F59E0B·탈락 #64748b, 국내 강등 #b91c1c·승강 PO #F59E0B(사용자 결정), 행 막대·범례 막대 같이 |
+| 선수 순위 넘침 | `standings/PlayerRankings.tsx` | `table-fixed` 순위 64px · 선수·팀 · 값 56px, 이름·팀명 말줄임 없이 띄어쓰기 줄바꿈(`break-keep`, 열보다 긴 한 단어만 끊음), '공동 n' 한 줄 |
+| 0 기록·20명 | 백엔드 `api/routes/standings.py`(`LIST_SIZE`), 프런트 `PlayerRankings.tsx` | 사용자 결정: 값 0(경고 누적만인 퇴장·출전 없는 골키퍼 선방) 5종·8개 대회 공통 제외(예: 챔스 2026 선방 172→71명), 선방도 상위 20명(순위·공동은 전체로 계산 후 자름), 4종은 공급사 순서 유지, 꽉 찬 목록에 '20위 밖에 같은 기록의 선수가 더 있을 수 있습니다.' |
+| 긴 이름 | `standings/KnockoutStage.tsx`(`SlotTitle` 이름 `[overflow-wrap:anywhere]`) | DB 최장 선수·팀명을 6개 구성요소에 넣어 확인 중 1024px 2열 대진 카드에서 'Haverfordwest'가 칸을 넘음 → 칸보다 긴 한 단어만 단어 안에서 끊김 |
+| 테스트 | 프런트 `tests/standings.test.mjs`(구간 tone), 백엔드 `tests/test_standings_db.py`(`test_a_recorded_zero_is_not_ranked`, 선방 검증 38명 집계·화면 20명) | 구간 색·0 제외·20명 고정 |
+
+검수: lint·tsc·npm test 92·build, ruff·pytest 400·DB 557 통과. 브라우저 1920·1280·1024·375·320 — UEFA 3대회 단계 전환·뒤로 가기·국내↔UEFA, 탭 왼쪽 맞춤(칩 줄 넘긴 뒤 포함), 구간 색·범례(UEFA·국내·분데스리가·리그 1), 분데스리가 선방(긴 이름 줄바꿈·'공동 21' 한 줄), 메인 리그 순위 카드·팀 탐색 칩 줄 그대로, 가장 긴 이름 시험 통과, 페이지 가로 넘침 0·콘솔 오류 0.
+
 ## 2026-11-25 (수) — 05 지난 경기 필터 줄·페이지 버튼 데스크탑 검수 반영
 
 브랜치 `feat/05-results`(최신 `dev` e14aba4 — 01 버튼 체계·02·03·04 반영 포함 — 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: Figma `53:593`·`53:995`(지난 경기), 'KickTab/Results Pagination' `556:7312`(PC `530:21586`·모바일 `530:21659`, 팀 탐색 `52:886`·`52:1197`). 작업 지시(2026-11-24 데스크탑 검수) 반영. `TeamSearch`·`ChipRow`는 03에서 끝나 손대지 않음.

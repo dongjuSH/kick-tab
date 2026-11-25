@@ -132,12 +132,16 @@ def test_top_lists_are_twenty_in_provider_order(client, session):
             assert all(i["yellowRed"] is None for i in body["items"])
 
 
-def test_saves_exclude_missing_players_and_share_ranks(client):
+def test_saves_exclude_missing_players_and_share_ranks(client, session):
+    from app.services.standings import read_saves
+
+    # Same as the 2026-10-30 API validation: 38 ranked, 34 excluded, M. Dúbravka 127 first.
+    # The screen shows the top 20 of them (2026-11-25, like the provider's four lists).
+    assert len(read_saves(session, 39, 2025).items) == 38
     body = client.get(
         "/api/v1/player-rankings", params={"league": 39, "season": 2025, "type": "saves"}
     ).json()["data"]
-    # Same as the 2026-10-30 API validation: 38 ranked, 34 excluded, M. Dúbravka 127 first.
-    assert len(body["items"]) == 38 and body["excluded"] == 34
+    assert len(body["items"]) == 20 and body["excluded"] == 34
     assert (body["items"][0]["player"]["id"], body["items"][0]["value"]) == (18886, 127)
     second = body["items"][1:3]
     assert [(i["rank"], i["tied"], i["value"]) for i in second] == [(2, True, 109), (2, True, 109)]
@@ -596,6 +600,27 @@ def test_a_teamless_refusal_waits_for_the_next_uefa_result(session):
         result = due_leagues(session, season, "player_stats", failed + timedelta(days=1),
                              matchday_hourly=False, leagues=(2,))
         assert (2 in result) is due, reason
+
+
+def test_a_recorded_zero_is_not_ranked(client, session):
+    """User decisions 2026-11-25: a 0 (red cards with second yellows only, saves of a keeper
+    who never played) is left out of every list, and every list — saves included — is cut
+    to the top 20; the others keep their ranks (saves ties counted over all keepers), and
+    the provider lists their numbering from 1 (zeros only ever come last)."""
+    from app.services.standings import read_saves, read_top_list
+
+    for league in (39, 140, 135, 78, 61, 2, 3, 848):
+        for season in (2025, 2026):
+            for kind in ("goals", "assists", "yellow", "red", "saves"):
+                items = client.get("/api/v1/player-rankings", params={
+                    "league": league, "season": season, "type": kind}).json()["data"]["items"]
+                stored = (read_saves(session, league, season).items if kind == "saves"
+                          else read_top_list(session, league, season, kind))
+                kept = [(e.rank, e.player.id) for e in stored if e.value != 0][:20]
+                assert [(i["rank"], i["player"]["id"]) for i in items] == kept
+                assert all(i["value"] != 0 for i in items)
+                if kind != "saves":
+                    assert [i["rank"] for i in items] == list(range(1, len(items) + 1))
 
 
 def _ko(client, league, stage, season=2025):

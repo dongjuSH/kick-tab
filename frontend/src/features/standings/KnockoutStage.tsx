@@ -122,7 +122,9 @@ function SlotTitle({ slot, name, home = false }: { slot: KnockoutTeamSlot; name:
       )}
     >
       {slot.team && <TeamCrest src={slot.team.crestUrl} name={name} size={20} />}
-      <span className="min-w-0 break-keep">{name}</span>
+      {/* Wraps at spaces; only a word longer than its half of the card (e.g. "Haverfordwest"
+          in a 2-column card at 1024px) is broken inside, never past the card edge. */}
+      <span className="min-w-0 break-keep [overflow-wrap:anywhere]">{name}</span>
     </span>
   );
 }
