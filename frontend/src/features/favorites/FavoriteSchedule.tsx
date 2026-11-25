@@ -16,6 +16,7 @@ import { formatShortDate } from "@/lib/format/kst";
 import { awaitingStatus, competitionName, kickoffTime, teamName } from "@/lib/format/match";
 import { useNow } from "@/lib/hooks/useNow";
 import { useScrollRow } from "@/lib/hooks/useScrollRow";
+import { favoriteMatches } from "./nextMatches";
 import type { FavoriteChange } from "./store";
 import { useFavorites } from "./useFavorites";
 
@@ -52,9 +53,7 @@ export function FavoriteSchedule() {
   const known = new Map([...picked, ...(schedule.data?.data.teams ?? [])].map((t) => [t.id, t]));
   // Live first, then the existing order; a match between two favourites appears once.
   // A released team's match leaves at once, before the changed list is fetched again.
-  const allMatches = (schedule.data?.data.matches ?? []).filter(
-    (m) => ids.includes(m.home.id) || ids.includes(m.away.id),
-  );
+  const allMatches = favoriteMatches(schedule.data?.data.matches ?? [], ids);
   const foldable = allMatches.length > FOLDED_MATCHES;
   // Back to three or fewer matches: the fold is gone, and a later fourth starts folded.
   if (!foldable && expanded) setExpanded(false);

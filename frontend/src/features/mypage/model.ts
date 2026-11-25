@@ -2,9 +2,9 @@
  * My page screen rules (chat 09, MY-001~004). Pure functions, fixed by `tests/mypage.test.mjs`.
  */
 
-/** "3 / 10 · 내 계정에 저장" (MY-002, Figma 52:2674 · 656:27025). */
+/** "3 / 10" beside the title (MY-002, Figma 52:2674, 2026-11-24). */
 export function favoriteCountText(count: number, max: number): string {
-  return `${count} / ${max} · 내 계정에 저장`;
+  return `${count} / ${max}`;
 }
 
 /** At the limit only adding stops; removing stays available (D-07-3). */
