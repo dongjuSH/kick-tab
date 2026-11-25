@@ -11,8 +11,18 @@ const EDGE = 16;
  * Star beside a team name on a match card (Figma 49:57 / 49:570, 2026-11-09): registers or
  * removes the team without leaving the page. A refusal (6th team, storage blocked, write
  * failed) keeps the list and says why for a few seconds.
+ * Team browse cards (07, Figma 52:624) use the same star at `iconSize` 18.
  */
-export function FavoriteStar({ teamId, teamName }: { teamId: number; teamName: string }) {
+export function FavoriteStar({
+  teamId,
+  teamName,
+  iconSize = 16,
+}: {
+  teamId: number;
+  teamName: string;
+  /** Drawn star size; the 44px target stays the same. */
+  iconSize?: 16 | 18;
+}) {
   const favorites = useFavorites();
   const [refusal, setRefusal] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -53,7 +63,7 @@ export function FavoriteStar({ teamId, teamName }: { teamId: number; teamName: s
         // 24px star, 44px target (guide §3.1 '조작 영역').
         className="relative inline-flex size-6 items-center justify-center rounded-full before:absolute before:-inset-2.5 hover:bg-subtle"
       >
-        <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" className={cx(active ? "text-action" : "text-fg-muted")}>
+        <svg aria-hidden width={iconSize} height={iconSize} viewBox="0 0 16 16" className={cx(active ? "text-action" : "text-fg-muted")}>
           <path
             d="M8 1.6l1.9 4 4.4.5-3.3 3 .9 4.3L8 11.2l-3.9 2.2.9-4.3-3.3-3 4.4-.5z"
             fill={active ? "currentColor" : "none"}
