@@ -16,14 +16,18 @@ import { RANKING_TYPES, dataStatus, isUefa, numberText, rankText } from "./model
 import { playerRankingsQuery } from "./queries";
 
 const SHOWN = 10;
+// Every list is at most the top 20 (provider lists; saves cut to match, 2026-11-25).
+const LIST_SIZE = 20;
 const ID_BASE = "player-ranking";
 const HEAD = "h-10 px-2.5 text-left text-small font-medium text-fg-secondary";
 
 /**
  * Player rankings of the selected league or UEFA competition season (LEAG-004; Figma 53:1353
- * / 61:1653 right column, states 57:599). Goals / assists / yellow / red are the provider's top 20 in its order — not a full
- * ranking; red counts direct reds only. Saves are aggregated from every player record:
- * goalkeepers with a missing value are excluded and counted, equal totals share a rank.
+ * / 61:1653 right column, states 57:599). Goals / assists / yellow / red are the provider's
+ * top 20 in its order — not a full ranking; red counts direct reds only. Saves are aggregated
+ * from every player record (goalkeepers with a missing value are excluded and counted, equal
+ * totals share a rank) and shown as the top 20 too. A recorded 0 is never listed, and a full
+ * list notes that equal records may continue past 20th (2026-11-25).
  * Ten rows first, "더 보기" shows the rest; a new league, season or type starts at ten
  * (the parent remounts this per league and season).
  */
@@ -76,11 +80,16 @@ export function PlayerRankings({
         <StateMessage title={emptyTitle} description={emptyDescription} />
       ) : (
       <div className="flex flex-col gap-3">
-        <table className="w-full border-collapse">
+        {/* Fixed columns (2026-11-24): rank 64px ("공동 n" on one line) | player · team (the
+            rest) | value — a long name wraps at spaces inside its column instead of pushing
+            the table wider (Bundesliga saves). */}
+        <table className="w-full table-fixed border-collapse">
           <caption className="sr-only">{`${label} 순위`}</caption>
           <thead className="bg-subtle">
             <tr>
-              <th scope="col" className={cx(HEAD, "w-[60px]")}>순위</th>
+              <th scope="col" className="h-10 w-16 px-2 text-left text-small font-medium text-fg-secondary">
+                순위
+              </th>
               <th scope="col" className={HEAD}>{type === "saves" ? "골키퍼 / 팀" : "선수 / 팀"}</th>
               <th scope="col" className={cx(HEAD, "w-14 text-right")}>{label}</th>
             </tr>
@@ -91,6 +100,11 @@ export function PlayerRankings({
             ))}
           </tbody>
         </table>
+        {/* A full list is cut at 20: players with the same record may continue past it
+            (user decision 2026-11-25). Shown once the 20th row is on screen. */}
+        {expanded && items.length >= LIST_SIZE && (
+          <p className="text-small text-fg-muted">20위 밖에 같은 기록의 선수가 더 있을 수 있습니다.</p>
+        )}
         {excluded > 0 && (
           <p className="rounded-control bg-subtle px-3 py-2.5 text-small text-fg-secondary">
             기록이 누락된 골키퍼 {excluded}명 제외 · 선방 값이 없는 선수를 0으로 넣지 않습니다.
@@ -130,10 +144,10 @@ export function PlayerRankings({
               included, never re-counted by the stage chosen above. */}
           {isUefa(league)
             ? type === "saves"
-              ? "예선 포함 대회 전체 선수 기록으로 집계한 골키퍼 선방 순위입니다."
+              ? "예선 포함 대회 전체 선수 기록으로 집계한 골키퍼 선방 상위 20명"
               : "예선 포함 대회 전체 · 제공 상위 20명"
             : type === "saves"
-              ? "리그 전체 선수 기록으로 집계한 골키퍼 선방 순위입니다."
+              ? "리그 전체 선수 기록으로 집계한 골키퍼 선방 상위 20명"
               : "리그별 제공 상위 20명"}
           {type === "red" && " 직접 퇴장만 집계하며 경고 누적 퇴장은 합산하지 않습니다."}
         </p>
@@ -147,24 +161,26 @@ function Row({ item }: { item: PlayerRankItem }) {
   const team = item.team;
   return (
     <tr className="border-b border-line">
-      <td className="h-[60px] px-2.5 text-body tabular-nums whitespace-nowrap">{rankText(item.rank, item.tied)}</td>
+      <td className="h-[60px] px-2 text-body tabular-nums whitespace-nowrap">{rankText(item.rank, item.tied)}</td>
       <td className="px-2.5 py-2">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <PlayerPhoto src={item.player.photoUrl} name={item.player.name} size={24} />
-          <div className="flex min-w-0 flex-col">
-            <span className="truncate text-body text-fg">{item.player.name}</span>
+          {/* Names wrap at spaces (user decision 2026-11-24), never "…"; one word longer than
+              the column is the only thing broken inside a word. */}
+          <div className="flex min-w-0 flex-col break-keep [overflow-wrap:anywhere]">
+            <span className="text-body text-fg">{item.player.name}</span>
             {team === null ? (
               <span className="text-small text-fg-muted">—</span>
             ) : team.detailAvailable === true ? (
               <Link
                 href={`/teams/${team.id}`}
                 prefetch={false}
-                className="truncate text-small text-fg-muted hover:text-action hover:underline"
+                className="text-small text-fg-muted hover:text-action hover:underline"
               >
                 {teamName(team)}
               </Link>
             ) : (
-              <span className="truncate text-small text-fg-muted">{teamName(team)}</span>
+              <span className="text-small text-fg-muted">{teamName(team)}</span>
             )}
           </div>
         </div>

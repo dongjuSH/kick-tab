@@ -35,13 +35,19 @@ const ORDER = {
 const HEAD = "whitespace-nowrap px-1.5 py-2.5 text-small font-medium text-fg-secondary lg:px-2.5";
 const CELL = "px-1.5 text-body tabular-nums lg:px-2.5";
 
-/** Left border of a row by its band (Figma 53:1353 · 61:1653); none outside every band. */
-export const BAND_BORDER: Record<Band["tone"], string> = {
-  live: "border-l-live",
-  warning: "border-l-warning",
-  error: "border-l-error",
+/** Left border of a row and its legend bar by band (Figma 53:1353 · 61:1653, `--kt-band-*`). */
+const BAND_BORDER: Record<Band["tone"], string> = {
+  direct: "border-l-band-direct",
+  playoff: "border-l-band-playoff",
+  out: "border-l-band-out",
+  relegation: "border-l-band-relegation",
 };
-const BAND_BAR: Record<Band["tone"], string> = { live: "bg-live", warning: "bg-warning", error: "bg-error" };
+const BAND_BAR: Record<Band["tone"], string> = {
+  direct: "bg-band-direct",
+  playoff: "bg-band-playoff",
+  out: "bg-band-out",
+  relegation: "bg-band-relegation",
+};
 
 /** Row frame: a 3px left border, coloured only inside a band. */
 export function bandRowClass(band: Band | null): string {

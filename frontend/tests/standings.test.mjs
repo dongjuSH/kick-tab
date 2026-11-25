@@ -94,16 +94,16 @@ test("table bands by position: bottom three, or 16th play-off and 17th-18th; UEF
   const text = (league, size, complete) =>
     tableBands(league, size, complete).map((b) => `${rangeText(b)} ${b.label} ${b.tone}`).join(" / ");
   for (const league of [39, 140, 135]) {
-    assert.equal(text(league, 20, false), "18–20위 강등권 error");
-    assert.equal(text(league, 20, true), "18–20위 강등 error");
+    assert.equal(text(league, 20, false), "18–20위 강등권 relegation");
+    assert.equal(text(league, 20, true), "18–20위 강등 relegation");
   }
   for (const league of [78, 61]) {
-    assert.equal(text(league, 18, false), "16위 승강 플레이오프권 warning / 17–18위 강등권 error");
-    assert.equal(text(league, 18, true), "16위 승강 플레이오프 warning / 17–18위 강등 error");
+    assert.equal(text(league, 18, false), "16위 승강 플레이오프권 playoff / 17–18위 강등권 relegation");
+    assert.equal(text(league, 18, true), "16위 승강 플레이오프 playoff / 17–18위 강등 relegation");
   }
   for (const league of [2, 3, 848]) {
-    assert.equal(text(league, 36, false), "1–8위 16강 직행권 live / 9–24위 플레이오프권 warning / 25–36위 탈락권 error");
-    assert.equal(text(league, 36, true), "1–8위 16강 직행 live / 9–24위 플레이오프 진출 warning / 25–36위 탈락 error");
+    assert.equal(text(league, 36, false), "1–8위 16강 직행권 direct / 9–24위 플레이오프권 playoff / 25–36위 탈락권 out");
+    assert.equal(text(league, 36, true), "1–8위 16강 직행 direct / 9–24위 플레이오프 진출 playoff / 25–36위 탈락 out");
   }
   const bundesliga = tableBands(78, 18, false);
   assert.equal(

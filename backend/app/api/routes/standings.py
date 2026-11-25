@@ -70,6 +70,7 @@ NO_SEASON_DATA = "선택한 시즌에는 이 리그의 순위 데이터가 없�
 STANDINGS_NOT_COLLECTED = "리그 순위를 아직 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."
 RANKING_NOT_COLLECTED = "선수 순위를 아직 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."
 SUMMARY_ROWS = 6
+LIST_SIZE = 20
 
 
 def _league(
@@ -233,7 +234,8 @@ def read_player_rankings(
     """LEAG-004: goals / assists / yellow / red are the provider's top lists in its order (not
     a full ranking); red counts direct red cards only. Saves are aggregated from every
     player line: goalkeepers with a missing value are excluded (`excluded`), ties share a
-    rank. UEFA competitions (06 개선 2026-11-20): the whole competition and season,
+    rank. A value of 0 is left out of every list, and each list is at most 20 long
+    (2026-11-25). UEFA competitions (06 개선 2026-11-20): the whole competition and season,
     qualifiers included — never re-counted by stage."""
     season = season or settings.current_season
     competition = _league(db, league, season, STANDINGS_IDS, NO_PLAYER_RANKINGS)
@@ -247,6 +249,15 @@ def read_player_rankings(
         entries, excluded = saves.items, saves.excluded
     else:
         entries, excluded = read_top_list(db, league, season, type), None
+    # A recorded 0 is not a ranking (user decision 2026-11-25: red cards or saves of 0 — a
+    # player with second yellows only, a keeper who never played — are left out). It sits at
+    # the end of every list, so the others keep their ranks. A missing value (null) is not 0
+    # and stays, shown as "—".
+    entries = [entry for entry in entries if entry.value != 0]
+    # Every list shows at most the top LIST_SIZE (user decision 2026-11-25): the provider's
+    # four lists are 20 long, and saves are cut to the same length. Saves ranks and "공동" are
+    # computed over all keepers first, so a tie at the cut is still shown correctly.
+    entries = entries[:LIST_SIZE]
     return PlayerRankingsResponse(
         data=PlayerRankings(
             type=type,

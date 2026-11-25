@@ -27,6 +27,12 @@
   --kt-status-warning-bg: #fffbeb;
   --kt-status-error: #b91c1c;
   --kt-status-error-bg: #fef2f2;
+  /* Standings bands: row left bar and legend (06, 2026-11-24 — UEFA direct / play-off / out,
+     domestic relegation; the domestic relegation play-off shares the play-off colour). */
+  --kt-band-direct: #2563eb;
+  --kt-band-playoff: #f59e0b;
+  --kt-band-out: #64748b;
+  --kt-band-relegation: #b91c1c;
   /* Logo keycap face / Tab arrow / keycap rim (Figma 46:258, 96:412). */
   --kt-brand-key: #f8fafc;
   --kt-brand-arrow: #2563eb;
@@ -128,6 +134,10 @@
   --color-warning-bg: var(--kt-status-warning-bg);
   --color-error: var(--kt-status-error);
   --color-error-bg: var(--kt-status-error-bg);
+  --color-band-direct: var(--kt-band-direct);
+  --color-band-playoff: var(--kt-band-playoff);
+  --color-band-out: var(--kt-band-out);
+  --color-band-relegation: var(--kt-band-relegation);
   --color-brand-key: var(--kt-brand-key);
   --color-brand-arrow: var(--kt-brand-arrow);
   --color-brand-rim: var(--kt-brand-rim);
