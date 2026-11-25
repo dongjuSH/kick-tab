@@ -1,55 +1,43 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { cx } from "./cx";
 
 /** Most page numbers shown at once (PC). */
-export const MAX_NUMBERS = 9;
-/** Fewest: the first page, the current one and the last. */
-const MIN_NUMBERS = 3;
-/** Row parts (Figma 530:21586 · 530:21659): 44px arrows and numbers, 14px "…", 4px gaps. */
-const ITEM = 44;
+export const MAX_NUMBERS = 7;
+/** A 44px button plus the 4px gap after it (Figma 556:7312: arrows and numbers are 44px). */
+const SLOT = 48;
 const GAP = 4;
-const ELLIPSIS = 14;
 
 /**
- * How many page numbers fit a row `width` px wide: both arrows, two "…" and the gaps
- * between every part, so the row never scrolls sideways (320px phone: 3, 375px: 4).
+ * How many page numbers fit a row `width` px wide next to `arrows` arrow buttons (4 with
+ * « », 2 without): the width left after the arrows and gaps ÷ 48px, kept to 1–7.
+ * The 375px card row (333px) fits 3 beside four arrows, the 320px one (278px) 1.
  */
-export function numbersFor(width: number): number {
-  const fixed = 2 * ITEM + 2 * ELLIPSIS + 3 * GAP;
-  const fit = Math.floor((width - fixed) / (ITEM + GAP));
-  return Math.min(MAX_NUMBERS, Math.max(MIN_NUMBERS, fit));
-}
-
-export type PageItem = number | "gap";
-
-/**
- * `1 2 3 … 420` style items: every page when they fit, otherwise the first and last page
- * always, a run around `page` filling the remaining `numbers - 2` places (pushed inward at
- * either end), and "gap" where pages are left out.
- */
-export function pageItems(page: number, pages: number, numbers: number): PageItem[] {
-  if (pages <= numbers) return Array.from({ length: pages }, (_, i) => i + 1);
-  const middle = numbers - 2;
-  const start = Math.max(2, Math.min(page - Math.floor((middle - 1) / 2), pages - middle));
-  const end = start + middle - 1;
-  return [
-    1,
-    ...(start > 2 ? (["gap"] as const) : []),
-    ...Array.from({ length: middle }, (_, i) => start + i),
-    ...(end < pages - 1 ? (["gap"] as const) : []),
-    pages,
-  ];
+export function numbersFor(width: number, arrows: 2 | 4 = 4): number {
+  const fit = Math.floor((width + GAP) / SLOT) - arrows;
+  return Math.min(MAX_NUMBERS, Math.max(1, fit));
 }
 
 /**
- * Page navigation (HIST-001 · Figma `지난 경기 페이지네이션 · 공통` 530:21586 PC / 530:21659
- * mobile), shared by past results and team browse (07): `< 1 2 3 … 420 >` in one centred row.
- * The first and last page stay fixed; as many numbers as the row's width allows (up to 9)
- * sit around the current page, which is filled and has `aria-current="page"`. The arrows are
- * icon buttons, dimmed and disabled at either end. Nothing is drawn for a single page.
+ * The consecutive page numbers shown: `numbers` of them with the current page in the middle
+ * (a little left of it for an even count), pushed inward at either end so the count stays
+ * the same. With fewer pages, every page.
+ */
+export function pageWindow(page: number, pages: number, numbers: number): number[] {
+  const count = Math.min(numbers, pages);
+  const start = Math.max(1, Math.min(page - Math.floor((count - 1) / 2), pages - count + 1));
+  return Array.from({ length: count }, (_, i) => start + i);
+}
+
+/**
+ * Page navigation (HIST-001 · Figma 'KickTab/Results Pagination' 556:7312, past results
+ * 530:21586 / 530:21659, team browse 52:886 / 52:1197): `« ‹ 13 14 15 [16] 17 18 19 › »`.
+ * ‹ › move one page, « » go to the first and last page and appear only when the numbers
+ * cannot all be shown at once (team browse with 2 pages: `‹ 1 2 ›`). How many numbers fit
+ * follows the row's measured width (PC 7, 375px 3, 320px 1). Arrows at an end are disabled;
+ * the current page is filled and has `aria-current="page"`. Nothing is drawn for one page.
  */
 export function Pagination({
   page,
@@ -63,7 +51,7 @@ export function Pagination({
   label?: string;
 }) {
   const navRef = useRef<HTMLElement>(null);
-  const [width, setWidth] = useState<number | null>(null);
+  const [width, setWidth] = useState(0);
 
   // The row follows the space it actually gets (card padding, zoom, phone width).
   useLayoutEffect(() => {
@@ -77,53 +65,48 @@ export function Pagination({
   }, [pages]);
 
   if (pages <= 1) return null;
-  const items = pageItems(page, pages, width === null ? MIN_NUMBERS : numbersFor(width));
+  const ends = pages > numbersFor(width, 2);
+  const numbers = pageWindow(page, pages, numbersFor(width, ends ? 4 : 2));
+  const atStart = page <= 1;
+  const atEnd = page >= pages;
 
-  const arrow = (direction: "left" | "right", name: string, target: number, disabled: boolean) => (
+  const arrow = (icon: IconName, name: string, target: number, disabled: boolean) => (
     <button
       type="button"
       aria-label={name}
       disabled={disabled}
       onClick={() => onChange(target)}
-      className="inline-flex size-11 shrink-0 items-center justify-center rounded-control hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-control hover:bg-subtle disabled:cursor-not-allowed disabled:opacity-[0.38] disabled:hover:bg-transparent"
     >
-      <Icon name={`chevron-${direction}`} />
+      <Icon name={icon} />
     </button>
   );
 
   // The arrows have no frame, so the row may reach into the card's side padding (-mx-3):
-  // that is what lets 320px phones keep `< 1 … 210 … 420 >` on one line.
+  // that is what gives a 375px phone three numbers beside four arrows.
   return (
-    <nav ref={navRef} aria-label={label} className="-mx-3 flex items-center justify-center gap-1">
-      {arrow("left", "이전 페이지", page - 1, page <= 1)}
-      {items.map((item, index) =>
-        item === "gap" ? (
-          <span
-            key={`gap-${index}`}
-            aria-hidden
-            className="w-3.5 shrink-0 text-center text-body font-medium text-fg-secondary"
-          >
-            …
-          </span>
-        ) : (
-          <button
-            key={item}
-            type="button"
-            aria-label={`${item}페이지`}
-            aria-current={item === page ? "page" : undefined}
-            onClick={() => item !== page && onChange(item)}
-            className={cx(
-              "inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-control border px-2 text-body font-medium",
-              item === page
-                ? "border-action bg-action text-fg-inverse"
-                : "border-line-strong bg-surface text-fg hover:bg-subtle",
-            )}
-          >
-            {item}
-          </button>
-        ),
-      )}
-      {arrow("right", "다음 페이지", page + 1, page >= pages)}
+    <nav ref={navRef} aria-label={label} className="-mx-3 flex items-center justify-center gap-1 lg:gap-2">
+      {ends && arrow("chevrons-left", "첫 페이지", 1, atStart)}
+      {arrow("chevron-left", "이전 페이지", page - 1, atStart)}
+      {numbers.map((n) => (
+        <button
+          key={n}
+          type="button"
+          aria-label={`${n}페이지`}
+          aria-current={n === page ? "page" : undefined}
+          onClick={() => n !== page && onChange(n)}
+          className={cx(
+            "inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-control border px-2 text-body font-medium",
+            n === page
+              ? "border-action bg-action text-fg-inverse"
+              : "border-line-strong bg-surface text-fg-secondary hover:bg-subtle",
+          )}
+        >
+          {n}
+        </button>
+      ))}
+      {arrow("chevron-right", "다음 페이지", page + 1, atEnd)}
+      {ends && arrow("chevrons-right", "마지막 페이지", pages, atEnd)}
     </nav>
   );
 }

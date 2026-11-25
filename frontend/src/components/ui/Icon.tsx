@@ -5,6 +5,8 @@ export type IconName =
   | "chevron-down"
   | "chevron-left"
   | "chevron-right"
+  | "chevrons-left"
+  | "chevrons-right"
   | "menu"
   | "x"
   | "search"
@@ -14,6 +16,8 @@ const NATURAL_SIZE: Record<IconName, number> = {
   "chevron-down": 16,
   "chevron-left": 18,
   "chevron-right": 18,
+  "chevrons-left": 18,
+  "chevrons-right": 18,
   menu: 18,
   x: 18,
   search: 24,

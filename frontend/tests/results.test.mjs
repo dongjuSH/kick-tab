@@ -92,68 +92,58 @@ test("unreadable team, competitions and page are reported, not dropped or reset"
   assert.equal(JSON.stringify([params.competitions, params.team, params.page]), "[[39,45],48,3]");
 });
 
-test("pagination items: first and last page fixed, numbers around the page, … for the rest", () => {
-  const { pageItems } = loader()("@/components/ui/Pagination");
-  const w = (page, pages, numbers) => pageItems(page, pages, numbers).map((i) => (i === "gap" ? "…" : i)).join(" ");
-  // Pages that fit are all shown, nothing more (Figma PC: 1 … 6 with 6 pages).
-  assert.equal(w(1, 1, 9), "1");
-  assert.equal(w(3, 5, 9), "1 2 3 4 5");
-  assert.equal(w(8, 8, 9), "1 2 3 4 5 6 7 8");
-  // Figma mobile (6 pages, 4 numbers): 1 2 3 … 6.
-  assert.equal(w(1, 6, 4), "1 2 3 … 6");
-  // PC, 2025-26 all (420 pages, 9 numbers).
-  assert.equal(w(1, 420, 9), "1 2 3 4 5 6 7 8 … 420");
-  assert.equal(w(2, 420, 9), "1 2 3 4 5 6 7 8 … 420");
-  assert.equal(w(5, 420, 9), "1 2 3 4 5 6 7 8 … 420");
-  assert.equal(w(6, 420, 9), "1 … 3 4 5 6 7 8 9 … 420");
-  assert.equal(w(210, 420, 9), "1 … 207 208 209 210 211 212 213 … 420");
-  assert.equal(w(417, 420, 9), "1 … 413 414 415 416 417 418 419 420");
-  assert.equal(w(420, 420, 9), "1 … 413 414 415 416 417 418 419 420");
-  // 320px phone (3 numbers): first, current, last.
-  assert.equal(w(1, 420, 3), "1 2 … 420");
-  assert.equal(w(2, 420, 3), "1 2 … 420");
-  assert.equal(w(210, 420, 3), "1 … 210 … 420");
-  assert.equal(w(419, 420, 3), "1 … 419 420");
-  assert.equal(w(420, 420, 3), "1 … 419 420");
-  // Team browse (8 pages).
-  assert.equal(w(5, 8, 4), "1 … 5 6 … 8");
+test("pagination window: consecutive numbers around the page, pushed inward at the ends", () => {
+  const { pageWindow } = loader()("@/components/ui/Pagination");
+  const w = (page, pages, numbers) => pageWindow(page, pages, numbers).join(" ");
+  // Every page when they fit (team browse 2 pages, Figma 6 pages).
+  assert.equal(w(1, 2, 7), "1 2");
+  assert.equal(w(1, 6, 7), "1 2 3 4 5 6");
+  // PC, 2025-26 all (420 pages, 7 numbers): the count stays 7 at either end.
+  assert.equal(w(1, 420, 7), "1 2 3 4 5 6 7");
+  assert.equal(w(4, 420, 7), "1 2 3 4 5 6 7");
+  assert.equal(w(5, 420, 7), "2 3 4 5 6 7 8");
+  assert.equal(w(16, 420, 7), "13 14 15 16 17 18 19");
+  assert.equal(w(210, 420, 7), "207 208 209 210 211 212 213");
+  assert.equal(w(420, 420, 7), "414 415 416 417 418 419 420");
+  // 375px (3) and 320px (1).
+  assert.equal(w(3, 6, 3), "2 3 4");
+  assert.equal(w(1, 420, 3), "1 2 3");
+  assert.equal(w(420, 420, 3), "418 419 420");
+  assert.equal(w(6, 6, 1), "6");
+  assert.equal(w(210, 420, 1), "210");
 });
 
-test("pagination width: numbers that fit the row with both arrows and two …", () => {
+test("pagination width: (row − four arrows and gaps) ÷ 48px, 1 to 7 numbers", () => {
   const { numbersFor } = loader()("@/components/ui/Pagination");
-  // 320px card row (254 + 24 into the padding) 3, 375px (333) 4, PC up to 9, never below 3.
-  assert.deepEqual([100, 278, 333, 500, 540, 1000, 1254].map(numbersFor), [3, 3, 4, 7, 8, 9, 9]);
-  // The widest row (n numbers, two …) always fits the width it was chosen for.
-  for (const width of [278, 333, 400, 500, 700]) {
-    const n = numbersFor(width);
-    assert.ok(2 * 44 + n * 44 + 2 * 14 + (n + 3) * 4 <= width, `${width}px → ${n}`);
+  // 320px card row (254 + 24 into the padding) 1, 375px (333) 3, PC 7.
+  assert.deepEqual([0, 278, 333, 400, 1254].map((w) => numbersFor(w)), [1, 1, 3, 4, 7]);
+  // Without « » two more fit: 320px shows team browse's two pages as ‹ 1 2 ›.
+  assert.deepEqual([0, 278, 333, 1254].map((w) => numbersFor(w, 2)), [1, 3, 5, 7]);
+  for (const width of [278, 333, 400, 500]) {
+    for (const arrows of [2, 4]) {
+      const n = numbersFor(width, arrows);
+      assert.ok((arrows + n) * 44 + (arrows + n - 1) * 4 <= width, `${width}px ${arrows} → ${n}`);
+    }
   }
 });
 
-test("pagination render: < 1 2 3 … 420 >, arrows disabled at the ends, current page marked", () => {
+test("pagination render: « ‹ numbers › », ends disabled, « » only when pages are hidden", () => {
   const props = (page, pages) => ({ page, pages, onChange: () => {} });
-  const labels = (html) => [...html.matchAll(/aria-label="(\d+)페이지"/g)].map((m) => Number(m[1]));
-  const disabled = (html) => [...html.matchAll(/aria-label="(이전|다음) 페이지" disabled=""/g)].map((m) => m[1]);
-  const gaps = (html) => (html.match(/…/g) ?? []).length;
+  const labels = (html) => [...html.matchAll(/<button[^>]*aria-label="([^"]+)"/g)].map((m) => m[1]);
+  const disabled = (html) => [...html.matchAll(/aria-label="([^"]+)" disabled=""/g)].map((m) => m[1]);
   const { Pagination } = loader({ "./Icon": { Icon: () => null } })("@/components/ui/Pagination");
-  // Server render (no width yet): the smallest row, 3 numbers.
+  // Server render (no width yet): the narrowest row, one number.
   const render = (page, pages) => renderToStaticMarkup(React.createElement(Pagination, props(page, pages)));
   assert.equal(render(1, 1), "");
   const start = render(1, 420);
-  assert.deepEqual(labels(start), [1, 2, 420]);
-  assert.deepEqual(disabled(start), ["이전"]);
-  assert.equal(gaps(start), 1);
+  assert.deepEqual(labels(start), ["첫 페이지", "이전 페이지", "1페이지", "다음 페이지", "마지막 페이지"]);
+  assert.deepEqual(disabled(start), ["첫 페이지", "이전 페이지"]);
   assert.match(start, /aria-current="page"[^>]*>1</);
-  assert.doesNotMatch(start, /처음|끝/);
-  const middle = render(210, 420);
-  assert.deepEqual(labels(middle), [1, 210, 420]);
-  assert.equal(gaps(middle), 2);
-  assert.deepEqual(disabled(middle), []);
+  assert.doesNotMatch(start, /…/);
+  assert.deepEqual(disabled(render(210, 420)), []);
   const end = render(420, 420);
-  assert.deepEqual(disabled(end), ["다음"]);
+  assert.deepEqual(disabled(end), ["다음 페이지", "마지막 페이지"]);
   assert.match(end, /aria-current="page"[^>]*>420</);
-  // Order: < numbers >.
-  assert.ok(middle.indexOf("이전 페이지") < middle.indexOf(">1<") && middle.indexOf(">420<") < middle.indexOf("다음 페이지"));
 });
 
 test("season select shows '2025-26 시즌' on the trigger and options, never a replacement", () => {

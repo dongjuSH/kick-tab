@@ -198,7 +198,9 @@ export function ResultsSection() {
       aria-label="지난 경기 필터와 결과"
       className="flex min-w-0 flex-col gap-4 rounded-card border border-line bg-surface p-4 lg:p-6"
     >
-      <div className="flex items-center gap-3">
+      {/* Figma 53:593 / 53:995 (2026-11-24): the season alone on the first row; 초기화 sits
+          beside the competition picker, like the main schedule's filter row. */}
+      <div className="flex items-center">
         {seasons.data ? (
           // Figma 53:995 / 61:883: 175px on mobile, 220px from sm; shrinks at 320px.
           <SeasonSelect
@@ -217,31 +219,34 @@ export function ResultsSection() {
         ) : (
           <Skeleton className="h-11 w-full max-w-[175px] sm:max-w-[220px]" />
         )}
-        <span className="flex-1" />
-        <Button variant="secondary" className="min-w-[76px] shrink-0 whitespace-nowrap" onClick={reset}>
-          초기화
-        </Button>
       </div>
 
       {!unsupported && (
         <div className="flex flex-col gap-3">
-          {competitionList ? (
-            <CompetitionFilter
-              competitions={competitionList}
-              selected={params.competitions}
-              onChange={(ids) => params.update({ competitions: ids })}
-              season={season ?? undefined}
-            />
-          ) : competitions.isError ? (
-            <p className="flex items-center gap-2 text-small text-error">
-              대회 목록을 불러오지 못했습니다.
-              <Button className="min-h-9" onClick={() => competitions.refetch()}>
-                다시 확인
-              </Button>
-            </p>
-          ) : (
-            <Skeleton className="h-11 w-full" />
-          )}
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              {competitionList ? (
+                <CompetitionFilter
+                  competitions={competitionList}
+                  selected={params.competitions}
+                  onChange={(ids) => params.update({ competitions: ids })}
+                  season={season ?? undefined}
+                />
+              ) : competitions.isError ? (
+                <p className="flex min-h-11 items-center gap-2 text-small text-error">
+                  대회 목록을 불러오지 못했습니다.
+                  <Button className="min-h-9" onClick={() => competitions.refetch()}>
+                    다시 확인
+                  </Button>
+                </p>
+              ) : (
+                <Skeleton className="h-11 w-full" />
+              )}
+            </div>
+            <Button variant="secondary" className="w-20 shrink-0 px-0" onClick={reset}>
+              초기화
+            </Button>
+          </div>
           {/* The main schedule's search group (Figma 61:883 '공통 팀 검색 · 지난 경기'): the
               favourite row (44px) right under the field, as on the main page (2026-11-24); the
               help names the season scope.
