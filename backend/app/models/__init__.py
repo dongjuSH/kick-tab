@@ -21,8 +21,6 @@ from app.models.standings import (
 )
 from app.models.sync_run import SyncRun
 from app.models.team_detail import (
-    PlayerClubSeason,
-    PlayerSeasonCheck,
     SquadMember,
     TeamCoach,
     TeamPlayerStat,
@@ -58,9 +56,7 @@ __all__ = [
     "NewsArticle",
     "NewsArticleTeam",
     "Player",
-    "PlayerClubSeason",
     "PlayerRanking",
-    "PlayerSeasonCheck",
     "PlayerSeasonStat",
     "Review",
     "ReviewReaction",

@@ -1,5 +1,22 @@
 # KickTab 일별 작업 내역
 
+## 2026-11-25 (수) — 08 선수단 정렬·부분 집계 해소·이적 기준 변경(사용자 요청·결정)
+
+브랜치 `feat/08-team-detail`(최신 `dev` 3689620 위)에 커밋·push 후 `dev` 병합. 사용자 결정 2건(이적 메인 = 리그·UEFA·클럽 월드컵 출전, 공급사 미제공 경기 제외), 마이그레이션 `0021` 사용자 확인 후 공유 DB 적용. 자체 검수, 외부 호출 API-Football 3회(발렌시아 확인 2·경기 기록 읽기 1).
+
+| 영역 | 변경 파일·함수 | 이유 |
+| --- | --- | --- |
+| 선수단 표 정렬 | `features/team-detail/SquadTable.tsx`(`COLUMNS`, 사진·숫자 셀, 정렬 화살표 `absolute`, `CompetitionLines`) | 선수명·국적만 왼쪽, 사진·등번호·포지션·출전·득점·도움·상세와 대회별 기록 숫자는 가운데(열 제목 포함). PC(lg) 숫자 열 80px·좌우 12px, 모바일은 표 안에서만 가로 스크롤. 제목 아래 설명 삭제, '부분 집계'는 제목 옆 상태로만 |
+| Figma | Team Squad Table 470:6667·Row 470:6646·Popover 469:6642, PC 인스턴스 472:18385 | 가운데 정렬 반영, PC 열 간격 16px(모바일 8px 유지) |
+| 아직 안 치른 대회 제외 | `services/team_detail.py`(`played_competitions`, `read_squad`), `sync/team_detail.py`(`team_player_stats` 현재 시즌 범위) | 2026-27 아래에 미리 나오는 지난 슈퍼컵 줄이 합계·'부분 집계'에 섞이던 문제 |
+| 공급사 미제공 경기 | `services/team_detail.py`(`missing_record_competitions`, `_gives_player_data`, `unread_record_matches`), `sync/team_detail.py`(`_read_record_matches`, 20개당 1회, 04 `store_fixture_records` 재사용) | 코파 델 레이 초반 라운드처럼 경기 기록에 그 팀 선수 기록이 없는 경기만 있는 대회는 부분 집계가 아님. 1회 실행으로 10경기 읽어 96팀 배지·안내 0 |
+| 이적 판정 | `services/team_detail.py`(`first_team_competitions`, `move_evidence`, `judge_move`), `api/routes/teams.py` | 메인 = 이 팀 리그·UEFA·클럽 월드컵 출전 1경기 이상, 그 외 모두 '기타 이동', 기록 미수집 시즌만 메인 유지. 맨시티 2026-27 메인 31→22줄, 8개 팀×2시즌 359→302줄, 주요 선수 유지 |
+| 쓰지 않는 코드·표 삭제 | `transfer_player_checks` 작업·`parse_player_season` 등, `models/team_detail.py`(`PlayerSeasonCheck`·`PlayerClubSeason`), `migrations/versions/20261125_0021_drop_player_season_checks.py`(새) | 이전 팀 확인이 더 이상 판정에 쓰이지 않음(작업 원칙 5). 공유 DB에서 1,667·2,408행 삭제(사용자 확인) |
+| 테스트 | `tests/test_team_detail.py`, `tests/test_team_detail_db.py` | 새 판정·안 치른 대회·공급사 미제공 경기 테스트, 삭제된 기능 테스트 제거 |
+| 기획 문서 | `docs/` 기능 명세서·PRD·유저 플로우 새 버전 | TEAM-002 규칙 2·6, TEAM-006 규칙 6·6-2·추가 검수·완료 조건, 변경 이력 |
+
+검사: ruff, pytest 388(+DB 547, 3 skipped), alembic check(head `0021`), lint, tsc, npm test 92, build, 브라우저 1920·375(콘솔 오류 0).
+
 ## 2026-11-25 (수) — 07 팀 탐색 별 아이콘 팀 카드(데스크탑 검수)
 
 브랜치 `feat/07-team-browse`(최신 `dev` a8e2f6a 병합 후 작업)에 커밋·push 후 `dev` 병합. 기준: Figma 52:624·52:949. 자체 검수, 외부 호출 0회.

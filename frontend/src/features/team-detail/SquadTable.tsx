@@ -31,12 +31,12 @@ import { AREA } from "./TeamMatches";
 
 const COLUMNS: readonly { key: SortKey; label: string; className: string }[] = [
   { key: "name", label: "선수명", className: "min-w-36 text-left" },
-  { key: "number", label: "등번호", className: "w-16 text-center" },
-  { key: "position", label: "포지션", className: "w-16 text-center" },
+  { key: "number", label: "등번호", className: "w-16 text-center lg:w-20" },
+  { key: "position", label: "포지션", className: "w-16 text-center lg:w-20" },
   { key: "nationality", label: "국적", className: "min-w-32 text-left" },
-  { key: "appearances", label: "출전", className: "w-14 text-right" },
-  { key: "goals", label: "득점", className: "w-14 text-right" },
-  { key: "assists", label: "도움", className: "w-14 text-right" },
+  { key: "appearances", label: "출전", className: "w-14 text-center lg:w-20" },
+  { key: "goals", label: "득점", className: "w-14 text-center lg:w-20" },
+  { key: "assists", label: "도움", className: "w-14 text-center lg:w-20" },
 ];
 
 /**
@@ -71,13 +71,10 @@ export function SquadTable({ teamId }: { teamId: number }) {
 
   return (
     <section aria-labelledby="team-players" className={AREA}>
-      <div className="flex flex-col gap-1">
+      {/* 2026-11-24 검수: the explanation under the title is gone; '부분 집계' stays as a state. */}
+      <div className="flex flex-wrap items-center gap-2">
         <h2 id="team-players" className="text-title font-bold">선수단</h2>
-        <p className="flex flex-wrap items-center gap-2 text-small text-fg-secondary">
-          <span>{season} 지원 대회 합계</span>
-          {partial && <Badge tone="warning">부분 집계</Badge>}
-        </p>
-        <p className="text-caption text-action">상세 버튼을 누르면 대회별 기록을 볼 수 있습니다</p>
+        {partial && <Badge tone="warning">부분 집계</Badge>}
       </div>
       <DataState
         status={dataStatus(query, players.length === 0, refreshFailed)}
@@ -116,7 +113,7 @@ export function SquadTable({ teamId }: { teamId: number }) {
                 </caption>
                 <thead>
                   <tr className="bg-subtle text-small text-fg-secondary">
-                    <th scope="col" className="w-12 min-w-12 px-2 py-2 text-left font-medium whitespace-nowrap">
+                    <th scope="col" className="w-12 min-w-12 px-2 py-2 text-center font-medium whitespace-nowrap">
                       사진
                     </th>
                     {COLUMNS.map((column) => (
@@ -130,12 +127,12 @@ export function SquadTable({ teamId }: { teamId: number }) {
                           type="button"
                           onClick={() => setSort(nextSort(sort, column.key))}
                           className={cx(
-                            "inline-flex min-h-11 items-center gap-1 rounded-control px-1 whitespace-nowrap hover:text-fg",
+                            "relative inline-flex min-h-11 items-center rounded-control px-1 whitespace-nowrap hover:text-fg",
                             sort.key === column.key && "font-bold text-fg",
                           )}
                         >
                           {column.label}
-                          <span aria-hidden className="w-2">
+                          <span aria-hidden className="absolute left-full -ml-0.5">
                             {sort.key === column.key ? (sort.dir === "asc" ? "↑" : "↓") : ""}
                           </span>
                         </button>
@@ -149,20 +146,20 @@ export function SquadTable({ teamId }: { teamId: number }) {
                 <tbody>
                   {shown.map((row) => (
                     <tr key={row.player.id} className="border-b border-line">
-                      <td className="min-w-12 px-2 py-2">
+                      <td className="min-w-12 px-2 py-2 text-center [&_img]:mx-auto">
                         <PlayerPhoto src={row.player.photoUrl} name={row.player.name} size={28} />
                       </td>
                       <th scope="row" className="px-2 py-2 text-left font-medium text-fg">
                         {row.player.name}
                       </th>
-                      <td className="px-1 py-2 text-center tabular-nums">{statText(row.number)}</td>
-                      <td className="px-1 py-2 text-center">{positionLabel(row.position)}</td>
+                      <td className="px-1 py-2 text-center tabular-nums lg:px-3">{statText(row.number)}</td>
+                      <td className="px-1 py-2 text-center lg:px-3">{positionLabel(row.position)}</td>
                       <td className="px-2 py-2">
                         <Nationality name={row.nationality} flagUrl={row.flagUrl} />
                       </td>
-                      <td className="px-2 py-2 text-right tabular-nums">{statText(row.totals?.appearances)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{statText(row.totals?.goals)}</td>
-                      <td className="px-2 py-2 text-right tabular-nums">{statText(row.totals?.assists)}</td>
+                      <td className="px-2 py-2 text-center tabular-nums lg:px-3">{statText(row.totals?.appearances)}</td>
+                      <td className="px-2 py-2 text-center tabular-nums lg:px-3">{statText(row.totals?.goals)}</td>
+                      <td className="px-2 py-2 text-center tabular-nums lg:px-3">{statText(row.totals?.assists)}</td>
                       <td className="px-1 py-1 text-center">
                         <button
                           type="button"
@@ -241,10 +238,10 @@ function CompetitionLines({ player, season }: { player: SquadPlayer; season: str
           <thead>
             <tr className="text-small text-fg-secondary">
               <th scope="col" className="py-2 text-left font-medium">대회</th>
-              <th scope="col" className="w-12 py-2 text-right font-medium">출전</th>
-              <th scope="col" className="w-12 py-2 text-right font-medium">득점</th>
-              <th scope="col" className="w-12 py-2 text-right font-medium">도움</th>
-              <th scope="col" className="w-12 py-2 text-right font-medium">평점</th>
+              <th scope="col" className="w-12 py-2 text-center font-medium">출전</th>
+              <th scope="col" className="w-12 py-2 text-center font-medium">득점</th>
+              <th scope="col" className="w-12 py-2 text-center font-medium">도움</th>
+              <th scope="col" className="w-12 py-2 text-center font-medium">평점</th>
             </tr>
           </thead>
           <tbody>
@@ -253,10 +250,10 @@ function CompetitionLines({ player, season }: { player: SquadPlayer; season: str
                 <th scope="row" className="py-3 text-left font-normal text-fg">
                   {competitionName(line.competition)}
                 </th>
-                <td className="py-3 text-right tabular-nums">{statText(line.appearances)}</td>
-                <td className="py-3 text-right tabular-nums">{statText(line.goals)}</td>
-                <td className="py-3 text-right tabular-nums">{statText(line.assists)}</td>
-                <td className="py-3 text-right tabular-nums">{ratingText(line.rating)}</td>
+                <td className="py-3 text-center tabular-nums">{statText(line.appearances)}</td>
+                <td className="py-3 text-center tabular-nums">{statText(line.goals)}</td>
+                <td className="py-3 text-center tabular-nums">{statText(line.assists)}</td>
+                <td className="py-3 text-center tabular-nums">{ratingText(line.rating)}</td>
               </tr>
             ))}
           </tbody>

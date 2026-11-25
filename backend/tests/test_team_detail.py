@@ -12,18 +12,15 @@ from app.services.standings import IncompleteData
 from app.services.team_detail import (
     NO_COACH,
     MoveEvidence,
-    check_season,
     check_squad,
     check_transfers,
     group_moves,
     half_range,
     is_due,
-    is_first_team,
     judge_move,
     last_refresh_day,
     match_result,
     merge_transfers,
-    parse_player_season,
     parse_profile_nationality,
     parse_squad,
     parse_statistics,
@@ -372,114 +369,28 @@ def row_move(player, direction, club, half=1, season=2026, day=None, kind="Trans
     )
 
 
-def evidence(played=(), complete=True, prior=None):
-    return MoveEvidence(frozenset(played), complete, prior or {})
+def evidence(played=(), complete=True):
+    return MoveEvidence(frozenset(played), complete)
 
 
-def test_moves_with_appearances_here_are_shown_whatever_their_type_or_club():
+def test_moves_with_first_team_appearances_here_are_shown_whatever_their_type_or_club():
     ev = evidence(played={1})
     # A departure not in the squad (e.g. Rodri) and a loan out are shown: he played here.
     assert judge_move(row_move(1, "out", 529, kind="Transfer"), ev) == (True, "played_here")
     assert judge_move(row_move(1, "out", 38, kind="Loan"), ev) == (True, "played_here")
+    assert judge_move(row_move(1, "in", 38, kind="Return from loan"), ev) == (True, "played_here")
 
 
-def test_moves_are_folded_only_when_complete_records_show_no_appearance():
-    youth_loan = row_move(2, "out", 38, kind="Loan")
-    assert judge_move(youth_loan, evidence()) == (False, "not_played")
-    # Records of an evidence season missing: not decided, so shown (never "not played").
-    assert judge_move(youth_loan, evidence(complete=False)) == (True, "records_incomplete")
-
-
-def test_a_signing_needs_the_club_he_came_from():
-    arrival = row_move(3, "in", 211, half=1, season=2026)  # summer 2026: club season 2025
-    assert judge_move(arrival, evidence()) == (True, "check_pending")
-    played = evidence(prior={(3, 2025): {211: 30, 999: 0}})
-    assert judge_move(arrival, played) == (True, "played_before")
-    youth = evidence(prior={(3, 2025): {}})  # checked: no first-team line at all
-    assert judge_move(arrival, youth) == (False, "not_played")
-    no_club = row_move(3, "in", None)
-    assert judge_move(no_club, played) == (True, "club_unknown")
-    assert judge_move(no_club, evidence()) == (True, "club_unknown")
-    # A January move comes from the club's current season.
-    winter = row_move(3, "in", 211, half=2, season=2026)
-    assert check_season(winter) == 2026
-    assert judge_move(winter, played) == (True, "check_pending")
-
-
-def test_a_loan_return_is_judged_by_this_team_only():
-    # Back from a lower-league loan with 30 games there, never played here: folded.
-    back = row_move(6, "in", 38, kind="Return from loan")
-    loaned = evidence(prior={(6, 2025): {38: 30}})
-    assert judge_move(back, loaned) == (False, "not_played")
-    assert judge_move(row_move(6, "in", 38, kind="Back from Loan"), loaned)[0] is False
-    # The same player with appearances here is shown; undecided records keep it shown.
-    assert judge_move(back, evidence(played={6})) == (True, "played_here")
-    assert judge_move(back, evidence(complete=False)) == (True, "records_incomplete")
-    # A permanent signing from that club is a new signing: the club decides.
-    assert judge_move(row_move(6, "in", 38, kind="Transfer"), loaned) == (True, "played_before")
-
-
-def test_youth_competitions_and_friendlies_are_not_first_team():
-    answer = [{"player": {"id": 9}, "statistics": [
-        {"team": {"id": 7197}, "league": {"name": "Premier League 2 Division One", "season": 2025},
-         "games": {"appearences": 12}},
-        {"team": {"id": 15381}, "league": {"name": "U18 Premier League - South", "season": 2025},
-         "games": {"appearences": 5}},
-        {"team": {"id": 50}, "league": {"name": "UEFA Youth League", "season": 2025},
-         "games": {"appearences": 4}},
-        {"team": {"id": 50}, "league": {"name": "Friendlies Clubs", "season": 2025},
-         "games": {"appearences": 3}},
-        {"team": {"id": 50}, "league": {"name": "Premier League", "season": 2025},
-         "games": {"appearences": 0}},
-        {"team": {"id": 50}, "league": {"name": "FA Cup", "season": 2025},
-         "games": {"appearences": 1}},
-        {"team": {"id": 38}, "league": {"name": "Championship", "season": 2025},
-         "games": {"appearences": 8}},
-        {"team": {"id": 40}, "league": {"name": "Serie B", "season": 2025},
-         "games": {"appearences": None}},
-    ]}]
-    assert parse_player_season(answer, 9, 2025) == {50: 1, 38: 8, 40: 0}
-    assert parse_player_season([], 9, 2025) == {}  # no answer: no appearances anywhere
-    with pytest.raises(IncompleteData):
-        parse_player_season([{"player": {"id": 8}, "statistics": []}], 9, 2025)
-    assert is_first_team("Primavera 1") is False and is_first_team("Serie A") is True
-
-
-def line_of(team, league, apps):
-    return {"team": {"id": team}, "league": {"name": league, "season": 2025},
-            "games": {"appearences": apps}}
-
-
-@pytest.mark.parametrize("values,expected", [
-    ([0, None], 0), ([None, 0], 0), ([None], 0), ([0, 0], 0), ([None, 2], 2),
-])
-def test_empty_null_club_lines_count_as_zero(values, expected):
-    answer = [{"player": {"id": 9}, "statistics": [line_of(38, "Championship", a) for a in values]}]
-    assert parse_player_season(answer, 9, 2025) == {38: expected}
-
-
-@pytest.mark.parametrize("field,value", [("goals", 0), ("assists", 2), ("rating", "7.287")])
-def test_a_valued_null_club_line_proves_an_appearance(field, value):
-    line = line_of(38, "Championship", None)
-    if field == "rating":
-        line["games"]["rating"] = value
-    else:
-        line["goals"] = {"total" if field == "goals" else "assists": value}
-    assert parse_player_season([{"player": {"id": 9}, "statistics": [line]}], 9, 2025) == {38: 1}
-
-
-def test_unidentifiable_nonempty_lines_are_refused():
-    for broken in (line_of(None, "Championship", 10), line_of(38, None, 10)):
-        with pytest.raises(IncompleteData):
-            parse_player_season([{"player": {"id": 9}, "statistics": [broken]}], 9, 2025)
-    valued = line_of(None, None, None)
-    valued["goals"] = {"assists": 2}
-    with pytest.raises(IncompleteData):
-        parse_player_season([{"player": {"id": 9}, "statistics": [valued]}], 9, 2025)
-    for apps in (None, 0):
-        answer = [{"player": {"id": 9}, "statistics": [line_of(None, None, apps)]}]
-        assert parse_player_season(answer, 9, 2025) == {}
-    assert judge_move(row_move(7, "out", 38), evidence(played={7}, complete=False)) == (
+def test_every_move_without_appearances_here_is_folded():
+    # User decision 2026-11-25: no first-team appearance for this team → '기타 이동', whatever
+    # the move: a youth loan out, a loan return, a signing who has not played here yet.
+    for move in (row_move(2, "out", 38, kind="Loan"),
+                 row_move(2, "in", 38, kind="Return from loan"),
+                 row_move(2, "in", 211, kind="Transfer"),
+                 row_move(2, "in", None, kind="Free agent")):
+        assert judge_move(move, evidence()) == (False, "not_played")
+    # Records of an evidence season never collected: not decided, so shown (never folded).
+    assert judge_move(row_move(2, "out", 38), evidence(complete=False)) == (
         True, "records_incomplete",
     )
 
@@ -491,18 +402,13 @@ def test_one_row_per_player_and_half_keeps_every_move():
     youth_in = row_move(5, "in", 38, day=date(2026, 7, 1), mid=3)
     youth_out = row_move(5, "out", 39, day=date(2026, 8, 1), mid=4)
     winter = row_move(4, "in", 506, half=2, day=date(2027, 1, 10), mid=5)
-    ev = evidence(played={4}, prior={(5, 2025): {38: 0}})
-    groups = group_moves([sold, youth_out, back, winter, youth_in], ev)
+    groups = group_moves([sold, youth_out, back, winter, youth_in], evidence(played={4}))
     rows = [(g.player_id, g.direction, g.shown, [m.id for m in g.moves]) for g in groups]
     assert rows == [
         (4, "out", True, [1, 2]),  # oldest first; the row goes where he ended up
-        (5, "out", False, [3, 4]),  # folded: every move confirmed without appearances
+        (5, "out", False, [3, 4]),  # folded: no appearance here
         (4, "in", True, [5]),  # another half is another row
     ]
-    # One shown move shows the whole row.
-    mixed = group_moves([youth_in, row_move(5, "out", 39, day=date(2026, 8, 1), mid=6)],
-                        evidence(complete=True, prior={(5, 2025): {38: 2}}))
-    assert [(g.shown, len(g.moves)) for g in mixed] == [(True, 2)]
 
 
 def players_page(current, total, entries):
