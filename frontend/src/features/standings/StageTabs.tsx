@@ -36,8 +36,10 @@ export function StageTabs({
     const own = box.current;
     const scope = own?.closest<HTMLElement>("[data-competition-choices]");
     if (!scope || !own) return;
+    // The competition chip row is the first group in the box (the stage tabs come after it).
+    const competitions = scope.querySelector<HTMLElement>('[role="group"]');
     const measure = () => {
-      const chip = scope.querySelectorAll<HTMLElement>('[role="group"] button')[firstUefa];
+      const chip = competitions?.querySelectorAll<HTMLElement>("button")[firstUefa];
       if (!chip || !matchMedia(PC).matches) {
         setInset(0);
         return;
@@ -49,11 +51,21 @@ export function StageTabs({
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(scope);
+    // The chips themselves can change width while the box keeps its size: a web font applied
+    // late on a first visit (no font cache — 00 검수 2026-11-25: tab 28px right of the chip at
+    // 1920 until a resize), or names replaced once `/competitions` arrives. Watch the chip
+    // row's content, and measure again when fonts finish loading.
+    if (competitions?.firstElementChild) observer.observe(competitions.firstElementChild);
+    let live = true;
+    void document.fonts?.ready.then(() => live && measure());
+    document.fonts?.addEventListener("loadingdone", measure);
     // The competition row scrolling (‹ ›, wheel, swipe) moves the chip.
     scope.addEventListener("scroll", measure, true);
     window.addEventListener("resize", measure);
     return () => {
+      live = false;
       observer.disconnect();
+      document.fonts?.removeEventListener("loadingdone", measure);
       scope.removeEventListener("scroll", measure, true);
       window.removeEventListener("resize", measure);
     };
