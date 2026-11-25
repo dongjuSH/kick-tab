@@ -97,24 +97,21 @@ function BlockMessage({ tab, status, onRetry }: { tab: RecordTab; status: BlockS
 const SIDE = "flex min-h-[52px] min-w-0 flex-1 items-center gap-2";
 const CENTRE = "relative flex w-14 shrink-0 flex-col items-center justify-center bg-surface text-center";
 
-function TimelineTeam({ team, align }: { team: TeamRef; align: "end" | "start" }) {
+// Head row: each team centred in its column — crest above the name (13px) on mobile, beside
+// it (14px) on PC (Figma 52:404 / 52:151).
+function TimelineTeam({ team }: { team: TeamRef }) {
   const name = teamName(team);
   return (
-    <span className={cx("flex min-w-0 flex-1 items-center gap-1", align === "end" && "justify-end")}>
+    <span className="flex min-w-0 flex-1 flex-col items-center justify-center gap-1 lg:flex-row">
       <TeamCrest src={team.crestUrl} name={name} size={20} />
-      <span
-        className={cx(
-          "min-w-0 break-keep text-small text-fg [overflow-wrap:anywhere]",
-          align === "end" && "text-right",
-        )}
-      >
+      <span className="min-w-0 text-center text-label break-keep text-fg [overflow-wrap:anywhere] lg:text-body">
         {name}
       </span>
     </span>
   );
 }
 
-function EventBody({ event, align }: { event: MatchEvent; align: "end" | "start" | "center" }) {
+function EventBody({ event, align }: { event: MatchEvent; align: "end" | "start" }) {
   const icon = (
     <span className="grid size-4 shrink-0 place-items-center">
       <EventIcon kind={eventKind(event)} />
@@ -124,7 +121,7 @@ function EventBody({ event, align }: { event: MatchEvent; align: "end" | "start"
     <span
       className={cx(
         "min-w-0 text-label text-fg [overflow-wrap:anywhere]",
-        align === "end" ? "flex-1 text-right" : align === "start" ? "flex-1" : "text-center",
+        align === "end" ? "flex-1 text-right" : "flex-1",
       )}
     >
       {eventText(event)}
@@ -146,7 +143,7 @@ function EventBody({ event, align }: { event: MatchEvent; align: "end" | "start"
 function Minute({ minute, note }: { minute: string; note?: string }) {
   return (
     <span className={CENTRE}>
-      <span className="whitespace-nowrap text-small text-action">{minute}</span>
+      <span className="whitespace-nowrap text-body text-action">{minute}</span>
       {note && <span className="w-14 text-[10px] leading-5 text-fg">{note}</span>}
     </span>
   );
@@ -165,10 +162,10 @@ function Timeline({ events, info, teams }: { events: MatchEvent[]; info: MatchIn
   if (rows.length === 0) return <StateMessage title="아직 기록된 이벤트가 없습니다" />;
   return (
     <div className="flex flex-col">
-      <div aria-hidden className="flex items-center gap-1">
-        <TimelineTeam team={teams.home} align="end" />
-        <span className="w-14 shrink-0 text-center text-small text-fg">시간</span>
-        <TimelineTeam team={teams.away} align="start" />
+      <div aria-hidden className="flex min-h-11 items-center gap-1 lg:min-h-7">
+        <TimelineTeam team={teams.home} />
+        <span className="w-14 shrink-0 text-center text-body text-fg">시간</span>
+        <TimelineTeam team={teams.away} />
       </div>
       <ol className="relative">
         <span aria-hidden className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-line" />
@@ -182,14 +179,11 @@ function Timeline({ events, info, teams }: { events: MatchEvent[]; info: MatchIn
           }
           const { event } = row;
           if (!event.side) {
+            // Figma 52:151: only the minute and '소속 미확인' on the line; the event is read out.
             return (
-              <li key={index} className="relative flex flex-col items-center pb-2">
-                <span className="flex min-h-[52px] items-center">
-                  <Minute minute={minuteText(event)} note="소속 미확인" />
-                </span>
-                <span className="relative flex max-w-full items-center gap-2 bg-surface px-2">
-                  <EventBody event={event} align="center" />
-                </span>
+              <li key={index} className="relative flex min-h-[52px] justify-center">
+                <span className="sr-only">{`소속 미확인, ${eventText(event)}, `}</span>
+                <Minute minute={minuteText(event)} note="소속 미확인" />
               </li>
             );
           }

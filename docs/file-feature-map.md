@@ -1,5 +1,7 @@
 # KickTab 파일별 구현 기능
 
+**2026-11-25 · 04 상대 전적·타임라인 데스크탑 검수 시안 반영(자체 검수·`dev` 병합):** 프런트 `features/match/HeadToHeadSection.tsx`(Figma 63:1909/63:2116 표 — PC 날짜·대회·결과, 모바일 날짜 아래 대회·결과, 결과 '홈팀 스코어 원정팀', 승·무·패 칩 표 아래), `features/match/MatchRecords.tsx`(`TimelineTeam` 열 가운데·PC 가로/모바일 세로, 시간·분 14px, 소속 미확인 줄 '분 / 소속 미확인'만), `tests/match-regressions.test.mjs`.
+
 **2026-11-24 · 03 경기 일정 데스크탑 검수 시안 반영(자체 검수·`dev` 병합):** 백엔드 `schemas/schedule.py`·`api/routes/schedule.py`(`TeamSchedule.start`·`end` 삭제), 테스트 `tests/test_schedule_rules.py`·`test_schedule_db.py`. 프런트 `features/schedule/ScheduleSection.tsx`(기간 문구 삭제, 필터 줄 초기화), `DateBar.tsx`(`fit`·칸 단위 `page`), `components/common/TeamSearch.tsx`(여백), `features/results/ResultsSection.tsx`(관심 팀 줄 간격), `features/favorites/FavoriteSchedule.tsx`(`TeamChips`·경기 3개 접기·2줄 76px 요약), `FavoriteStar.tsx`(한 줄 팝업·화면 안 보정), `components/ui/Badge.tsx`(`compact`·`raised`), `components/common/MatchStatusBadge.tsx`(`raised`), `components/common/MatchCard.tsx`(모바일 Figma 306:3969 배치), `components/layout/StickyPanel.tsx`(긴 패널 아래 끝 고정), `features/standings/ChipRow.tsx`(흐림 제거·24×44 화살표), `lib/hooks/useScrollRow.ts`(새), `lib/format/kst.ts`(`formatDateRange` 삭제), 생성 타입, `tests/match-regressions.test.mjs`.
 
 **2026-11-24 · 02 금칙어 닉네임 오류 문구(사용자 결정·`dev` 병합):** 백엔드 `services/auth_security.py`(`NICKNAME_BLOCKED` → '운영자 사칭이나 비속어로 볼 수 있는 단어가 포함되어 사용할 수 없는 닉네임입니다.'), `tests/test_auth_rules.py`(문구·예외 없음 'badminton'·'시발점'). 프런트 `features/auth/rules.ts`(`NICKNAME_BLOCKED`), `tests/auth.test.mjs`.
