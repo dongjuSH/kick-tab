@@ -126,7 +126,6 @@ function reviewReturn({ mine, draft, restricted }) {
     },
     "@/features/auth/session": { REVIEW_DRAFT_PREFIX: "kt-review-draft:" },
     "./ReviewTextForm": { ReviewTextForm: "review-form" },
-    "./ReviewGuidance": { ReviewGuidance: () => null },
     "./ReviewRestriction": { ReviewRestrictionNotice: () => null, useRestrictionEnd() {} },
   }, { sessionStorage: { getItem: () => draft } });
   const { ReviewComposer } = load("@/features/match/ReviewComposer");
@@ -187,6 +186,29 @@ const leaves = {
   "@/components/common/TeamCrest": { TeamCrest: () => null, PlayerPhoto: () => null },
 };
 
+test("match review composer: hidden '평가 작성'/'평가 수정' label, no '!', restriction keeps its title (2026-11-26)", () => {
+  const h = hooks();
+  const forms = [];
+  const load = loader({ react: h.react,
+    "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: async () => {} }) },
+    "next/navigation": { useRouter: () => ({ push() {} }) },
+    "@/components/ui/Button": { Button: "button" },
+    "@/features/auth/returnTo": { hasReviewIntent: () => false, clearReviewIntent() {} },
+    "@/features/auth/session": { REVIEW_DRAFT_PREFIX: "kt-review-draft:" },
+    "./ReviewTextForm": { ReviewTextForm: (props) => { forms.push(props); return null; } },
+    "./ReviewRestriction": { ReviewRestrictionNotice: () => React.createElement("p", null, "제한 안내"), useRestrictionEnd() {} },
+  }, { sessionStorage: { getItem: () => null } });
+  const { ReviewComposer } = load("@/features/match/ReviewComposer");
+  h.render(ReviewComposer, { memberId: "m", fixtureId: 1, mine: undefined, restrictedUntil: null });
+  const form = forms.at(-1);
+  assert.equal(form.label, "평가 작성");
+  assert.equal(form.labelHidden, true);
+  assert.equal(renderToStaticMarkup(form.aside), '<span class="ml-auto text-small text-fg-muted">경기당 1개</span>');
+  // Restricted with no own review: no field, the visible '평가 작성' title stays.
+  const restricted = h.render(ReviewComposer, { memberId: "m", fixtureId: 1, mine: undefined, restrictedUntil: "2026-12-31T00:00:00Z" }).html;
+  assert.match(restricted, /<p class="text-label font-bold text-fg">평가 작성<\/p><p>제한 안내<\/p>/);
+});
+
 test("records query has no timer of its own: the match update drives it (MAT-004 rule 4, LIVE-004)", () => {
   const load = loader({ "@/lib/api/client": { apiFetch: () => { throw Error("unexpected network"); } } });
   const { matchRecordsQuery } = load("@/features/match/queries");
@@ -195,6 +217,19 @@ test("records query has no timer of its own: the match update drives it (MAT-004
     assert.equal(options.refetchInterval, undefined);
     assert.equal(options.refetchOnWindowFocus, false);
   }
+});
+
+test("review form label can be kept for screen readers only (match page, user decision 2026-11-26)", () => {
+  const h = hooks();
+  const { ReviewTextForm } = loader({ ...leaves, react: h.react })("@/features/match/ReviewTextForm");
+  const props = { label: "평가 작성", text: "", onChange() {}, pending: false, submitLabel: "등록", onSubmit() {},
+    aside: React.createElement("span", null, "경기당 1개") };
+  const hidden = h.render(ReviewTextForm, { ...props, labelHidden: true }).html;
+  assert.match(hidden, /<label for="[^"]+" class="sr-only">평가 작성<\/label>/);
+  assert.match(hidden, /경기당 1개/);
+  // My page keeps the visible label ('평가 수정').
+  const shown = h.render(ReviewTextForm, { ...props, label: "평가 수정" }).html;
+  assert.match(shown, /<label for="[^"]+" class="text-label font-bold text-fg">평가 수정<\/label>/);
 });
 
 test("page areas by state: no lineup or review area before kickoff, reviews beside finished records", () => {
