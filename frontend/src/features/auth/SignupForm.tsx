@@ -9,7 +9,8 @@ import type { LegalDocumentId } from "@/features/legal/documents";
 import { apiFetch } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import type { Member } from "@/lib/api/types";
-import { AuthCard, Field, FormMessage, SocialButtons } from "./AuthForm";
+// SocialButtons: deferred, see the note in the form below.
+import { AuthCard, Field, FormMessage } from "./AuthForm";
 import { EmailCodeStep, type Verified } from "./EmailCodeStep";
 import { rememberReviewIntent, reviewIntent, safeReturnTo } from "./returnTo";
 import {
@@ -44,7 +45,9 @@ export function SignupForm() {
   const returnTo = safeReturnTo(params.get("returnTo"));
   const intent = reviewIntent(params.get("intent"));
   const [verified, setVerified] = useState<Verified | null>(null);
-  // Figma 134:5398 · 134:5623: the social buttons belong to the first step only.
+  // Figma 134:5398 · 134:5623: the social buttons belong to the first step only. Kept for
+  // the deferred social sign-in (buttons commented out below until that work).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [codeSent, setCodeSent] = useState(false);
   // Remounts the email/code step so a later signup on this kept page starts empty.
   const [flow, setFlow] = useState(0);
@@ -229,7 +232,8 @@ export function SignupForm() {
           {status.message}
         </p>
       </form>
-      {!verified && !codeSent && <SocialButtons />}
+      {/* Social sign-in (Kakao/Google) is deferred until after launch (user decision 2026-11-26, guide P-02): the buttons are hidden until that work.
+      {!verified && !codeSent && <SocialButtons />} */}
     </AuthCard>
   );
 }
