@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.news import NewsArticle, NewsArticleTeam
 from app.models.sync_run import SyncRun
 from app.schemas.schedule import NewsItem
+from app.services.news_classify import description_text
 
 NEWS_LIMIT = 48
 # Team news (08, 2026-11-18): the newest 24 linked articles (main news keeps 48).
@@ -124,7 +125,8 @@ def list_news(
             id=a.id,
             badge=a.badge,
             title=a.title,
-            description=a.description,
+            # Articles stored before addresses were dropped (kept 72 hours) read clean too.
+            description=description_text(a.description),
             url=a.url,
             source_domain=a.source_domain,
             published_at=a.published_at,

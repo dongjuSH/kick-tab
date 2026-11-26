@@ -19,12 +19,26 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 _TAG = re.compile(r"<[^>]*>")
+# A web address in a description ("→ [원문에서 영상 보기] https://news.sbs.co.kr/n/?id=…")
+# with the pointer and bracketed label right before it.
+_ADDRESS = re.compile(
+    r"(?:[→▶☞]\s*)?(?:\[[^\[\]\n]{1,30}\]\s*)?(?:[→▶☞:]\s*)?(?:https?://|www\.)\S+"
+)
+_SPACES = re.compile(r"\s+")
 _COMPACT_DROP = re.compile(r"[\s.\-·'’`_/&()\[\]「」『』\"“”,:;!?…]+")
 
 
 def plain_text(value: str) -> str:
     """Provider text without <b> tags and HTML entities."""
     return html.unescape(_TAG.sub("", value or "")).strip()
+
+
+def description_text(value: str | None) -> str | None:
+    """The description shown on a news card: plain text without web addresses (and the
+    '→ [원문에서 영상 보기]' pointer before one); nothing left is no description. Stored
+    descriptions and API answers both go through it; classification reads the raw text."""
+    text = _SPACES.sub(" ", _ADDRESS.sub(" ", plain_text(value or ""))).strip()
+    return text or None
 
 
 def _fold(text: str) -> str:
