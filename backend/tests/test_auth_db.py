@@ -520,6 +520,7 @@ def test_member_favorites_limit_and_ownership(env):
     assert again.status_code == 200 and len(again.json()["data"]["teams"]) == 10
     eleventh = a.post("/api/v1/me/favorites", json={"teamId": teams[10]}, headers=WEB)
     assert eleventh.status_code == 409 and eleventh.json()["error"]["code"] == "FAVORITE_LIMIT"
+    assert eleventh.json()["error"]["message"] == "관심 팀은 최대 10팀까지 등록할 수 있습니다."
     listed = a.get("/api/v1/me/favorites").json()["data"]
     assert [t["id"] for t in listed["teams"]] == teams[:10] and listed["max"] == 10
     # Remove one, the 11th fits; re-adding the removed one is refused again.
