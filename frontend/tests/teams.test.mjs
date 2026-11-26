@@ -114,8 +114,8 @@ test("FavoriteToggle: with five teams the others are refused (Figma 57:766), reg
   const full = favorites("ready", [1, 2, 3, 4, 5]);
   const other = toggleMarkup(full, 40);
   assert.match(other, /disabled=""/);
-  assert.match(other, />최대 5개까지 등록할 수 있어요</);
-  assert.match(other, /aria-label="리버풀 관심 팀 등록 불가, 최대 5개까지 등록할 수 있어요"/);
+  assert.match(other, />최대 5팀까지 등록할 수 있습니다</);
+  assert.match(other, /aria-label="리버풀 관심 팀 등록 불가, 최대 5팀까지 등록할 수 있습니다"/);
   const registered = toggleMarkup(full, 3);
   assert.doesNotMatch(registered, /disabled=""/);
   assert.match(registered, /★ 관심 팀 등록됨/);

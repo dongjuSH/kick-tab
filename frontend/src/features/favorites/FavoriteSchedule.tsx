@@ -128,7 +128,7 @@ export function FavoriteSchedule() {
         {/* The limit has no standing notice (the count shows it); a refused add still says so. */}
         {limitHit && (
           <p role="status" className="text-small text-warning">
-            관심 팀은 최대 {favorites.max}개까지 등록할 수 있습니다.
+            관심 팀은 최대 {favorites.max}팀까지 등록할 수 있습니다.
           </p>
         )}
         {adding && !full && <AddTeam registered={ids} onAdd={add} />}

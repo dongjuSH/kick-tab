@@ -9,7 +9,7 @@ import { useFavorites } from "./useFavorites";
 /** Why a change was refused (FAV-002); shared by the toggle and the match-card star. The
  *  limit is the current user's: guests 5, members 10 (D-07-3). */
 export function favoriteRefusal(change: FavoriteChange, max: number): string | null {
-  if (change === "limit") return `관심 팀은 최대 ${max}개까지 등록할 수 있습니다.`;
+  if (change === "limit") return `관심 팀은 최대 ${max}팀까지 등록할 수 있습니다.`;
   if (change === "unavailable") return "이 브라우저에서는 관심 팀을 저장할 수 없습니다.";
   if (change === "failed") return "저장하지 못했습니다. 다시 시도해 주세요.";
   return null;
@@ -64,14 +64,14 @@ export function FavoriteToggle({
         aria-pressed={active}
         aria-label={
           full
-            ? `${teamName} 관심 팀 등록 불가, 최대 ${favorites.max}개까지 등록할 수 있어요`
+            ? `${teamName} 관심 팀 등록 불가, 최대 ${favorites.max}팀까지 등록할 수 있습니다`
             : `${teamName} 관심 팀 ${active ? "해제" : "등록"}`
         }
         disabled={favorites.status === "loading" || full || saving}
         aria-busy={saving || undefined}
         onClick={toggle}
       >
-        {active ? "★ 관심 팀 등록됨" : full ? `최대 ${favorites.max}개까지 등록할 수 있어요` : "☆ 관심 팀 등록"}
+        {active ? "★ 관심 팀 등록됨" : full ? `최대 ${favorites.max}팀까지 등록할 수 있습니다` : "☆ 관심 팀 등록"}
       </Button>
       {message && (
         <p role="status" className="text-small text-warning">

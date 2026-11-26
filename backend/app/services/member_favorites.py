@@ -17,7 +17,7 @@ from app.models.user import MEMBER_FAVORITES_MAX, MemberFavorite
 from app.schemas.auth import MemberFavorites
 from app.services.reference import team_detail_lookup, team_ref
 
-LIMIT_MESSAGE = f"관심 팀은 최대 {MEMBER_FAVORITES_MAX}개까지 등록할 수 있습니다."
+LIMIT_MESSAGE = f"관심 팀은 최대 {MEMBER_FAVORITES_MAX}팀까지 등록할 수 있습니다."
 
 
 def _lock(db: Session, user_id: uuid.UUID) -> None:

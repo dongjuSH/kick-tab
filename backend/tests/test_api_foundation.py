@@ -22,7 +22,7 @@ _probe = APIRouter(prefix="/__probe")
 
 @_probe.get("/api-error")
 def _raise_api_error():
-    raise ApiError(409, "FAVORITE_LIMIT", "관심 팀은 최대 5개까지 등록할 수 있습니다.")
+    raise ApiError(409, "FAVORITE_LIMIT", "관심 팀은 최대 5팀까지 등록할 수 있습니다.")
 
 
 @_probe.get("/crash")
@@ -212,7 +212,7 @@ def test_api_error_and_unhandled_error_envelopes(client):
     assert response.status_code == 409
     assert response.json()["error"] == {
         "code": "FAVORITE_LIMIT",
-        "message": "관심 팀은 최대 5개까지 등록할 수 있습니다.",
+        "message": "관심 팀은 최대 5팀까지 등록할 수 있습니다.",
         "details": {},
     }
     crash = client.get("/__probe/crash")
