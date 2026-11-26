@@ -17,6 +17,7 @@ from app.services.news_classify import (
     _mentioned,
     _parts,
     classify,
+    description_text,
     plain_text,
 )
 from app.services.reference import normalize_name
@@ -260,6 +261,18 @@ def test_fc_after_a_league_name_is_not_liga_f():
 
 def test_plain_text_strips_markup():
     assert plain_text("<b>맨시티</b> &quot;승리&quot;") == '맨시티 "승리"'
+
+
+def test_description_text_drops_addresses_and_their_pointer():
+    """A provider description carrying a link shows without it (2026-11-25)."""
+    raw = "레알 마드리드가 <b>승리</b>했다. → [원문에서 영상 보기] https://news.sbs.co.kr/n/?id=N1008"
+    assert description_text(raw) == "레알 마드리드가 승리했다."
+    assert description_text("경기 전 www.example.com/a 기자회견") == "경기 전 기자회견"
+    # Ordinary text, brackets and colons stay; an address alone is no description.
+    assert description_text("[속보] 3:1 승리 → 선두 탈환") == "[속보] 3:1 승리 → 선두 탈환"
+    assert description_text(" → [원문에서 영상 보기] https://news.sbs.co.kr/n/?id=N1 ") is None
+    assert description_text("") is None
+    assert description_text(None) is None
 
 
 def test_english_aliases_match_whole_words():

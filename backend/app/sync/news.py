@@ -21,7 +21,7 @@ from app.config import settings
 from app.models.news import NewsArticle, NewsArticleTeam
 from app.models.reference import TeamAlias, TeamCompetitionSeason
 from app.providers.naver_news import NaverNewsClient, NaverNewsError, NaverNewsStopped
-from app.services.news_classify import AliasIndex, classify, plain_text
+from app.services.news_classify import AliasIndex, classify, description_text, plain_text
 from app.sync.registry import JobContext, JobPartialFailure, register_job
 
 logger = logging.getLogger(__name__)
@@ -151,8 +151,9 @@ def sync_news(ctx: JobContext) -> None:
                         url=original.strip(),
                         source_domain=urlsplit(link).hostname or "",
                         title=title,
-                        # A missing description stays empty; nothing is written for it.
-                        description=plain_text(item.description) or None,
+                        # A missing description (or one that was only an address) stays
+                        # empty; nothing is written for it.
+                        description=description_text(item.description),
                         published_at=published,
                         badge=result.badge,
                         fetched_at=now,
