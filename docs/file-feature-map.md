@@ -317,7 +317,7 @@ apps/
 | `teams/` | `TeamsSection.tsx`, `useTeamsParams.ts`, `queries.ts` | 팀 탐색 화면, URL 조건, 조회 |
 | `team-detail/` | `TeamDetail.tsx`, `TeamMatches.tsx`, `SquadTable.tsx`, `SeasonRecords.tsx`, `TeamNews.tsx` | 팀 상세 조립, 경기, 선수단 표, 시즌 기록·이적, 팀 뉴스 |
 | | `model.ts`, `queries.ts` | 정렬·표기 규칙, 조회 |
-| `auth/` | `LoginForm.tsx`, `SignupForm.tsx`, `PasswordResetForm.tsx`, `EmailCodeStep.tsx`, `AuthForm.tsx` | 로그인, 회원가입, 비밀번호 찾기, 이메일 인증번호, 공용 카드·입력칸 |
+| `auth/` | `LoginForm.tsx`, `SignupForm.tsx`, `PasswordResetForm.tsx`, `EmailCodeStep.tsx`, `AuthForm.tsx` | 로그인, 회원가입, 비밀번호 찾기, 이메일 인증번호, 공용 카드·입력칸·소셜 버튼(소셜 로그인은 배포 이후 작업이라 버튼 사용을 주석 처리) |
 | | `session.ts`, `AuthSync.tsx`, `returnTo.ts`, `rules.ts` | 로그인 상태·자동 갱신, 로그인 후 돌아갈 곳, 입력 규칙·닉네임 금칙어 |
 | `mypage/` | `MyPage.tsx`, `FavoriteTeams.tsx`, `MyReviews.tsx`, `AccountPanel.tsx` | 마이페이지 조립, 관심 팀·팀별 다음 경기, 내 평가, 계정 관리 |
 | | `PasswordDialog.tsx`, `WithdrawDialog.tsx`, `MyCard.tsx`, `model.ts`, `queries.ts` | 비밀번호 변경 창, 탈퇴 확인 창, 영역 카드, 화면 규칙, 조회 |

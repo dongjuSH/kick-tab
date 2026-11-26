@@ -100,6 +100,8 @@ export function FormMessage({ tone, children }: { tone: "error" | "info" | "succ
 export const SOCIAL_NOTICE = "카카오·구글 로그인은 준비 중입니다. 이메일로 이용해 주세요.";
 
 /**
+ * Not shown for now: social sign-in is deferred until after launch (2026-11-26, guide P-02);
+ * the login and signup forms keep their usage commented out.
  * Kakao / Google buttons kept as designed (P-02, Figma 637:7272 Default → Notice). Pressing
  * one shows the notice under the group on the same screen: no page move, popup or toast,
  * no social sign-in.

@@ -6,7 +6,8 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import type { Member } from "@/lib/api/types";
-import { AuthCard, Field, FormMessage, SocialButtons } from "./AuthForm";
+// SocialButtons: deferred, see the note in the form below.
+import { AuthCard, Field, FormMessage } from "./AuthForm";
 import { rememberReviewIntent, reviewIntent, safeReturnTo } from "./returnTo";
 import { checkSession, useAuth } from "./session";
 
@@ -94,7 +95,8 @@ export function LoginForm() {
           회원가입
         </ButtonLink>
       </div>
-      <SocialButtons />
+      {/* Social sign-in (Kakao/Google) is deferred until after launch (user decision 2026-11-26, guide P-02): the buttons are hidden until that work.
+      <SocialButtons /> */}
     </AuthCard>
   );
 }
