@@ -19,6 +19,7 @@ export function reviewSendable(text: string): boolean {
  */
 export function ReviewTextForm({
   label,
+  labelHidden = false,
   aside,
   text,
   onChange,
@@ -30,7 +31,9 @@ export function ReviewTextForm({
   fieldRef,
 }: {
   label: string;
-  /** Right side of the label row (review guidance, '경기당 1개'). */
+  /** Keeps the label for screen readers only (the match page: the field speaks for itself). */
+  labelHidden?: boolean;
+  /** Right side of the label row ('경기당 1개'). */
   aside?: ReactNode;
   text: string;
   onChange: (value: string) => void;
@@ -52,7 +55,7 @@ export function ReviewTextForm({
   return (
     <form onSubmit={submit} className="flex flex-col gap-2" noValidate>
       <div className="flex items-center gap-1">
-        <label htmlFor={`${ids}-text`} className="text-label font-bold text-fg">
+        <label htmlFor={`${ids}-text`} className={labelHidden ? "sr-only" : "text-label font-bold text-fg"}>
           {label}
         </label>
         {aside}

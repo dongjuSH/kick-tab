@@ -10,7 +10,6 @@ import { apiFetch } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import type { ReviewItem } from "@/lib/api/types";
 import { REVIEW_DRAFT_PREFIX, checkSession, memberRequest } from "@/features/auth/session";
-import { ReviewGuidance } from "./ReviewGuidance";
 import { ReviewRestrictionNotice, useRestrictionEnd } from "./ReviewRestriction";
 import { ReviewTextForm } from "./ReviewTextForm";
 
@@ -227,13 +226,11 @@ export function ReviewComposer({
   return (
     <div ref={area}>
       <ReviewTextForm
+        // The visible '평가 작성' and its '!' are gone (user decision 2026-11-26): the field says
+        // it, and the '!' sits by the '경기 평가' title. The label stays for screen readers.
         label={current === "edit" ? "평가 수정" : "평가 작성"}
-        aside={
-          <>
-            <ReviewGuidance />
-            <span className="ml-auto text-small text-fg-muted">경기당 1개</span>
-          </>
-        }
+        labelHidden
+        aside={<span className="ml-auto text-small text-fg-muted">경기당 1개</span>}
         text={text}
         onChange={change}
         pending={pending}
